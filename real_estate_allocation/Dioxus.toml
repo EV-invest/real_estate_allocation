@@ -1,0 +1,11 @@
+[application]
+name = "real_estate_allocation"
+
+[web.app]
+title = "Real Estate Allocation"
+
+[web.resource.dev]
+style = []
+
+[web.resource]
+style = []
