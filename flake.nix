@@ -46,7 +46,7 @@
           rootDir = ./.;
           badges = [ "msrv" "crates_io" "docs_rs" "loc" "ci" ];
         };
-        combined = v_flakes.utils.combine [ rs github readme ];
+        combined = v_flakes.utils.combine { inherit rust; modules = [ rs github readme ]; };
       in
       {
         packages =
@@ -90,8 +90,8 @@
               rust
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
-						env.RUST_BACKTRACE = 1;
-						env.RUST_LIB_BACKTRACE = 0;
+            env.RUST_BACKTRACE = 1;
+            env.RUST_LIB_BACKTRACE = 0;
           };
       }
     );
