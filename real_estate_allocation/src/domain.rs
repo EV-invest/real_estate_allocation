@@ -2,12 +2,14 @@ use ev::architecture::{AggregateRoot, Entity, Id, Specification};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub struct PropertyTag;
-pub struct FileTag;
 pub type PropertyId = Id<PropertyTag>;
 pub type FileId = Id<FileTag>;
 
 use crate::error::DomainError;
+
+pub struct FileTag;
+
+pub struct PropertyTag;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum PropertyState {

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use ev::architecture::{Reader, Repository, Specification};
@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS property_files (
 );
 ";
 
+const SAMPLE_PIC: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="#0c1626"/><rect x="40" y="180" width="120" height="140" fill="#001e4e"/><rect x="200" y="120" width="140" height="200" fill="#081020"/><rect x="380" y="60" width="160" height="260" fill="#001e4e"/><text x="320" y="340" fill="#e6e1d3" font-family="serif" font-size="20" text-anchor="middle">Sample Property</text></svg>"##;
 /// Leaf port over the `ev` repository markers. No `UnitOfWork`: every write here
 /// is a single row, so a transaction boundary would buy nothing.
 #[async_trait]
@@ -49,7 +50,7 @@ pub struct SqliteStore {
 
 impl SqliteStore {
 	pub async fn open(db_path: &str, data_dir: PathBuf) -> Result<Self, DomainError> {
-		if let Some(parent) = std::path::Path::new(db_path).parent() {
+		if let Some(parent) = Path::new(db_path).parent() {
 			std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create db dir: {e}")))?;
 		}
 		std::fs::create_dir_all(&data_dir).map_err(|e| DomainError::Repository(format!("create data dir: {e}")))?;
@@ -61,137 +62,7 @@ impl SqliteStore {
 
 	/// `./data/properties/<property_id>/<file_id>__<filename>`.
 	pub fn file_path(&self, property_id: PropertyId, file_id: FileId, filename: &str) -> PathBuf {
-		self.data_dir.join(property_id.raw().to_string()).join(format!("{}__{}", file_id.raw(), filename))
-	}
-}
-
-/// Row mirroring the `properties` table. Private so the domain model stays free
-/// of persistence derives.
-#[derive(FromRow)]
-struct PropertyRow {
-	id: String,
-	lat: f64,
-	lng: f64,
-	price: f64,
-	state: String,
-	research_url: String,
-	terms: Option<String>,
-	deal_json: Option<String>,
-	loan_json: Option<String>,
-	additional_reasoning: Option<String>,
-}
-
-impl TryFrom<PropertyRow> for Property {
-	type Error = DomainError;
-
-	/// Stored values were validated on the way in, so a parse failure here means
-	/// the row is corrupt — a repository error, never a client-facing validation.
-	fn try_from(row: PropertyRow) -> Result<Self, Self::Error> {
-		let id = crate::domain::parse_property_id(&row.id).map_err(corrupt_row)?;
-		let deal = row
-			.deal_json
-			.map(|j| serde_json::from_str::<DealStructure>(&j))
-			.transpose()
-			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
-		let loan = row
-			.loan_json
-			.map(|j| serde_json::from_str::<LoanRates>(&j))
-			.transpose()
-			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
-		Ok(Self {
-			id,
-			coords: Coords { lat: row.lat, lng: row.lng },
-			price: Money::parse(row.price).map_err(corrupt_row)?,
-			state: PropertyState::parse(&row.state).map_err(corrupt_row)?,
-			research_url: ResearchUrl::parse(row.research_url).map_err(corrupt_row)?,
-			terms: row.terms,
-			deal,
-			loan,
-			additional_reasoning: row.additional_reasoning,
-			price_series: Vec::new(),
-		})
-	}
-}
-
-#[derive(FromRow)]
-struct FileRow {
-	id: String,
-	property_id: String,
-	kind: String,
-	filename: String,
-	content_type: String,
-}
-
-impl TryFrom<FileRow> for PropertyFile {
-	type Error = DomainError;
-
-	fn try_from(row: FileRow) -> Result<Self, Self::Error> {
-		Ok(Self {
-			id: crate::domain::parse_file_id(&row.id).map_err(corrupt_row)?,
-			property_id: crate::domain::parse_property_id(&row.property_id).map_err(corrupt_row)?,
-			kind: FileKind::parse(&row.kind).map_err(corrupt_row)?,
-			filename: row.filename,
-			content_type: row.content_type,
-		})
-	}
-}
-
-impl Repository for SqliteStore {
-	type Aggregate = Property;
-}
-
-impl Reader for SqliteStore {
-	type Aggregate = Property;
-}
-
-#[async_trait]
-impl PropertyRepository for SqliteStore {
-	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
-	/// in-memory by design; SQL pushdown is explicitly descoped.
-	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
-		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
-			.fetch_all(&self.pool)
-			.await
-			.map_err(map_sqlx_error)?;
-		let mut out = Vec::new();
-		for row in rows {
-			let p = Property::try_from(row)?;
-			if spec.map(|s| Specification::holds(s, &p)).unwrap_or(true) {
-				out.push(p);
-			}
-		}
-		Ok(out)
-	}
-
-	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
-		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
-			.bind(id.raw().to_string())
-			.fetch_optional(&self.pool)
-			.await
-			.map_err(map_sqlx_error)?;
-		row.map(Property::try_from).transpose()
-	}
-
-	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError> {
-		sqlx::query("INSERT INTO property_files (id, property_id, kind, filename, content_type) VALUES (?, ?, ?, ?, ?)")
-			.bind(f.id.raw().to_string())
-			.bind(f.property_id.raw().to_string())
-			.bind(f.kind.as_str())
-			.bind(&f.filename)
-			.bind(&f.content_type)
-			.execute(&self.pool)
-			.await
-			.map_err(map_sqlx_error)?;
-		Ok(())
-	}
-
-	async fn list_files(&self, id: PropertyId) -> Result<Vec<PropertyFile>, DomainError> {
-		let rows = sqlx::query_as::<_, FileRow>("SELECT id, property_id, kind, filename, content_type FROM property_files WHERE property_id = ?")
-			.bind(id.raw().to_string())
-			.fetch_all(&self.pool)
-			.await
-			.map_err(map_sqlx_error)?;
-		rows.into_iter().map(PropertyFile::try_from).collect()
+		self.data_dir.join(property_id.raw().to_string()).join(format!("{}__{filename}", file_id.raw()))
 	}
 }
 
@@ -344,8 +215,135 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	Ok(())
 }
+/// Row mirroring the `properties` table. Private so the domain model stays free
+/// of persistence derives.
+#[derive(FromRow)]
+struct PropertyRow {
+	id: String,
+	lat: f64,
+	lng: f64,
+	price: f64,
+	state: String,
+	research_url: String,
+	terms: Option<String>,
+	deal_json: Option<String>,
+	loan_json: Option<String>,
+	additional_reasoning: Option<String>,
+}
 
-const SAMPLE_PIC: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="#0c1626"/><rect x="40" y="180" width="120" height="140" fill="#001e4e"/><rect x="200" y="120" width="140" height="200" fill="#081020"/><rect x="380" y="60" width="160" height="260" fill="#001e4e"/><text x="320" y="340" fill="#e6e1d3" font-family="serif" font-size="20" text-anchor="middle">Sample Property</text></svg>"##;
+impl TryFrom<PropertyRow> for Property {
+	type Error = DomainError;
+
+	/// Stored values were validated on the way in, so a parse failure here means
+	/// the row is corrupt — a repository error, never a client-facing validation.
+	fn try_from(row: PropertyRow) -> Result<Self, Self::Error> {
+		let id = crate::domain::parse_property_id(&row.id).map_err(corrupt_row)?;
+		let deal = row
+			.deal_json
+			.map(|j| serde_json::from_str::<DealStructure>(&j))
+			.transpose()
+			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
+		let loan = row
+			.loan_json
+			.map(|j| serde_json::from_str::<LoanRates>(&j))
+			.transpose()
+			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
+		Ok(Self {
+			id,
+			coords: Coords { lat: row.lat, lng: row.lng },
+			price: Money::parse(row.price).map_err(corrupt_row)?,
+			state: PropertyState::parse(&row.state).map_err(corrupt_row)?,
+			research_url: ResearchUrl::parse(row.research_url).map_err(corrupt_row)?,
+			terms: row.terms,
+			deal,
+			loan,
+			additional_reasoning: row.additional_reasoning,
+			price_series: Vec::new(),
+		})
+	}
+}
+
+#[derive(FromRow)]
+struct FileRow {
+	id: String,
+	property_id: String,
+	kind: String,
+	filename: String,
+	content_type: String,
+}
+
+impl TryFrom<FileRow> for PropertyFile {
+	type Error = DomainError;
+
+	fn try_from(row: FileRow) -> Result<Self, Self::Error> {
+		Ok(Self {
+			id: crate::domain::parse_file_id(&row.id).map_err(corrupt_row)?,
+			property_id: crate::domain::parse_property_id(&row.property_id).map_err(corrupt_row)?,
+			kind: FileKind::parse(&row.kind).map_err(corrupt_row)?,
+			filename: row.filename,
+			content_type: row.content_type,
+		})
+	}
+}
+
+impl Repository for SqliteStore {
+	type Aggregate = Property;
+}
+
+impl Reader for SqliteStore {
+	type Aggregate = Property;
+}
+
+#[async_trait]
+impl PropertyRepository for SqliteStore {
+	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
+	/// in-memory by design; SQL pushdown is explicitly descoped.
+	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
+		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
+			.fetch_all(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		let mut out = Vec::new();
+		for row in rows {
+			let p = Property::try_from(row)?;
+			if spec.map(|s| Specification::holds(s, &p)).unwrap_or(true) {
+				out.push(p);
+			}
+		}
+		Ok(out)
+	}
+
+	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
+		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
+			.bind(id.raw().to_string())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		row.map(Property::try_from).transpose()
+	}
+
+	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError> {
+		sqlx::query("INSERT INTO property_files (id, property_id, kind, filename, content_type) VALUES (?, ?, ?, ?, ?)")
+			.bind(f.id.raw().to_string())
+			.bind(f.property_id.raw().to_string())
+			.bind(f.kind.as_str())
+			.bind(&f.filename)
+			.bind(&f.content_type)
+			.execute(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		Ok(())
+	}
+
+	async fn list_files(&self, id: PropertyId) -> Result<Vec<PropertyFile>, DomainError> {
+		let rows = sqlx::query_as::<_, FileRow>("SELECT id, property_id, kind, filename, content_type FROM property_files WHERE property_id = ?")
+			.bind(id.raw().to_string())
+			.fetch_all(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		rows.into_iter().map(PropertyFile::try_from).collect()
+	}
+}
 
 /// A persisted row failed domain re-validation: the database holds bad data.
 fn corrupt_row(err: DomainError) -> DomainError {
