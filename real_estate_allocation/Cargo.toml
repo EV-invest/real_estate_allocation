@@ -3,26 +3,12 @@ name = "real_estate_allocation"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-clap.workspace = true
-color-eyre.workspace = true
-derive-new.workspace = true
-miette.workspace = true
-real_estate_allocation_macros.workspace = true
-v_utils.workspace = true
-
-serde = { workspace = true }
-serde_json.workspace = true
-jiff.workspace = true
-uuid.workspace = true
-async-trait.workspace = true
-thiserror.workspace = true
-
-# Fullstack: one crate, two builds. `web` for the wasm client, `server` for the
-# host binary — `dx serve` drives both. `ev::uikit` is renderer-agnostic so it is
-# shared; `ev::architecture` is native/server-only; `ev::wasm` layers browser
-# backends and is enabled per-target below.
-dioxus = { workspace = true, features = ["fullstack"] }
+[features]
+# `dx serve` toggles these per-build; mirrors dioxus' own split so the platform
+# auto-detects correctly.
+default = []
+web = ["dioxus/web"]
+server = ["dioxus/server"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
@@ -36,16 +22,30 @@ v_utils = { workspace = true, features = ["distributions"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "web"] }
 ev = { workspace = true, features = ["architecture", "uikit", "wasm"] }
-wasm-bindgen.workspace = true
 getrandom.workspace = true
 uuid = { workspace = true, features = ["js"] }
+wasm-bindgen.workspace = true
 
-[features]
-# `dx serve` toggles these per-build; mirrors dioxus' own split so the platform
-# auto-detects correctly.
-default = []
-web = ["dioxus/web"]
-server = ["dioxus/server"]
+[dependencies]
+clap.workspace = true
+color-eyre.workspace = true
+derive-new.workspace = true
+miette.workspace = true
+real_estate_allocation_macros.workspace = true
+v_utils.workspace = true
+async-trait.workspace = true
+jiff.workspace = true
+secrecy.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+# Fullstack: one crate, two builds. `web` for the wasm client, `server` for the
+# host binary — `dx serve` drives both. `ev::uikit` is renderer-agnostic so it is
+# shared; `ev::architecture` is native/server-only; `ev::wasm` layers browser
+# backends and is enabled per-target below.
+dioxus = { workspace = true, features = ["fullstack"] }
 
 [lints]
 workspace = true

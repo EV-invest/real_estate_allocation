@@ -48,8 +48,47 @@
           badges = [ "msrv" "crates_io" "docs_rs" "loc" "ci" ];
         };
         combined = v_flakes.utils.combine { inherit rust; modules = [ rs github readme ]; };
+
+        # ── dev orchestrator ─────────────────────────────────────────────────
+        # `nix run .#dev` → Tailwind watch + the fullstack `dx serve`, together.
+        # Self-contained (`writeShellApplication` bakes runtimeInputs onto PATH)
+        # so it works without first entering the devShell.
+        #
+        # IMPORTANT: resolve the repo at *runtime* via `git rev-parse`, never
+        # `toString ./.` — the latter locks the wrapper to the read-only
+        # /nix/store snapshot, where neither cargo (target/) nor npm
+        # (node_modules/) can write. Run `nix run .#dev` from anywhere in the repo.
+        runDev = pkgs.writeShellApplication {
+          name = "run-dev";
+          runtimeInputs = with pkgs; [ rust dioxus-cli nodejs git ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo/real_estate_allocation"
+
+            # Tailwind v4 standalone CLI needs `tailwindcss` resolvable from
+            # node_modules; install once, then build + watch.
+            if [ ! -d node_modules ]; then
+              npm install
+            fi
+            npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css
+            npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch & css=$!
+            trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
+
+            # `--interactive false`: dx's default full-screen TUI assumes it owns
+            # the terminal and corrupts when it shares stdout with the css watcher.
+            cd "$repo"
+            exec dx serve --package real_estate_allocation --port "''${REA_PORT:-8080}" --interactive false
+          '';
+        };
       in
       {
+        # `nix run .#dev` → Tailwind watch + fullstack dx serve (the one command
+        # you need for a dev view). `.#default` aliases it.
+        apps = {
+          dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
+          default = { type = "app"; program = "${runDev}/bin/run-dev"; };
+        };
+
         packages =
           let
             rustc = rust;
