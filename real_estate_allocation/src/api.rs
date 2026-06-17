@@ -47,11 +47,13 @@ pub async fn list_files(id: PropertyId) -> Result<Vec<PropertyFile>, ServerFnErr
 
 #[server]
 pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: String, content_type: String, bytes: Vec<u8>, token: String) -> Result<PropertyFile, ServerFnError> {
+	use secrecy::ExposeSecret as _;
+
 	use crate::store::PropertyRepository;
 
 	let store: crate::store::SqliteStore = consume_context();
 	let cfg: crate::config::AppConfig = consume_context();
-	if token != cfg.admin_token {
+	if token != cfg.admin_token.expose_secret() {
 		return Err(ServerFnError::new("not authorized to upload"));
 	}
 
@@ -82,14 +84,18 @@ pub async fn file_bytes(id: PropertyId, file_id: crate::domain::FileId, filename
 
 #[server]
 pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
+	use secrecy::ExposeSecret as _;
+
 	let cfg: crate::config::AppConfig = consume_context();
-	Ok(!token.is_empty() && token == cfg.admin_token)
+	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
 
 #[server]
 pub async fn maps_api_key() -> Result<String, ServerFnError> {
+	use secrecy::ExposeSecret as _;
+
 	let cfg: crate::config::AppConfig = consume_context();
-	Ok(cfg.maps_api_key)
+	Ok(cfg.maps_api_key.expose_secret().to_string())
 }
 
 #[cfg(not(target_arch = "wasm32"))]

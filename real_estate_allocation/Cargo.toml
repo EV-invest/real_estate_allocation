@@ -13,11 +13,15 @@ server = ["dioxus/server"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
 ev = { workspace = true, features = ["architecture", "uikit"] }
+# `config` (with its SmartDefault'd AppConfig) is server-only.
+smart-default.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
-# `laplace_random_walk` (price-series mock) lives behind this feature, and it
-# pulls `rand`→`getrandom 0.4`, which has no wasm backend — so it is server-only.
-v_utils = { workspace = true, features = ["distributions"] }
+# v_utils is native-only: the wasm client uses none of it directly, and its
+# `io`/`distributions` features pull `ustr`→`ahash` and `rand`, both of which
+# drag in a `getrandom` with no wasm backend. `distributions` →
+# `laplace_random_walk` (price-series mock); `io` → `ExpandedPath`/`LiveSettings`.
+v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "web"] }
@@ -40,7 +44,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-v_utils.workspace = true
 
 [lints]
 workspace = true

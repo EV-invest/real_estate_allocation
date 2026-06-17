@@ -49,13 +49,16 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-	pub async fn open(db_path: &str, data_dir: PathBuf) -> Result<Self, DomainError> {
-		if let Some(parent) = Path::new(db_path).parent() {
+	pub async fn open(db_path: &Path, data_dir: PathBuf) -> Result<Self, DomainError> {
+		if let Some(parent) = db_path.parent() {
 			std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create db dir: {e}")))?;
 		}
 		std::fs::create_dir_all(&data_dir).map_err(|e| DomainError::Repository(format!("create data dir: {e}")))?;
 
-		let pool = SqlitePoolOptions::new().connect(&format!("sqlite://{db_path}?mode=rwc")).await.map_err(map_sqlx_error)?;
+		let pool = SqlitePoolOptions::new()
+			.connect(&format!("sqlite://{}?mode=rwc", db_path.display()))
+			.await
+			.map_err(map_sqlx_error)?;
 		sqlx::query(SCHEMA).execute(&pool).await.map_err(map_sqlx_error)?;
 		Ok(Self { pool, data_dir })
 	}

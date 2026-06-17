@@ -1,30 +1,20 @@
-use v_utils::macros as v_macros;
+use std::net::SocketAddr;
 
-#[derive(Clone, Debug, Default, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings)]
+use secrecy::SecretString;
+use smart_default::SmartDefault;
+use v_utils::{io::ExpandedPath, macros as v_macros};
+
+#[derive(Clone, Debug, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings, SmartDefault)]
 pub struct AppConfig {
-	#[primitives(skip)]
-	#[serde(default = "__default_maps_api_key")]
-	pub maps_api_key: String,
-	#[primitives(skip)]
-	#[serde(default = "__default_db_path")]
-	pub db_path: String,
-	#[primitives(skip)]
-	#[serde(default = "__default_data_dir")]
-	pub data_dir: String,
-	#[primitives(skip)]
-	#[serde(default)]
-	pub admin_token: String,
-	#[primitives(skip)]
+	pub maps_api_key: SecretString,
+	#[default(ExpandedPath::from("./data/app.db"))]
+	pub db_path: ExpandedPath,
+	#[default(ExpandedPath::from("./data/properties"))]
+	pub data_dir: ExpandedPath,
+	pub admin_token: SecretString,
 	#[serde(default)]
 	pub admins: Vec<String>,
-}
-
-fn __default_maps_api_key() -> String {
-	String::new()
-}
-fn __default_db_path() -> String {
-	"./data/app.db".to_string()
-}
-fn __default_data_dir() -> String {
-	"./data/properties".to_string()
+	/// Address the fullstack server binds to. Overrides dioxus' `127.0.0.1:8080` default.
+	#[default(SocketAddr::from(([127, 0, 0, 1], 8080)))]
+	pub socket_addr: SocketAddr,
 }
