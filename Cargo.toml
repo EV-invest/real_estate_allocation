@@ -22,5 +22,5 @@ clap = { version = "^4.5.4", features = ["derive"] }
 color-eyre = "^0.6.5"
 derive-new = "^0"
 miette = { version = "^7.6.0", features = ["fancy", "serde", "syntect-highlighter"] }
-v_utils = { version = "^2.15.0", features = ["io", "macros", "cli"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
+v_utils = { version = "^2.15.0", features = ["io", "macros", "cli"] }
