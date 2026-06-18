@@ -48,9 +48,13 @@ fn main() {
 	// dioxus' server launch reads the bind address from these env vars
 	// (`dioxus_cli_config::fullstack_address_or_localhost`), falling back to
 	// 127.0.0.1:8080. Setting them from config is the only override it exposes.
-	unsafe {
-		std::env::set_var("IP", config.socket_addr.ip().to_string());
-		std::env::set_var("PORT", config.socket_addr.port().to_string());
+	// Under `dx serve` the CLI owns the address (it sets these to its proxy
+	// target and fronts us on its devserver), so we only override for prod.
+	if std::env::var_os("DIOXUS_DEVSERVER_PORT").is_none() {
+		unsafe {
+			std::env::set_var("IP", config.socket_addr.ip().to_string());
+			std::env::set_var("PORT", config.socket_addr.port().to_string());
+		}
 	}
 
 	// Fullstack axum server. `with_context` makes both the store and config

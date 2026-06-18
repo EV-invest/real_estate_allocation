@@ -77,7 +77,7 @@
             # `--interactive false`: dx's default full-screen TUI assumes it owns
             # the terminal and corrupts when it shares stdout with the css watcher.
             cd "$repo"
-            exec dx serve --package real_estate_allocation --port "''${REA_PORT:-8080}" --interactive false
+            exec dx serve --package real_estate_allocation --interactive false
           '';
         };
       in
