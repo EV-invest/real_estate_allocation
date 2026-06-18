@@ -43,6 +43,28 @@ flowchart LR
 - `map` — **isolated** Google-Maps module; the only file touching the JS API. The
   inline-JS `extern` is fully `cfg(wasm32)`-gated, so the server build never links it.
 
+## Property Info Standard
+What we provide about a property (`domain::Property`). Required fields carry a
+validating value object so a bad one can't enter the domain; optional fields are
+`Option` and rendered only when present.
+
+| Field | Type | Req. | Invariant / notes |
+| --- | --- | --- | --- |
+| `id` | `PropertyId` (`Id<PropertyTag>`, Uuid) | yes | minted on insert |
+| `coords` | `Coords { lat, lng }` | yes | Google-Maps marker position |
+| `price` | `Money` | yes | non-negative, finite |
+| `state` | `PropertyState` | yes | `Purchased` \| `Interesting` \| `Purchasing` |
+| `research_url` | `ResearchUrl` | yes | non-empty http(s) — the reasoning post |
+| `terms` | `Option<String>` | no | deal terms, free text |
+| `deal` | `Option<DealStructure { equity_pct, debt_pct, notes }>` | no | deal structure |
+| `loan` | `Option<LoanRates { rate_pct, term_years, lender }>` | no | rates if not bought outright |
+| `additional_reasoning` | `Option<String>` | no | miscellaneous notes worth surfacing |
+| `price_series` | `Vec<f64>` | — | **mock**, filled on read, never persisted |
+
+Associated media (pics / pitch-deck / documents) are separate `PropertyFile`
+records (`{ id, property_id, kind: Pic|PitchDeck|Document, filename, content_type }`),
+not fields on `Property`.
+
 ## Persistence
 - SQLite via `sqlx` (`runtime-tokio`, `sqlite`). One pool, schema run on startup.
 - File bytes: `./data/properties/<property_id>/<file_id>__<filename>`.

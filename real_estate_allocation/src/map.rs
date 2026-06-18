@@ -27,6 +27,7 @@ pub fn MapPanel() -> Element {
 			// Read both reactive sources *inside* the effect so it re-runs whenever
 			// the property list or the selection changes.
 			let sel = selected().map(|id| id.raw().to_string()).unwrap_or_default();
+			sync_url(&sel);
 			if let Some(props) = properties.read().as_ref() {
 				let json = serde_json::to_string(props).unwrap_or_else(|_| "[]".into());
 				render_markers("rea-map", &json, &sel);
@@ -148,9 +149,24 @@ export function rea_render_markers(elId, propsJson, selectedId) {
 }
 
 export function rea_on_select(cb) { window.__reaSelect = cb; }
+
+export function rea_sync_url(selectedId) {
+  const url = new URL(window.location.href);
+  if (selectedId) { url.searchParams.set('property', selectedId); }
+  else { url.searchParams.delete('property'); }
+  window.history.replaceState({}, '', url);
+}
+
+export function rea_url_property() {
+  return new URL(window.location.href).searchParams.get('property') || '';
+}
 "#)]
 extern "C" {
 	#[wasm_bindgen(js_name = rea_render_markers)]
 	fn render_markers(el_id: &str, props_json: &str, selected_id: &str);
 	fn rea_on_select(cb: &wasm_bindgen::closure::Closure<dyn FnMut(String)>);
+	#[wasm_bindgen(js_name = rea_sync_url)]
+	fn sync_url(selected_id: &str);
+	#[wasm_bindgen(js_name = rea_url_property)]
+	pub fn url_property() -> String;
 }

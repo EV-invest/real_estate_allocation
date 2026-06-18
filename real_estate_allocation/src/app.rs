@@ -8,7 +8,7 @@ pub type Selected = Signal<Option<PropertyId>>;
 
 #[component]
 pub fn App() -> Element {
-	let selected: Selected = use_signal(|| None::<PropertyId>);
+	let selected: Selected = use_signal(initial_selection);
 	use_context_provider(|| selected);
 
 	// Maps JS key is server-side config; fetch it so the loader `<script>` can be
@@ -30,5 +30,16 @@ pub fn App() -> Element {
 			document::Script { src, defer: true }
 		}
 		Dashboard {}
+	}
+}
+/// Deep-link support: read `?property=<uuid>` so a shared URL opens preselected.
+fn initial_selection() -> Option<PropertyId> {
+	#[cfg(target_arch = "wasm32")]
+	{
+		crate::domain::parse_property_id(&crate::map::url_property()).ok()
+	}
+	#[cfg(not(target_arch = "wasm32"))]
+	{
+		None
 	}
 }
