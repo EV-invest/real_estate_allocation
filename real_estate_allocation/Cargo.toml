@@ -21,7 +21,9 @@ tokio.workspace = true
 # `io`/`distributions` features pull `ustr`→`ahash` and `rand`, both of which
 # drag in a `getrandom` with no wasm backend. `distributions` →
 # `laplace_random_walk` (price-series mock); `io` → `ExpandedPath`/`LiveSettings`.
-v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli"] }
+# `tracing` + `xdg`: route `clientside!` logs to a file under the XDG state dir
+# instead of stdout (otherwise the macro warns and only prints to the terminal).
+v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli", "tracing", "xdg"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "web"] }

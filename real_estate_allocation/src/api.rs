@@ -3,17 +3,29 @@ use dioxus::prelude::*;
 use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyState};
 
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
-/// `SqliteStore` / `AppConfig` out of the fullstack server context (provided via
-/// `LaunchBuilder::with_context` in `main`), and is called as an async fn from the
-/// wasm client.
+/// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
+/// `main`), and is called as an async fn from the wasm client.
 
+/// Shared host state, attached to every request as an axum `Extension` in `main`.
+/// Server-only: the wasm client never constructs it.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone)]
+pub struct AppState {
+	pub store: crate::store::SqliteStore,
+	pub config: crate::config::AppConfig,
+}
+
+//HACK: see `main` — `LaunchBuilder::with_context` doesn't reach server fns in
+// dioxus-server 0.7.9, so we read our state from the request extension instead.
+// `FullstackContext` is the one handle available in both the SSR render path and
+// the server-fn POST path.
 #[server]
 pub async fn list_properties(filter: Option<Vec<PropertyState>>) -> Result<Vec<Property>, ServerFnError> {
 	use ev::architecture::Specification;
 
 	use crate::{domain::InState, store::PropertyRepository};
 
-	let store: crate::store::SqliteStore = consume_context();
+	let store = app_state().await?.store;
 
 	// Or-combine the requested states; default = Purchased. The `Fn(&T)->bool`
 	// blanket impl makes the disjunction itself a `Specification`.
@@ -22,12 +34,11 @@ pub async fn list_properties(filter: Option<Vec<PropertyState>>) -> Result<Vec<P
 	let props = store.list(Some(&spec)).await.map_err(to_server_err)?;
 	Ok(props)
 }
-
 #[server]
 pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnError> {
 	use crate::store::PropertyRepository;
 
-	let store: crate::store::SqliteStore = consume_context();
+	let store = app_state().await?.store;
 	let mut prop = store.get(id).await.map_err(to_server_err)?;
 	if let Some(p) = prop.as_mut() {
 		// Deterministic mock series, seeded from the id so it is stable per property.
@@ -36,23 +47,20 @@ pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnEr
 	}
 	Ok(prop)
 }
-
 #[server]
 pub async fn list_files(id: PropertyId) -> Result<Vec<PropertyFile>, ServerFnError> {
 	use crate::store::PropertyRepository;
 
-	let store: crate::store::SqliteStore = consume_context();
+	let store = app_state().await?.store;
 	store.list_files(id).await.map_err(to_server_err)
 }
-
 #[server]
 pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: String, content_type: String, bytes: Vec<u8>, token: String) -> Result<PropertyFile, ServerFnError> {
 	use secrecy::ExposeSecret as _;
 
 	use crate::store::PropertyRepository;
 
-	let store: crate::store::SqliteStore = consume_context();
-	let cfg: crate::config::AppConfig = consume_context();
+	let AppState { store, config: cfg } = app_state().await?;
 	if token != cfg.admin_token.expose_secret() {
 		return Err(ServerFnError::new("not authorized to upload"));
 	}
@@ -74,28 +82,31 @@ pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: Stri
 	store.add_file(file.clone()).await.map_err(to_server_err)?;
 	Ok(file)
 }
-
 #[server]
 pub async fn file_bytes(id: PropertyId, file_id: crate::domain::FileId, filename: String) -> Result<Vec<u8>, ServerFnError> {
-	let store: crate::store::SqliteStore = consume_context();
+	let store = app_state().await?.store;
 	let path = store.file_path(id, file_id, &filename);
 	std::fs::read(&path).map_err(|e| ServerFnError::new(format!("read file: {e}")))
 }
-
 #[server]
 pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
 	use secrecy::ExposeSecret as _;
 
-	let cfg: crate::config::AppConfig = consume_context();
+	let cfg = app_state().await?.config;
 	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
-
 #[server]
 pub async fn maps_api_key() -> Result<String, ServerFnError> {
 	use secrecy::ExposeSecret as _;
 
-	let cfg: crate::config::AppConfig = consume_context();
+	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
+}
+#[cfg(not(target_arch = "wasm32"))]
+async fn app_state() -> Result<AppState, ServerFnError> {
+	use dioxus::{fullstack::FullstackContext, server::axum::Extension};
+	let Extension(state) = FullstackContext::extract::<Extension<AppState>, _>().await?;
+	Ok(state)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

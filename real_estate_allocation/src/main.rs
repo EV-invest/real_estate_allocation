@@ -3,7 +3,6 @@ fn main() {
 	use std::{sync::Arc, time::Duration};
 
 	use clap::Parser;
-	use dioxus::LaunchBuilder;
 	use real_estate_allocation::{
 		App,
 		config::{AppConfig, LiveSettings, SettingsCommand, SettingsFlags},
@@ -57,9 +56,21 @@ fn main() {
 		}
 	}
 
-	// Fullstack axum server. `with_context` makes both the store and config
-	// available to every `#[server]` fn via `FromContext`.
-	LaunchBuilder::server().with_context(store).with_context(config).launch(App);
+	//HACK: dioxus-server 0.7.9 does not forward `LaunchBuilder::with_context`
+	// to server functions — those contexts only reach the SSR vdom, so a
+	// `consume_context` inside a `#[server]` fn panics ("Must be called from
+	// inside a Dioxus runtime"). We instead attach the shared state as an axum
+	// request extension, which is present on both the SSR render request and
+	// every server-fn POST; `crate::api` reads it via `FullstackContext`.
+	use dioxus::server::axum::{Extension, Router};
+	let app_state = real_estate_allocation::api::AppState { store, config };
+	dioxus::server::serve(move || {
+		let app_state = app_state.clone();
+		async move {
+			let router = Router::new().merge(dioxus::server::router(App)).layer(Extension(app_state));
+			Ok(router)
+		}
+	});
 }
 
 #[cfg(target_arch = "wasm32")]
