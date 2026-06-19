@@ -1,15 +1,31 @@
 use dioxus::prelude::*;
 
-use crate::{dashboard::Dashboard, domain::PropertyId};
+use crate::{
+	dashboard::Dashboard,
+	domain::{Property, PropertyId},
+};
 
-/// The selected property, shared from the root so all four panels read/write the
-/// same selection. `None` until the user clicks a marker.
+/// The selected property, shared from the root so all panels read/write the same
+/// selection. `None` until the user clicks a marker.
 pub type Selected = Signal<Option<PropertyId>>;
+
+/// The fetched record for the current selection, resolved once at the root and
+/// shared so the top bar, chart, and details panel don't each re-fetch it.
+/// Outer `None` = still loading; `Some(None)` = nothing selected.
+pub type SelectedProperty = Resource<Option<Property>>;
 
 #[component]
 pub fn App() -> Element {
 	let selected: Selected = use_signal(initial_selection);
 	use_context_provider(|| selected);
+
+	let property: SelectedProperty = use_resource(move || async move {
+		match selected() {
+			Some(id) => crate::api::get_property(id).await.ok().flatten(),
+			None => None,
+		}
+	});
+	use_context_provider(|| property);
 
 	// Maps JS key is server-side config; fetch it so the loader `<script>` can be
 	// emitted with the right key (Maps JS keys are public, restricted by referrer).

@@ -1,30 +1,22 @@
 use dioxus::prelude::*;
-use ev::uikit::{Badge, BadgeVariant, Card, CardContent, CardHeader, CardTitle, Separator, Skeleton};
+use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
 
-use crate::{
-	app::Selected,
-	domain::{Property, PropertyState},
-};
+use crate::{app::SelectedProperty, domain::Property};
 
 #[component]
 pub fn DetailsPanel() -> Element {
-	let selected = use_context::<Selected>();
-	let property = use_resource(move || async move {
-		match selected() {
-			Some(id) => crate::api::get_property(id).await.ok().flatten(),
-			None => None,
-		}
-	});
+	let property = use_context::<SelectedProperty>();
 
 	rsx! {
-		Card { class: "overflow-y-auto",
+		Card { class: "flex h-full flex-col",
 			CardHeader {
-				CardTitle { class: "font-serif text-main-accent-t1", "Deal details" }
+				CardTitle { class: "font-serif text-main-accent-t1", "Deal terms & structure" }
+				CardDescription { "Pricing, leverage, and return profile" }
 			}
-			CardContent {
+			CardContent { class: "flex-1 overflow-y-auto",
 				match &*property.read() {
 					Some(Some(p)) => rsx! { Details { property: p.clone() } },
-					Some(None) => rsx! { p { class: "text-muted-foreground text-sm", "No property selected." } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a property to see its terms." } },
 					None => rsx! { Skeleton { class: "h-48 w-full" } },
 				}
 			}
@@ -34,63 +26,54 @@ pub fn DetailsPanel() -> Element {
 
 #[component]
 fn Details(property: Property) -> Element {
-	let (badge_variant, badge_label) = match property.state {
-		PropertyState::Purchased => (BadgeVariant::Success, "Purchased"),
-		PropertyState::Interesting => (BadgeVariant::Outline, "Interesting"),
-		PropertyState::Purchasing => (BadgeVariant::Secondary, "Purchasing"),
-	};
-
 	rsx! {
-		div { class: "flex flex-col gap-3",
-			div { class: "flex items-center justify-between gap-2",
-				span { class: "font-mono text-2xl text-main-accent-t3", "${property.price.amount():.0}" }
-				Badge { variant: badge_variant, "{badge_label}" }
-			}
-
-			a {
-				href: "{property.research_url.as_str()}",
-				target: "_blank",
-				rel: "noopener noreferrer",
-				class: "text-main-accent-t1 underline-offset-4 hover:underline text-sm w-fit",
-				"Open research ↗"
-			}
-
-			if let Some(terms) = property.terms.as_ref() {
-				Separator {}
-				Section { title: "Terms", "{terms}" }
-			}
+		div { class: "flex flex-col",
+			Kv { label: "Price", value_class: "text-main-accent-t3", "{property.price}" }
 
 			if let Some(deal) = property.deal.as_ref() {
-				Separator {}
-				Section { title: "Deal structure",
-					p { "Equity {deal.equity_pct:.0}% / Debt {deal.debt_pct:.0}%" }
-					if let Some(notes) = deal.notes.as_ref() {
-						p { class: "text-muted-foreground", "{notes}" }
-					}
-				}
+				Kv { label: "Equity / Debt", "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
 			}
 
 			if let Some(loan) = property.loan.as_ref() {
-				Separator {}
-				Section { title: "Loan",
-					p { "{loan.rate_pct:.2}% over {loan.term_years}y — {loan.lender}" }
-				}
+				Kv { label: "Loan rate", value_class: "text-main-accent-t1", "{loan.rate_pct:.2}%" }
+				Kv { label: "Term", "{loan.term_years} yr" }
+				Kv { label: "Lender", "{loan.lender}" }
+			}
+
+			if let Some(terms) = property.terms.as_ref() {
+				Note { label: "Terms", "{terms}" }
+			}
+
+			if let Some(notes) = property.deal.as_ref().and_then(|d| d.notes.as_ref()) {
+				Note { label: "Deal notes", "{notes}" }
 			}
 
 			if let Some(reasoning) = property.additional_reasoning.as_ref() {
-				Separator {}
-				Section { title: "Reasoning", "{reasoning}" }
+				Note { label: "Reasoning", "{reasoning}" }
 			}
 		}
 	}
 }
 
+/// A label/value row. Hairline-separated from the previous row via a top border
+/// (first row drops it), matching the kit's deal-terms rhythm.
 #[component]
-fn Section(title: String, children: Element) -> Element {
+fn Kv(label: String, #[props(default)] value_class: String, children: Element) -> Element {
 	rsx! {
-		div { class: "flex flex-col gap-1",
-			span { class: "text-xs uppercase tracking-wide text-main-accent-t1", "{title}" }
-			div { class: "text-sm", {children} }
+		div { class: "flex items-center justify-between gap-4 border-t border-border py-2.5 first:border-t-0",
+			span { class: "text-sm text-muted-foreground", "{label}" }
+			span { class: "text-right text-sm font-semibold {value_class}", {children} }
+		}
+	}
+}
+
+/// A free-text block (terms, notes, reasoning) under an eyebrow label.
+#[component]
+fn Note(label: String, children: Element) -> Element {
+	rsx! {
+		div { class: "mt-2 flex flex-col gap-1.5 border-t border-border pt-3",
+			span { class: "text-xs font-semibold uppercase tracking-wide text-muted-foreground", "{label}" }
+			p { class: "text-sm leading-relaxed text-muted-foreground", {children} }
 		}
 	}
 }

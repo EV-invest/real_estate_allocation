@@ -1,28 +1,23 @@
 use dioxus::prelude::*;
-use ev::uikit::{Card, CardContent, CardHeader, CardTitle, ChartConfig, ChartContainer, ChartSeries, Skeleton};
+use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
 
-use crate::app::Selected;
+use crate::{app::SelectedProperty, domain::Money};
 
 #[component]
 pub fn ChartPanel() -> Element {
-	let selected = use_context::<Selected>();
-	let property = use_resource(move || async move {
-		match selected() {
-			Some(id) => crate::api::get_property(id).await.ok().flatten(),
-			None => None,
-		}
-	});
+	let property = use_context::<SelectedProperty>();
 
 	rsx! {
-		Card { class: "overflow-hidden",
+		Card { class: "flex h-[400px] flex-col overflow-hidden",
 			CardHeader {
-				CardTitle { class: "font-serif text-main-accent-t1", "Price series" }
+				CardTitle { class: "font-serif text-main-accent-t1", "Weekly price estimates" }
+				CardDescription { "Estimated value since acquisition" }
 			}
-			CardContent {
+			CardContent { class: "flex flex-1 flex-col gap-4",
 				match &*property.read() {
-					Some(Some(p)) => rsx! { PriceChart { series: p.price_series.clone() } },
-					Some(None) => rsx! { p { class: "text-muted-foreground text-sm", "Select a property on the map." } },
-					None => rsx! { Skeleton { class: "h-48 w-full" } },
+					Some(Some(p)) => rsx! { ChartBody { series: p.price_series.clone(), price: p.price } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a property on the map." } },
+					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
 			}
 		}
@@ -30,11 +25,33 @@ pub fn ChartPanel() -> Element {
 }
 
 #[component]
-fn PriceChart(series: Vec<f64>) -> Element {
+fn ChartBody(series: Vec<f64>, price: Money) -> Element {
 	if series.is_empty() {
-		return rsx! { Skeleton { class: "h-48 w-full" } };
+		return rsx! { Skeleton { class: "h-full w-full" } };
 	}
+	let first = series.first().copied().unwrap_or(0.0);
+	let last = series.last().copied().unwrap_or(0.0);
+	let delta = if first.abs() > f64::EPSILON { (last / first - 1.0) * 100.0 } else { 0.0 };
+	let up = delta >= 0.0;
+	let delta_class = if up { "text-main-accent-t2" } else { "text-destructive" };
+	let arrow = if up { "▲" } else { "▼" };
 
+	rsx! {
+		div { class: "flex items-baseline gap-3",
+			span { class: "font-serif text-3xl font-semibold", "{price}" }
+			span { class: "text-sm font-semibold {delta_class}", "{arrow} {delta:+.1}%" }
+		}
+		PriceChart { series, up }
+		div { class: "flex justify-between text-xs text-muted-foreground",
+			for l in ["Mar", "Apr", "May", "Jun", "Now"] {
+				span { "{l}" }
+			}
+		}
+	}
+}
+
+#[component]
+fn PriceChart(series: Vec<f64>, up: bool) -> Element {
 	let min = series.iter().copied().fold(f64::INFINITY, f64::min);
 	let max = series.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 	let span = (max - min).max(f64::EPSILON);
@@ -53,27 +70,23 @@ fn PriceChart(series: Vec<f64>) -> Element {
 		})
 		.collect::<Vec<_>>()
 		.join(" ");
-
-	let config: ChartConfig = vec![(
-		"price".to_string(),
-		ChartSeries {
-			label: Some("Weekly estimate".to_string()),
-			color: Some("var(--color-main-accent-t3)".to_string()),
-		},
-	)];
+	// Close the line back down to the baseline so the area under it can be filled.
+	let area = format!("0,{H:.0} {points} {W:.0},{H:.0}");
+	let color = if up { "var(--color-main-accent-t2)" } else { "var(--color-destructive)" };
 
 	rsx! {
-		ChartContainer { id: "price", config,
-			svg {
-				class: "w-full h-48",
-				view_box: "0 0 1000 200",
-				preserve_aspect_ratio: "none",
-				polyline {
-					points,
-					fill: "none",
-					stroke: "var(--color-price)",
-					stroke_width: "2",
-				}
+		svg {
+			class: "min-h-0 w-full flex-1",
+			view_box: "0 0 1000 200",
+			preserve_aspect_ratio: "none",
+			polygon { points: area, fill: color, fill_opacity: "0.12" }
+			polyline {
+				points,
+				fill: "none",
+				stroke: color,
+				stroke_width: "2.5",
+				stroke_linejoin: "round",
+				stroke_linecap: "round",
 			}
 		}
 	}

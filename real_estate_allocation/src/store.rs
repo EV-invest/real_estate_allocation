@@ -12,6 +12,7 @@ use crate::{
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS properties (
 	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
 	lat REAL NOT NULL,
 	lng REAL NOT NULL,
 	price REAL NOT NULL,
@@ -60,6 +61,10 @@ impl SqliteStore {
 			.await
 			.map_err(map_sqlx_error)?;
 		sqlx::query(SCHEMA).execute(&pool).await.map_err(map_sqlx_error)?;
+		// Additive migration for DBs created before `name` existed. The only
+		// expected failure is "duplicate column name" when it's already present
+		// (fresh DBs get it from SCHEMA above), so the error is safe to drop.
+		let _ = sqlx::query("ALTER TABLE properties ADD COLUMN name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
 		Ok(Self { pool, data_dir })
 	}
 
@@ -78,6 +83,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	}
 
 	struct Seed {
+		name: &'static str,
 		coords: Coords,
 		price: f64,
 		state: PropertyState,
@@ -90,6 +96,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	let seeds = [
 		Seed {
+			name: "Times Square Tower",
 			coords: Coords { lat: 40.7580, lng: -73.9855 },
 			price: 12_500_000.0,
 			state: PropertyState::Purchased,
@@ -108,6 +115,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			reasoning: Some("Flagship retail corridor; durable foot traffic."),
 		},
 		Seed {
+			name: "Bishopsgate House",
 			coords: Coords { lat: 51.5074, lng: -0.1278 },
 			price: 8_900_000.0,
 			state: PropertyState::Purchased,
@@ -122,6 +130,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			reasoning: None,
 		},
 		Seed {
+			name: "Le Marais Residences",
 			coords: Coords { lat: 48.8566, lng: 2.3522 },
 			price: 6_400_000.0,
 			state: PropertyState::Interesting,
@@ -132,6 +141,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			reasoning: Some("Mixed-use upside if rezoned."),
 		},
 		Seed {
+			name: "Shibuya Crossing Lofts",
 			coords: Coords { lat: 35.6762, lng: 139.6503 },
 			price: 5_100_000.0,
 			state: PropertyState::Interesting,
@@ -142,6 +152,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			reasoning: None,
 		},
 		Seed {
+			name: "Brickell Bay Tower",
 			coords: Coords { lat: 25.7617, lng: -80.1918 },
 			price: 7_750_000.0,
 			state: PropertyState::Purchasing,
@@ -160,6 +171,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			reasoning: Some("Tax-advantaged inflow tailwind."),
 		},
 		Seed {
+			name: "Marina Bay Quarter",
 			coords: Coords { lat: 1.3521, lng: 103.8198 },
 			price: 9_300_000.0,
 			state: PropertyState::Purchasing,
@@ -179,8 +191,9 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		}
 		let deal_json = s.deal.as_ref().map(|d| serde_json::to_string(d).expect("DealStructure serializes"));
 		let loan_json = s.loan.as_ref().map(|l| serde_json::to_string(l).expect("LoanRates serializes"));
-		sqlx::query("INSERT INTO properties (id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		sqlx::query("INSERT INTO properties (id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			.bind(id.raw().to_string())
+			.bind(s.name)
 			.bind(s.coords.lat)
 			.bind(s.coords.lng)
 			.bind(s.price)
@@ -223,6 +236,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 #[derive(FromRow)]
 struct PropertyRow {
 	id: String,
+	name: String,
 	lat: f64,
 	lng: f64,
 	price: f64,
@@ -253,6 +267,7 @@ impl TryFrom<PropertyRow> for Property {
 			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
 		Ok(Self {
 			id,
+			name: row.name,
 			coords: Coords { lat: row.lat, lng: row.lng },
 			price: Money::parse(row.price).map_err(corrupt_row)?,
 			state: PropertyState::parse(&row.state).map_err(corrupt_row)?,
@@ -302,7 +317,7 @@ impl PropertyRepository for SqliteStore {
 	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
 	/// in-memory by design; SQL pushdown is explicitly descoped.
 	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
-		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
+		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
 			.fetch_all(&self.pool)
 			.await
 			.map_err(map_sqlx_error)?;
@@ -317,7 +332,7 @@ impl PropertyRepository for SqliteStore {
 	}
 
 	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
-		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
+		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
 			.bind(id.raw().to_string())
 			.fetch_optional(&self.pool)
 			.await

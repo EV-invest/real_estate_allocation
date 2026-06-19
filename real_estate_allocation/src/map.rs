@@ -3,7 +3,7 @@
 //! renders a placeholder so the inline-JS extern is never linked off-target.
 
 use dioxus::prelude::*;
-use ev::uikit::{Card, CardContent, CardHeader, CardTitle, Skeleton, ToggleGroup, ToggleGroupItem};
+use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, ToggleGroup, ToggleGroupItem};
 
 use crate::{app::Selected, domain::PropertyState};
 
@@ -51,9 +51,12 @@ pub fn MapPanel() -> Element {
 	let _ = (selected, &properties);
 
 	rsx! {
-		Card { class: "overflow-hidden flex flex-col",
-			CardHeader { class: "flex-row items-center justify-between gap-2",
-				CardTitle { class: "font-serif text-main-accent-t1", "Portfolio map" }
+		Card { class: "flex h-[400px] flex-col overflow-hidden",
+			CardHeader { class: "flex flex-row items-start justify-between gap-2",
+				div {
+					CardTitle { class: "font-serif text-main-accent-t1", "Location" }
+					CardDescription { "Portfolio sites — click a marker to inspect" }
+				}
 				StateFilter { filter }
 			}
 			CardContent { class: "flex-1 relative p-0",

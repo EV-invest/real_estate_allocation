@@ -83,6 +83,19 @@ impl Money {
 	}
 }
 
+impl std::fmt::Display for Money {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let a = self.0;
+		if a >= 1_000_000.0 {
+			write!(f, "${:.2}M", a / 1_000_000.0)
+		} else if a >= 1_000.0 {
+			write!(f, "${:.0}K", a / 1_000.0)
+		} else {
+			write!(f, "${a:.0}")
+		}
+	}
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DealStructure {
 	pub equity_pct: f64,
@@ -100,6 +113,7 @@ pub struct LoanRates {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Property {
 	pub id: PropertyId,
+	pub name: String,
 	pub coords: Coords,
 	pub price: Money,
 	pub state: PropertyState,
