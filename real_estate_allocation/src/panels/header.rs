@@ -14,14 +14,18 @@ pub fn TopBar() -> Element {
 	let property = use_context::<SelectedProperty>();
 
 	rsx! {
-		header { class: "sticky top-0 z-20 flex flex-col gap-2 border-b border-border bg-background/90 px-6 py-5 backdrop-blur lg:px-8",
-			match &*property.read() {
-				Some(Some(p)) => rsx! { Loaded { property: p.clone() } },
-				Some(None) => rsx! { Empty {} },
-				None => rsx! {
-					div { class: "h-4 w-40 animate-pulse rounded bg-accent" }
-					div { class: "h-8 w-64 animate-pulse rounded bg-accent" }
-				},
+		header { class: "sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur",
+			// Inner column shares the body's max-width so the header aligns with the
+			// content beneath it, while the border/background stay full-bleed.
+			div { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-2 px-6 py-5 lg:px-8",
+				match &*property.read() {
+					Some(Some(p)) => rsx! { Loaded { property: p.clone() } },
+					Some(None) => rsx! { Empty {} },
+					None => rsx! {
+						div { class: "h-4 w-40 animate-pulse rounded bg-accent" }
+						div { class: "h-8 w-64 animate-pulse rounded bg-accent" }
+					},
+				}
 			}
 		}
 	}

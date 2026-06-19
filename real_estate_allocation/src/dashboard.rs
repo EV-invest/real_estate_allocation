@@ -10,7 +10,10 @@ pub fn Dashboard() -> Element {
 	rsx! {
 		div { class: "min-h-screen bg-background text-foreground",
 			TopBar {}
-			main { class: "flex flex-col gap-6 p-6 lg:p-8",
+			// Amazon-style centered column: content is capped and guttered so it never
+			// stretches edge-to-edge on wide monitors (which read flat/sparse). The cap
+			// restores the portrait proportions of the Figma.
+			main { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-6 py-6 lg:px-8",
 				// Location + price chart. 5/3 split on desktop, stacked on mobile.
 				div { class: "grid grid-cols-1 gap-6 lg:grid-cols-5",
 					div { class: "lg:col-span-3", MapPanel {} }
