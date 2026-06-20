@@ -25,7 +25,7 @@ pub fn ChartPanel() -> Element {
 }
 
 #[component]
-fn ChartBody(series: Vec<f64>, price: Money) -> Element {
+fn ChartBody(series: Vec<f64>, price: Option<Money>) -> Element {
 	if series.is_empty() {
 		return rsx! { Skeleton { class: "h-full w-full" } };
 	}
@@ -38,7 +38,10 @@ fn ChartBody(series: Vec<f64>, price: Money) -> Element {
 
 	rsx! {
 		div { class: "flex items-baseline gap-3",
-			span { class: "font-serif text-3xl font-semibold", "{price}" }
+			match price {
+				Some(p) => rsx! { span { class: "font-serif text-3xl font-semibold", "{p}" } },
+				None => rsx! { span { class: "font-serif text-3xl font-semibold text-warn", "?" } },
+			}
 			span { class: "text-sm font-semibold {delta_class}", "{arrow} {delta:+.1}%" }
 		}
 		PriceChart { series, up }

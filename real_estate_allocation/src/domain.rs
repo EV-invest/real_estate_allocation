@@ -37,6 +37,46 @@ impl PropertyState {
 	}
 }
 
+/// Build progress, orthogonal to `PropertyState` (which tracks *our* acquisition
+/// lifecycle, not the asset's physical state).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum ConstructionStatus {
+	UnderConstruction,
+	Completed,
+}
+
+impl ConstructionStatus {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::UnderConstruction => "under_construction",
+			Self::Completed => "completed",
+		}
+	}
+
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		match raw {
+			"under_construction" => Ok(Self::UnderConstruction),
+			"completed" => Ok(Self::Completed),
+			other => Err(DomainError::Validation(format!("unknown construction status: {other}"))),
+		}
+	}
+}
+
+/// A developer we know. Referenced by `Property::developer` (by `name`); the store
+/// enforces that every non-null reference resolves to one of these.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Developer {
+	pub name: String,
+	//TODO: generalize this `note` into a reusable concept — an arbitrary (table,
+	// key) → note side-table surfaced on hover, so any value (not just developers)
+	// can carry one, and ideally the lookup tables themselves are defined/managed
+	// through it. For now it lives only on Developer.
+	pub note: String,
+	/// The developer's own homepage. Per-property brochures live in documents, not
+	/// here — this is the developer-level link only.
+	pub page: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Coords {
 	pub lat: f64,
@@ -115,8 +155,13 @@ pub struct Property {
 	pub id: PropertyId,
 	pub name: String,
 	pub coords: Coords,
-	pub price: Money,
+	/// `None` until we have a real number — rendered as a `?` in the warn colour
+	/// rather than a fabricated figure.
+	pub price: Option<Money>,
 	pub state: PropertyState,
+	pub construction: ConstructionStatus,
+	/// Developer name; must resolve to a row in the developers table when set.
+	pub developer: Option<String>,
 	pub research_url: ResearchUrl,
 	pub terms: Option<String>,
 	pub deal: Option<DealStructure>,

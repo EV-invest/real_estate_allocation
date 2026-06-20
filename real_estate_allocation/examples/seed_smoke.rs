@@ -10,6 +10,7 @@ async fn main() {
 
 	let all = store.list(None).await.expect("list");
 	assert_eq!(all.len(), 6, "expected 6 portfolio properties");
+	let mut priced = 0;
 	for p in &all {
 		let files = store.list_files(p.id).await.expect("list files");
 		assert!(!files.is_empty(), "{} has no pics", p.name);
@@ -18,7 +19,16 @@ async fn main() {
 			let bytes = std::fs::read(&path).expect("pic on disk");
 			assert!(bytes.len() > 1000, "{} pic suspiciously small", f.filename);
 		}
-		println!("{:<42} {:>9}  {} pics  {}", p.name, p.price.to_string(), files.len(), p.research_url.as_str());
+		// Every property's developer must resolve to a developers row (FK contract).
+		let dev = p.developer.as_ref().expect("seed sets a developer on every property");
+		let resolved = store.get_developer(dev).await.expect("get developer");
+		assert!(resolved.is_some(), "{} references unknown developer {dev}", p.name);
+		if p.price.is_some() {
+			priced += 1;
+		}
+		let price = p.price.map(|m| m.to_string()).unwrap_or_else(|| "?".into());
+		println!("{:<42} {:>9}  {:<18} {} pics  dev={}", p.name, price, p.construction.as_str(), files.len(), dev);
 	}
+	assert_eq!(priced, 4, "the 4 built properties are priced; the 2 under-construction are not");
 	println!("OK");
 }

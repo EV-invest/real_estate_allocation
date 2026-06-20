@@ -38,6 +38,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-warn: var(--warn);
 
   /* sidebar utilities (PC) */
   --color-sidebar: var(--sidebar);
@@ -86,6 +87,8 @@
   --accent-foreground: white;
   --destructive: #da251d;
   --destructive-foreground: #e6e1d3;
+  /* caution amber — missing/unverified data (e.g. an unknown price) */
+  --warn: #e0a72c;
   --border: color-mix(in srgb, #e6e1d3 10%, transparent);
   --input: color-mix(in srgb, #e6e1d3 20%, transparent);
   --ring: #2a9d8f;

@@ -41,7 +41,8 @@ pub fn PortfolioHeatmap() -> Element {
 #[component]
 fn Treemap(properties: Vec<Property>) -> Element {
 	let mut selected = use_context::<Selected>();
-	let values: Vec<f64> = properties.iter().map(|p| p.price.amount().max(1.0)).collect();
+	// Unknown price → minimal tile area rather than dropping the holding.
+	let values: Vec<f64> = properties.iter().map(|p| p.price.map_or(1.0, |m| m.amount()).max(1.0)).collect();
 	let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
 
 	rsx! {

@@ -1,22 +1,35 @@
-use std::path::{Path, PathBuf};
+use std::{
+	path::{Path, PathBuf},
+	str::FromStr as _,
+};
 
 use async_trait::async_trait;
 use ev::architecture::{Reader, Repository, Specification};
-use sqlx::{FromRow, Row as _, SqlitePool, sqlite::SqlitePoolOptions};
+use sqlx::{
+	FromRow, Row as _, SqlitePool,
+	sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
 
 use crate::{
-	domain::{Coords, DealStructure, FileId, FileKind, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, ResearchUrl},
+	domain::{ConstructionStatus, Coords, DealStructure, Developer, FileId, FileKind, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, ResearchUrl},
 	error::DomainError,
 };
 
 const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS developers (
+	name TEXT PRIMARY KEY,
+	note TEXT NOT NULL DEFAULT '',
+	page TEXT
+);
 CREATE TABLE IF NOT EXISTS properties (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
 	lat REAL NOT NULL,
 	lng REAL NOT NULL,
-	price REAL NOT NULL,
+	price REAL,
 	state TEXT NOT NULL,
+	construction TEXT NOT NULL,
+	developer TEXT REFERENCES developers(name),
 	research_url TEXT NOT NULL,
 	terms TEXT,
 	deal_json TEXT,
@@ -40,6 +53,7 @@ pub trait PropertyRepository: Repository<Aggregate = Property> + Reader<Aggregat
 	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError>;
 	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError>;
 	async fn list_files(&self, id: PropertyId) -> Result<Vec<PropertyFile>, DomainError>;
+	async fn get_developer(&self, name: &str) -> Result<Option<Developer>, DomainError>;
 }
 
 #[derive(Clone)]
@@ -55,15 +69,14 @@ impl SqliteStore {
 		}
 		std::fs::create_dir_all(&data_dir).map_err(|e| DomainError::Repository(format!("create data dir: {e}")))?;
 
-		let pool = SqlitePoolOptions::new()
-			.connect(&format!("sqlite://{}?mode=rwc", db_path.display()))
-			.await
-			.map_err(map_sqlx_error)?;
+		// `foreign_keys(true)` per connection so the `developer` → developers(name)
+		// reference is enforced by the DB, not just by seed discipline.
+		let opts = SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))
+			.map_err(map_sqlx_error)?
+			.create_if_missing(true)
+			.foreign_keys(true);
+		let pool = SqlitePoolOptions::new().connect_with(opts).await.map_err(map_sqlx_error)?;
 		sqlx::query(SCHEMA).execute(&pool).await.map_err(map_sqlx_error)?;
-		// Additive migration for DBs created before `name` existed. The only
-		// expected failure is "duplicate column name" when it's already present
-		// (fresh DBs get it from SCHEMA above), so the error is safe to drop.
-		let _ = sqlx::query("ALTER TABLE properties ADD COLUMN name TEXT NOT NULL DEFAULT ''").execute(&pool).await;
 		Ok(Self { pool, data_dir })
 	}
 
@@ -77,8 +90,9 @@ impl SqliteStore {
 /// track from issue #3, plus the separately-selected Calla) are `Purchased` — the
 /// holdings the portfolio view renders. Two under-construction towers (Q1 / Triton)
 /// are `Purchasing` prospects. Marketing imagery (building shots, floor plans, unit
-/// layouts) ships bundled and is written to disk on first run. Prices are
-/// representative per-unit asking prices, converted from VND at ~25,000 VND/USD.
+/// layouts) ships bundled and is written to disk on first run. Prices, where
+/// known, are representative per-unit asking prices converted from VND at
+/// ~25,000 VND/USD; the under-construction towers have none yet (`None`).
 /// Idempotent: a non-empty DB is left untouched.
 pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	let count: i64 = sqlx::query("SELECT COUNT(*) AS n FROM properties").fetch_one(&store.pool).await.map_err(map_sqlx_error)?.get("n");
@@ -89,8 +103,11 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	struct Seed {
 		name: &'static str,
 		coords: Coords,
-		price: f64,
+		/// `None` where we have no real number yet (the two under-construction towers).
+		price: Option<f64>,
 		state: PropertyState,
+		construction: ConstructionStatus,
+		developer: &'static str,
 		research_url: &'static str,
 		terms: &'static str,
 		reasoning: &'static str,
@@ -106,21 +123,25 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "Quy Nhơn Melody",
 			coords: Coords { lat: 13.7686, lng: 109.2278 },
-			price: 96_000.0,
+			price: Some(96_000.0),
 			state: PropertyState::Purchased,
+			construction: ConstructionStatus::Completed,
+			developer: "Hưng Thịnh",
 			research_url: "https://www.hungthinhland.com/en/projects/detail/QUY-NHON-MELODY.html",
 			terms: "Handed over early 2024 (topped out 2021, completed Dec 2023). 4-star seafront tourism-apartment standard.",
-			reasoning: "Developer: Hưng Thịnh Group (with Kim Cúc). Two 35-floor towers (Tropical & Flamenco), 1,332 units + 21 shops on the An Dương Vương–Chương Dương beachfront. Representative 2-BR ≈ 2.4 tỷ VND. Beachfront short-stay rental demand behind an established national brand.",
+			reasoning: "Two 35-floor towers (Tropical & Flamenco) with Kim Cúc, 1,332 units + 21 shops on the An Dương Vương–Chương Dương beachfront. Representative 2-BR ≈ 2.4 tỷ VND. Beachfront short-stay rental demand behind an established national brand.",
 			pics: &[("building.jpg", JPG, include_bytes!("../assets/seed/melody/building.jpg"))],
 		},
 		Seed {
 			name: "Vina2 Panorama Quy Nhơn",
 			coords: Coords { lat: 13.8050, lng: 109.2070 },
-			price: 60_000.0,
+			price: Some(60_000.0),
 			state: PropertyState::Purchased,
+			construction: ConstructionStatus::Completed,
+			developer: "VINA2",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/can-ho-vina2-panorama/",
 			terms: "Built and handed over from early 2024; residents occupying. Move-in available from 30% of unit value.",
-			reasoning: "Developer: VINA2 (Investment & Construction JSC). 20 floors, 252 units (Studio–3BR) in the Đê Đông resettlement area, Nhơn Bình; riverside with pool and shophouse podium. ~22–26 tr/m². Lowest entry price of the four; Hà Thanh river / Thị Nại lagoon outlook.",
+			reasoning: "20 floors, 252 units (Studio–3BR) in the Đê Đông resettlement area, Nhơn Bình; riverside with pool and shophouse podium. ~22–26 tr/m². Lowest entry price of the four; Hà Thanh river / Thị Nại lagoon outlook.",
 			pics: &[
 				("building.png", PNG, include_bytes!("../assets/seed/vina2_panorama/building.png")),
 				("real.jpg", JPG, include_bytes!("../assets/seed/vina2_panorama/real.jpg")),
@@ -130,11 +151,13 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "Ecolife Riverside Quy Nhơn",
 			coords: Coords { lat: 13.7720, lng: 109.2120 },
-			price: 59_000.0,
+			price: Some(59_000.0),
 			state: PropertyState::Purchased,
+			construction: ConstructionStatus::Completed,
+			developer: "Capital House",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/ecolife-riverside/",
 			terms: "Completed and handed over; red book (sổ hồng) issued — move in immediately.",
-			reasoning: "Developer: Capital House. 27-floor single tower, 694 units on Điện Biên Phủ St along the Hà Thanh river. Green-building positioning; issued title lowers legal risk. Representative 2-BR ≈ 1.48 tỷ VND.",
+			reasoning: "27-floor single tower, 694 units on Điện Biên Phủ St along the Hà Thanh river. Green-building positioning; issued title lowers legal risk. Representative 2-BR ≈ 1.48 tỷ VND.",
 			pics: &[
 				("building.png", PNG, include_bytes!("../assets/seed/ecolife/building.png")),
 				("real.jpg", JPG, include_bytes!("../assets/seed/ecolife/real.jpg")),
@@ -144,11 +167,13 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "The Calla (Calla Apartment Quy Nhơn)",
 			coords: Coords { lat: 13.7542045, lng: 109.2073247 },
-			price: 80_000.0,
+			price: Some(80_000.0),
 			state: PropertyState::Purchased,
+			construction: ConstructionStatus::Completed,
+			developer: "Armo",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/calla-apartment-quy-nhon/",
 			terms: "Completed, sổ hồng available. Bank financing up to 80% LTV with interest grace through handover.",
-			reasoning: "Developer: Armo Investment & Development JSC. 29-floor tower (100m), 454 units + 13 shophouses in the Vũng Chua green urban area (QL1D, Ghềnh Ráng); ~800m to the beach. First garden-apartment in Quy Nhơn; mountain + sea + city views. Units 39–82m² (1–3BR), ~25–28 tr/m². Total project investment 563 tỷ VND.",
+			reasoning: "29-floor tower (100m), 454 units + 13 shophouses in the Vũng Chua green urban area (QL1D, Ghềnh Ráng); ~800m to the beach. First garden-apartment in Quy Nhơn; mountain + sea + city views. Units 39–82m² (1–3BR), ~25–28 tr/m². Total project investment 563 tỷ VND.",
 			pics: &[
 				("building.jpg", JPG, include_bytes!("../assets/seed/calla/building.jpg")),
 				("livingroom.jpg", JPG, include_bytes!("../assets/seed/calla/livingroom.jpg")),
@@ -159,11 +184,13 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "Q1 Tower (Cadia Quy Nhơn)",
 			coords: Coords { lat: 13.7710, lng: 109.2360 },
-			price: 150_000.0,
+			price: None,
 			state: PropertyState::Purchasing,
+			construction: ConstructionStatus::UnderConstruction,
+			developer: "Phát Đạt",
 			research_url: "https://q1-tower.vn/",
 			terms: "Under construction (broke ground Jun 2022). Beachfront 5-star branded-residence; not yet handed over.",
-			reasoning: "Developer: Phát Đạt (Ngô Mây Real Estate JSC, PDR). Diamond-plot 5,246m² at No.1 Ngô Mây, directly facing Quy Nhơn beach & Nguyễn Tất Thành square. 5-star tourism apartments + hotel operated to Wyndham standard, smart-home fitted. Branded-residence scarcity in the city centre; pre-handover entry.",
+			reasoning: "Diamond-plot 5,246m² at No.1 Ngô Mây, directly facing Quy Nhơn beach & Nguyễn Tất Thành square. 5-star tourism apartments + hotel operated to Wyndham standard, smart-home fitted. Branded-residence scarcity in the city centre; pre-handover entry.",
 			pics: &[
 				("building.jpg", JPG, include_bytes!("../assets/seed/q1_tower/building.jpg")),
 				("render.jpg", JPG, include_bytes!("../assets/seed/q1_tower/render.jpg")),
@@ -173,11 +200,13 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "Triton — Quy Nhơn Sky Residence",
 			coords: Coords { lat: 13.7820, lng: 109.2190 },
-			price: 110_000.0,
+			price: None,
 			state: PropertyState::Purchasing,
+			construction: ConstructionStatus::UnderConstruction,
+			developer: "Arita",
 			research_url: "https://tritonquynhonsky.vn/",
 			terms: "Under construction (launched 2025); pricing still being released. Not yet handed over.",
-			reasoning: "Developer: Arita Corporation. 48-storey premium tower (4 basements) at 72B Tây Sơn, Quy Nhơn Nam. Tallest of the set; early-stage entry on a central arterial. Specs and pricing still firming up — treat valuation as provisional.",
+			reasoning: "48-storey premium tower (4 basements) at 72B Tây Sơn, Quy Nhơn Nam. Tallest of the set; early-stage entry on a central arterial. Specs and pricing still firming up — treat valuation as provisional.",
 			pics: &[
 				("building.jpg", JPG, include_bytes!("../assets/seed/triton/building.jpg")),
 				("location.jpg", JPG, include_bytes!("../assets/seed/triton/location.jpg")),
@@ -186,15 +215,36 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		},
 	];
 
+	// Developers first: the FK on properties.developer requires them to exist.
+	let developers: [(&str, &str, Option<&str>); 6] = [
+		("Hưng Thịnh", "Large national developer; ecosystem includes Hưng Thịnh Land & Incons. 2022–23 liquidity stress — watch counterparty risk.", Some("https://hungthinhcorp.com.vn/")),
+		("VINA2", "Listed contractor-developer (HNX: VC2) that builds its own projects. Smaller balance sheet.", Some("https://vina2.com.vn/")),
+		("Capital House", "Hà Nội green-building specialist behind the Ecolife / Ecohome brands.", None),
+		("Armo", "Local Bình Định developer; The Calla is its flagship tower.", None),
+		("Phát Đạt", "Major listed developer (HOSE: PDR), HCMC-centric. Bình Định pipeline slipped to ~2027.", Some("https://phatdat.com.vn/")),
+		("Arita", "Local developer; Triton is early-stage with a limited track record.", None),
+	];
+	for (name, note, page) in developers {
+		sqlx::query("INSERT INTO developers (name, note, page) VALUES (?, ?, ?)")
+			.bind(name)
+			.bind(note)
+			.bind(page)
+			.execute(&store.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+	}
+
 	for s in seeds {
 		let id = PropertyId::new();
-		sqlx::query("INSERT INTO properties (id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		sqlx::query("INSERT INTO properties (id, name, lat, lng, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			.bind(id.raw().to_string())
 			.bind(s.name)
 			.bind(s.coords.lat)
 			.bind(s.coords.lng)
 			.bind(s.price)
 			.bind(s.state.as_str())
+			.bind(s.construction.as_str())
+			.bind(s.developer)
 			.bind(s.research_url)
 			.bind(s.terms)
 			.bind(None::<String>)
@@ -233,8 +283,10 @@ struct PropertyRow {
 	name: String,
 	lat: f64,
 	lng: f64,
-	price: f64,
+	price: Option<f64>,
 	state: String,
+	construction: String,
+	developer: Option<String>,
 	research_url: String,
 	terms: Option<String>,
 	deal_json: Option<String>,
@@ -263,8 +315,10 @@ impl TryFrom<PropertyRow> for Property {
 			id,
 			name: row.name,
 			coords: Coords { lat: row.lat, lng: row.lng },
-			price: Money::parse(row.price).map_err(corrupt_row)?,
+			price: row.price.map(Money::parse).transpose().map_err(corrupt_row)?,
 			state: PropertyState::parse(&row.state).map_err(corrupt_row)?,
+			construction: ConstructionStatus::parse(&row.construction).map_err(corrupt_row)?,
+			developer: row.developer,
 			research_url: ResearchUrl::parse(row.research_url).map_err(corrupt_row)?,
 			terms: row.terms,
 			deal,
@@ -273,6 +327,13 @@ impl TryFrom<PropertyRow> for Property {
 			price_series: Vec::new(),
 		})
 	}
+}
+
+#[derive(FromRow)]
+struct DeveloperRow {
+	name: String,
+	note: String,
+	page: Option<String>,
 }
 
 #[derive(FromRow)]
@@ -311,7 +372,7 @@ impl PropertyRepository for SqliteStore {
 	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
 	/// in-memory by design; SQL pushdown is explicitly descoped.
 	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
-		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
+		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
 			.fetch_all(&self.pool)
 			.await
 			.map_err(map_sqlx_error)?;
@@ -326,12 +387,25 @@ impl PropertyRepository for SqliteStore {
 	}
 
 	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
-		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
+		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
 			.bind(id.raw().to_string())
 			.fetch_optional(&self.pool)
 			.await
 			.map_err(map_sqlx_error)?;
 		row.map(Property::try_from).transpose()
+	}
+
+	async fn get_developer(&self, name: &str) -> Result<Option<Developer>, DomainError> {
+		let row = sqlx::query_as::<_, DeveloperRow>("SELECT name, note, page FROM developers WHERE name = ?")
+			.bind(name)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		Ok(row.map(|r| Developer {
+			name: r.name,
+			note: r.note,
+			page: r.page,
+		}))
 	}
 
 	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError> {

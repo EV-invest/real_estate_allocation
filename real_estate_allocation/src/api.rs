@@ -48,6 +48,13 @@ pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnEr
 	Ok(prop)
 }
 #[server]
+pub async fn get_developer(name: String) -> Result<Option<crate::domain::Developer>, ServerFnError> {
+	use crate::store::PropertyRepository;
+
+	let store = app_state().await?.store;
+	store.get_developer(&name).await.map_err(to_server_err)
+}
+#[server]
 pub async fn list_files(id: PropertyId) -> Result<Vec<PropertyFile>, ServerFnError> {
 	use crate::store::PropertyRepository;
 

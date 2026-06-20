@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
-use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
+use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
 
-use crate::{app::SelectedProperty, domain::Property};
+use crate::{
+	app::SelectedProperty,
+	domain::{ConstructionStatus, Property},
+};
 
 #[component]
 pub fn DetailsPanel() -> Element {
@@ -28,7 +31,19 @@ pub fn DetailsPanel() -> Element {
 fn Details(property: Property) -> Element {
 	rsx! {
 		div { class: "flex flex-col",
-			Kv { label: "Price", value_class: "text-main-accent-t3", "{property.price}" }
+			match property.price {
+				Some(p) => rsx! { Kv { label: "Price", value_class: "text-main-accent-t3", "{p}" } },
+				None => rsx! { Kv { label: "Price", value_class: "text-warn", "?" } },
+			}
+
+			if let Some(dev) = property.developer.as_ref() {
+				DeveloperKv { name: dev.clone() }
+			}
+
+			match property.construction {
+				ConstructionStatus::Completed => rsx! { Kv { label: "Construction", value_class: "text-main-accent-t2", "Completed" } },
+				ConstructionStatus::UnderConstruction => rsx! { Kv { label: "Construction", value_class: "text-warn", "Under construction" } },
+			}
 
 			if let Some(deal) = property.deal.as_ref() {
 				Kv { label: "Equity / Debt", "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
@@ -63,6 +78,32 @@ fn Kv(label: String, #[props(default)] value_class: String, children: Element) -
 		div { class: "flex items-center justify-between gap-4 border-t border-border py-2.5 first:border-t-0",
 			span { class: "text-sm text-muted-foreground", "{label}" }
 			span { class: "text-right text-sm font-semibold {value_class}", {children} }
+		}
+	}
+}
+
+/// Developer row. Resolves the developer's note server-side and, when present,
+/// surfaces it on hover over the name.
+#[component]
+fn DeveloperKv(name: String) -> Element {
+	let lookup = name.clone();
+	let dev = use_resource(move || {
+		let lookup = lookup.clone();
+		async move { crate::api::get_developer(lookup).await.ok().flatten() }
+	});
+	let note = dev.read().as_ref().and_then(|o| o.as_ref()).map(|d| d.note.clone()).filter(|n| !n.trim().is_empty());
+
+	rsx! {
+		match note {
+			Some(note) => rsx! {
+				Kv { label: "Developer",
+					Tooltip {
+						TooltipTrigger { class: "cursor-help text-sm font-semibold underline decoration-dotted underline-offset-4", "{name}" }
+						TooltipContent { class: "max-w-xs text-left text-xs font-normal normal-case", "{note}" }
+					}
+				}
+			},
+			None => rsx! { Kv { label: "Developer", "{name}" } },
 		}
 	}
 }

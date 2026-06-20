@@ -40,7 +40,10 @@ fn Loaded(property: Property) -> Element {
 			div { class: "flex items-center gap-3",
 				h1 { class: "font-serif text-3xl font-semibold tracking-tight", "{property.name}" }
 				Badge { variant, "{label}" }
-				span { class: "text-sm font-medium text-muted-foreground", "{property.price}" }
+				match property.price {
+					Some(p) => rsx! { span { class: "text-sm font-medium text-muted-foreground", "{p}" } },
+					None => rsx! { span { class: "text-sm font-medium text-warn", "?" } },
+				}
 			}
 			a {
 				href: "{property.research_url.as_str()}",

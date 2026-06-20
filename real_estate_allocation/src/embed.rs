@@ -103,7 +103,10 @@ fn FeaturedCard(property: Property) -> Element {
 				h3 { class: "font-serif text-2xl font-semibold text-white", "{property.name}" }
 				p { class: "mb-6 mt-2 line-clamp-3 max-w-xl text-muted-foreground", "{property.reasoning_or_terms()}" }
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
-					Stat { label: "Price", value_class: "text-main-accent-t3", "{property.price}" }
+					match property.price {
+						Some(p) => rsx! { Stat { label: "Price", value_class: "text-main-accent-t3", "{p}" } },
+						None => rsx! { Stat { label: "Price", value_class: "text-warn", "?" } },
+					}
 					Stat { label: "Status", value_class: "text-main-accent-t2", "Purchased" }
 					Stat { label: "Action", value_class: "text-white", "Open ↗" }
 				}
@@ -133,7 +136,10 @@ fn SideCard(property: Property) -> Element {
 				h3 { class: "font-serif text-xl font-semibold text-white", "{property.name}" }
 				p { class: "mb-6 mt-2 line-clamp-3 text-muted-foreground", "{property.reasoning_or_terms()}" }
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
-					Stat { label: "Price", value_class: "text-white", "{property.price}" }
+					match property.price {
+						Some(p) => rsx! { Stat { label: "Price", value_class: "text-white", "{p}" } },
+						None => rsx! { Stat { label: "Price", value_class: "text-warn", "?" } },
+					}
 					span { class: "inline-flex items-center gap-1 font-mono text-xs tracking-wider text-main-accent-t1 group-hover:text-white",
 						"Deal Sheet"
 						IconArrow {}
