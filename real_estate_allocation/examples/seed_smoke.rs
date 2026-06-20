@@ -9,7 +9,7 @@ async fn main() {
 	seed(&store).await.expect("seed");
 
 	let all = store.list(None).await.expect("list");
-	assert_eq!(all.len(), 4, "expected 4 portfolio properties");
+	assert_eq!(all.len(), 6, "expected 6 portfolio properties");
 	for p in &all {
 		let files = store.list_files(p.id).await.expect("list files");
 		assert!(!files.is_empty(), "{} has no pics", p.name);

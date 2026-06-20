@@ -73,12 +73,13 @@ impl SqliteStore {
 	}
 }
 
-/// Our Quy Nhơn portfolio: four already-built projects, one per developer track
-/// from issue #3 plus the separately-selected Calla. All `Purchased` — these are
-/// the holdings the portfolio view renders. Marketing imagery (building shots,
-/// floor plans, unit layouts) ships bundled and is written to disk on first run.
-/// Prices are representative per-unit asking prices, converted from VND at
-/// ~25,000 VND/USD. Idempotent: a non-empty DB is left untouched.
+/// Our Quy Nhơn portfolio. The four already-built projects (one per developer
+/// track from issue #3, plus the separately-selected Calla) are `Purchased` — the
+/// holdings the portfolio view renders. Two under-construction towers (Q1 / Triton)
+/// are `Purchasing` prospects. Marketing imagery (building shots, floor plans, unit
+/// layouts) ships bundled and is written to disk on first run. Prices are
+/// representative per-unit asking prices, converted from VND at ~25,000 VND/USD.
+/// Idempotent: a non-empty DB is left untouched.
 pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	let count: i64 = sqlx::query("SELECT COUNT(*) AS n FROM properties").fetch_one(&store.pool).await.map_err(map_sqlx_error)?.get("n");
 	if count > 0 {
@@ -89,6 +90,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		name: &'static str,
 		coords: Coords,
 		price: f64,
+		state: PropertyState,
 		research_url: &'static str,
 		terms: &'static str,
 		reasoning: &'static str,
@@ -105,6 +107,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "Quy Nhơn Melody",
 			coords: Coords { lat: 13.7686, lng: 109.2278 },
 			price: 96_000.0,
+			state: PropertyState::Purchased,
 			research_url: "https://www.hungthinhland.com/en/projects/detail/QUY-NHON-MELODY.html",
 			terms: "Handed over early 2024 (topped out 2021, completed Dec 2023). 4-star seafront tourism-apartment standard.",
 			reasoning: "Developer: Hưng Thịnh Group (with Kim Cúc). Two 35-floor towers (Tropical & Flamenco), 1,332 units + 21 shops on the An Dương Vương–Chương Dương beachfront. Representative 2-BR ≈ 2.4 tỷ VND. Beachfront short-stay rental demand behind an established national brand.",
@@ -114,6 +117,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "Vina2 Panorama Quy Nhơn",
 			coords: Coords { lat: 13.8050, lng: 109.2070 },
 			price: 60_000.0,
+			state: PropertyState::Purchased,
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/can-ho-vina2-panorama/",
 			terms: "Built and handed over from early 2024; residents occupying. Move-in available from 30% of unit value.",
 			reasoning: "Developer: VINA2 (Investment & Construction JSC). 20 floors, 252 units (Studio–3BR) in the Đê Đông resettlement area, Nhơn Bình; riverside with pool and shophouse podium. ~22–26 tr/m². Lowest entry price of the four; Hà Thanh river / Thị Nại lagoon outlook.",
@@ -127,6 +131,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "Ecolife Riverside Quy Nhơn",
 			coords: Coords { lat: 13.7720, lng: 109.2120 },
 			price: 59_000.0,
+			state: PropertyState::Purchased,
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/ecolife-riverside/",
 			terms: "Completed and handed over; red book (sổ hồng) issued — move in immediately.",
 			reasoning: "Developer: Capital House. 27-floor single tower, 694 units on Điện Biên Phủ St along the Hà Thanh river. Green-building positioning; issued title lowers legal risk. Representative 2-BR ≈ 1.48 tỷ VND.",
@@ -140,6 +145,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "The Calla (Calla Apartment Quy Nhơn)",
 			coords: Coords { lat: 13.7542045, lng: 109.2073247 },
 			price: 80_000.0,
+			state: PropertyState::Purchased,
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/calla-apartment-quy-nhon/",
 			terms: "Completed, sổ hồng available. Bank financing up to 80% LTV with interest grace through handover.",
 			reasoning: "Developer: Armo Investment & Development JSC. 29-floor tower (100m), 454 units + 13 shophouses in the Vũng Chua green urban area (QL1D, Ghềnh Ráng); ~800m to the beach. First garden-apartment in Quy Nhơn; mountain + sea + city views. Units 39–82m² (1–3BR), ~25–28 tr/m². Total project investment 563 tỷ VND.",
@@ -148,6 +154,34 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 				("livingroom.jpg", JPG, include_bytes!("../assets/seed/calla/livingroom.jpg")),
 				("floorplan.png", PNG, include_bytes!("../assets/seed/calla/floorplan.png")),
 				("unit_87m2.png", PNG, include_bytes!("../assets/seed/calla/unit_87m2.png")),
+			],
+		},
+		Seed {
+			name: "Q1 Tower (Cadia Quy Nhơn)",
+			coords: Coords { lat: 13.7710, lng: 109.2360 },
+			price: 150_000.0,
+			state: PropertyState::Purchasing,
+			research_url: "https://q1-tower.vn/",
+			terms: "Under construction (broke ground Jun 2022). Beachfront 5-star branded-residence; not yet handed over.",
+			reasoning: "Developer: Phát Đạt (Ngô Mây Real Estate JSC, PDR). Diamond-plot 5,246m² at No.1 Ngô Mây, directly facing Quy Nhơn beach & Nguyễn Tất Thành square. 5-star tourism apartments + hotel operated to Wyndham standard, smart-home fitted. Branded-residence scarcity in the city centre; pre-handover entry.",
+			pics: &[
+				("building.jpg", JPG, include_bytes!("../assets/seed/q1_tower/building.jpg")),
+				("render.jpg", JPG, include_bytes!("../assets/seed/q1_tower/render.jpg")),
+				("livingroom.jpg", JPG, include_bytes!("../assets/seed/q1_tower/livingroom.jpg")),
+			],
+		},
+		Seed {
+			name: "Triton — Quy Nhơn Sky Residence",
+			coords: Coords { lat: 13.7820, lng: 109.2190 },
+			price: 110_000.0,
+			state: PropertyState::Purchasing,
+			research_url: "https://tritonquynhonsky.vn/",
+			terms: "Under construction (launched 2025); pricing still being released. Not yet handed over.",
+			reasoning: "Developer: Arita Corporation. 48-storey premium tower (4 basements) at 72B Tây Sơn, Quy Nhơn Nam. Tallest of the set; early-stage entry on a central arterial. Specs and pricing still firming up — treat valuation as provisional.",
+			pics: &[
+				("building.jpg", JPG, include_bytes!("../assets/seed/triton/building.jpg")),
+				("location.jpg", JPG, include_bytes!("../assets/seed/triton/location.jpg")),
+				("floorplan.jpg", JPG, include_bytes!("../assets/seed/triton/floorplan.jpg")),
 			],
 		},
 	];
@@ -160,7 +194,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			.bind(s.coords.lat)
 			.bind(s.coords.lng)
 			.bind(s.price)
-			.bind(PropertyState::Purchased.as_str())
+			.bind(s.state.as_str())
 			.bind(s.research_url)
 			.bind(s.terms)
 			.bind(None::<String>)
