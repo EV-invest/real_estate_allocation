@@ -39,6 +39,9 @@
           enable = true;
           lastSupportedVersion = "nightly-2026-06-16";
           jobs.default = true;
+          gitignore.extra = ''
+            real_estate_allocation/assets/tokens.css
+          '';
         };
         readme = v_flakes.readme-fw {
           inherit pkgs pname;
