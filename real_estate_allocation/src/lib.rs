@@ -4,6 +4,7 @@ pub mod api;
 pub mod app;
 pub mod dashboard;
 pub mod domain;
+pub mod embed;
 pub mod error;
 pub mod map;
 pub mod panels;

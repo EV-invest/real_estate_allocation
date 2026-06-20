@@ -37,7 +37,7 @@ async-trait.workspace = true
 clap.workspace = true
 color-eyre.workspace = true
 derive-new.workspace = true
-dioxus = { workspace = true, features = ["fullstack"] }
+dioxus = { workspace = true, features = ["fullstack", "router"] }
 jiff.workspace = true
 miette.workspace = true
 real_estate_allocation_macros.workspace = true
