@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS property_files (
 );
 ";
 
-const SAMPLE_PIC: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="#0c1626"/><rect x="40" y="180" width="120" height="140" fill="#001e4e"/><rect x="200" y="120" width="140" height="200" fill="#081020"/><rect x="380" y="60" width="160" height="260" fill="#001e4e"/><text x="320" y="340" fill="#e6e1d3" font-family="serif" font-size="20" text-anchor="middle">Sample Property</text></svg>"##;
 /// Leaf port over the `ev` repository markers. No `UnitOfWork`: every write here
 /// is a single row, so a transaction boundary would buy nothing.
 #[async_trait]
@@ -74,8 +73,12 @@ impl SqliteStore {
 	}
 }
 
-/// Insert a handful of sample properties across all three states if the table is
-/// empty. Idempotent: a non-empty DB is left untouched.
+/// Our Quy Nhơn portfolio: four already-built projects, one per developer track
+/// from issue #3 plus the separately-selected Calla. All `Purchased` — these are
+/// the holdings the portfolio view renders. Marketing imagery (building shots,
+/// floor plans, unit layouts) ships bundled and is written to disk on first run.
+/// Prices are representative per-unit asking prices, converted from VND at
+/// ~25,000 VND/USD. Idempotent: a non-empty DB is left untouched.
 pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	let count: i64 = sqlx::query("SELECT COUNT(*) AS n FROM properties").fetch_one(&store.pool).await.map_err(map_sqlx_error)?.get("n");
 	if count > 0 {
@@ -86,147 +89,104 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		name: &'static str,
 		coords: Coords,
 		price: f64,
-		state: PropertyState,
 		research_url: &'static str,
-		terms: Option<&'static str>,
-		deal: Option<DealStructure>,
-		loan: Option<LoanRates>,
-		reasoning: Option<&'static str>,
+		terms: &'static str,
+		reasoning: &'static str,
+		/// (filename-on-disk, content-type, bytes). Floor plans / unit layouts ride
+		/// as `Pic` too so they render inline in the media gallery.
+		pics: &'static [(&'static str, &'static str, &'static [u8])],
 	}
+
+	const JPG: &str = "image/jpeg";
+	const PNG: &str = "image/png";
 
 	let seeds = [
 		Seed {
-			name: "Times Square Tower",
-			coords: Coords { lat: 40.7580, lng: -73.9855 },
-			price: 12_500_000.0,
-			state: PropertyState::Purchased,
-			research_url: "https://example.com/research/times-square",
-			terms: Some("All-cash close, 30-day diligence."),
-			deal: Some(DealStructure {
-				equity_pct: 60.0,
-				debt_pct: 40.0,
-				notes: Some("JV with local operator".into()),
-			}),
-			loan: Some(LoanRates {
-				rate_pct: 5.4,
-				term_years: 10,
-				lender: "Apollo".into(),
-			}),
-			reasoning: Some("Flagship retail corridor; durable foot traffic."),
+			name: "Quy Nhơn Melody",
+			coords: Coords { lat: 13.7686, lng: 109.2278 },
+			price: 96_000.0,
+			research_url: "https://www.hungthinhland.com/en/projects/detail/QUY-NHON-MELODY.html",
+			terms: "Handed over early 2024 (topped out 2021, completed Dec 2023). 4-star seafront tourism-apartment standard.",
+			reasoning: "Developer: Hưng Thịnh Group (with Kim Cúc). Two 35-floor towers (Tropical & Flamenco), 1,332 units + 21 shops on the An Dương Vương–Chương Dương beachfront. Representative 2-BR ≈ 2.4 tỷ VND. Beachfront short-stay rental demand behind an established national brand.",
+			pics: &[("building.jpg", JPG, include_bytes!("../assets/seed/melody/building.jpg"))],
 		},
 		Seed {
-			name: "Bishopsgate House",
-			coords: Coords { lat: 51.5074, lng: -0.1278 },
-			price: 8_900_000.0,
-			state: PropertyState::Purchased,
-			research_url: "https://example.com/research/london-city",
-			terms: None,
-			deal: None,
-			loan: Some(LoanRates {
-				rate_pct: 4.9,
-				term_years: 7,
-				lender: "Lloyds".into(),
-			}),
-			reasoning: None,
+			name: "Vina2 Panorama Quy Nhơn",
+			coords: Coords { lat: 13.8050, lng: 109.2070 },
+			price: 60_000.0,
+			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/can-ho-vina2-panorama/",
+			terms: "Built and handed over from early 2024; residents occupying. Move-in available from 30% of unit value.",
+			reasoning: "Developer: VINA2 (Investment & Construction JSC). 20 floors, 252 units (Studio–3BR) in the Đê Đông resettlement area, Nhơn Bình; riverside with pool and shophouse podium. ~22–26 tr/m². Lowest entry price of the four; Hà Thanh river / Thị Nại lagoon outlook.",
+			pics: &[
+				("building.png", PNG, include_bytes!("../assets/seed/vina2_panorama/building.png")),
+				("real.jpg", JPG, include_bytes!("../assets/seed/vina2_panorama/real.jpg")),
+				("floorplan.jpg", JPG, include_bytes!("../assets/seed/vina2_panorama/floorplan.jpg")),
+			],
 		},
 		Seed {
-			name: "Le Marais Residences",
-			coords: Coords { lat: 48.8566, lng: 2.3522 },
-			price: 6_400_000.0,
-			state: PropertyState::Interesting,
-			research_url: "https://example.com/research/paris-marais",
-			terms: Some("Seller financing on offer."),
-			deal: None,
-			loan: None,
-			reasoning: Some("Mixed-use upside if rezoned."),
+			name: "Ecolife Riverside Quy Nhơn",
+			coords: Coords { lat: 13.7720, lng: 109.2120 },
+			price: 59_000.0,
+			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/ecolife-riverside/",
+			terms: "Completed and handed over; red book (sổ hồng) issued — move in immediately.",
+			reasoning: "Developer: Capital House. 27-floor single tower, 694 units on Điện Biên Phủ St along the Hà Thanh river. Green-building positioning; issued title lowers legal risk. Representative 2-BR ≈ 1.48 tỷ VND.",
+			pics: &[
+				("building.png", PNG, include_bytes!("../assets/seed/ecolife/building.png")),
+				("real.jpg", JPG, include_bytes!("../assets/seed/ecolife/real.jpg")),
+				("floorplan.png", PNG, include_bytes!("../assets/seed/ecolife/floorplan.png")),
+			],
 		},
 		Seed {
-			name: "Shibuya Crossing Lofts",
-			coords: Coords { lat: 35.6762, lng: 139.6503 },
-			price: 5_100_000.0,
-			state: PropertyState::Interesting,
-			research_url: "https://example.com/research/tokyo-shibuya",
-			terms: None,
-			deal: None,
-			loan: None,
-			reasoning: None,
-		},
-		Seed {
-			name: "Brickell Bay Tower",
-			coords: Coords { lat: 25.7617, lng: -80.1918 },
-			price: 7_750_000.0,
-			state: PropertyState::Purchasing,
-			research_url: "https://example.com/research/miami-brickell",
-			terms: Some("Under LOI, exclusivity through Q3."),
-			deal: Some(DealStructure {
-				equity_pct: 75.0,
-				debt_pct: 25.0,
-				notes: None,
-			}),
-			loan: Some(LoanRates {
-				rate_pct: 6.1,
-				term_years: 5,
-				lender: "Blackstone".into(),
-			}),
-			reasoning: Some("Tax-advantaged inflow tailwind."),
-		},
-		Seed {
-			name: "Marina Bay Quarter",
-			coords: Coords { lat: 1.3521, lng: 103.8198 },
-			price: 9_300_000.0,
-			state: PropertyState::Purchasing,
-			research_url: "https://example.com/research/singapore-cbd",
-			terms: None,
-			deal: None,
-			loan: None,
-			reasoning: Some("Gateway-city scarcity premium."),
+			name: "The Calla (Calla Apartment Quy Nhơn)",
+			coords: Coords { lat: 13.7542045, lng: 109.2073247 },
+			price: 80_000.0,
+			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/calla-apartment-quy-nhon/",
+			terms: "Completed, sổ hồng available. Bank financing up to 80% LTV with interest grace through handover.",
+			reasoning: "Developer: Armo Investment & Development JSC. 29-floor tower (100m), 454 units + 13 shophouses in the Vũng Chua green urban area (QL1D, Ghềnh Ráng); ~800m to the beach. First garden-apartment in Quy Nhơn; mountain + sea + city views. Units 39–82m² (1–3BR), ~25–28 tr/m². Total project investment 563 tỷ VND.",
+			pics: &[
+				("building.jpg", JPG, include_bytes!("../assets/seed/calla/building.jpg")),
+				("livingroom.jpg", JPG, include_bytes!("../assets/seed/calla/livingroom.jpg")),
+				("floorplan.png", PNG, include_bytes!("../assets/seed/calla/floorplan.png")),
+				("unit_87m2.png", PNG, include_bytes!("../assets/seed/calla/unit_87m2.png")),
+			],
 		},
 	];
 
-	let mut first_id = None;
 	for s in seeds {
 		let id = PropertyId::new();
-		if first_id.is_none() {
-			first_id = Some(id);
-		}
-		let deal_json = s.deal.as_ref().map(|d| serde_json::to_string(d).expect("DealStructure serializes"));
-		let loan_json = s.loan.as_ref().map(|l| serde_json::to_string(l).expect("LoanRates serializes"));
 		sqlx::query("INSERT INTO properties (id, name, lat, lng, price, state, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			.bind(id.raw().to_string())
 			.bind(s.name)
 			.bind(s.coords.lat)
 			.bind(s.coords.lng)
 			.bind(s.price)
-			.bind(s.state.as_str())
+			.bind(PropertyState::Purchased.as_str())
 			.bind(s.research_url)
 			.bind(s.terms)
-			.bind(deal_json)
-			.bind(loan_json)
+			.bind(None::<String>)
+			.bind(None::<String>)
 			.bind(s.reasoning)
 			.execute(&store.pool)
 			.await
 			.map_err(map_sqlx_error)?;
-	}
 
-	// Drop a sample pic to disk + metadata, attached to the first seeded property.
-	if let Some(pid) = first_id {
-		let fid = FileId::new();
-		let filename = "sample.svg";
-		let bytes = SAMPLE_PIC.as_bytes();
-		let path = store.file_path(pid, fid, filename);
-		if let Some(parent) = path.parent() {
-			std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create file dir: {e}")))?;
+		for (filename, content_type, bytes) in s.pics {
+			let fid = FileId::new();
+			let path = store.file_path(id, fid, filename);
+			if let Some(parent) = path.parent() {
+				std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create file dir: {e}")))?;
+			}
+			std::fs::write(&path, bytes).map_err(|e| DomainError::Repository(format!("write seed pic: {e}")))?;
+			store
+				.add_file(PropertyFile {
+					id: fid,
+					property_id: id,
+					kind: FileKind::Pic,
+					filename: (*filename).into(),
+					content_type: (*content_type).into(),
+				})
+				.await?;
 		}
-		std::fs::write(&path, bytes).map_err(|e| DomainError::Repository(format!("write sample pic: {e}")))?;
-		store
-			.add_file(PropertyFile {
-				id: fid,
-				property_id: pid,
-				kind: FileKind::Pic,
-				filename: filename.into(),
-				content_type: "image/svg+xml".into(),
-			})
-			.await?;
 	}
 
 	Ok(())
