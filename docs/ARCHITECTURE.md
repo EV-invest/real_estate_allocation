@@ -38,8 +38,14 @@ flowchart LR
   out of the fullstack context via `consume_context`.
 - `config` *(server-only)* — `AppConfig` (`maps_api_key`, `db_path`, `data_dir`,
   `admin_token`, `admins`) over `v_utils` `LiveSettings`.
-- `app` / `dashboard` / `panels` — UI. Selection is a root `Signal<Option<PropertyId>>`
-  shared via context; each panel `use_resource`s keyed on it.
+- `app` / `dashboard` / `panels` — UI. `app` owns the router (`Route`): `/` →
+  `Home` (the full dashboard) and `/embed/overview` → the embed. Selection is a
+  root `Signal<Option<PropertyId>>` shared via context; each panel `use_resource`s
+  keyed on it.
+- `embed` — the iframe-only `/embed/overview` surface (marketing bento: two
+  property tiles that deep-link into `/?property=<id>`, a market note, and a
+  client-side ROI calculator). Carries none of the dashboard shell/contexts. See
+  **Embedding** below.
 - `map` — **isolated** Google-Maps module; the only file touching the JS API. The
   inline-JS `extern` is fully `cfg(wasm32)`-gated, so the server build never links it.
 
@@ -65,6 +71,21 @@ Associated media (pics / pitch-deck / documents) are separate `PropertyFile`
 records (`{ id, property_id, kind: Pic|PitchDeck|Document, filename, content_type }`),
 not fields on `Property`.
 
+## Embedding (iframe)
+Routes under `/embed/*` are meant to be `<iframe>`d by a host page. Anything new
+there must keep these invariants:
+- **No frame-busting headers.** We send no `X-Frame-Options`/CSP today, so framing
+  works. If a proxy ever fronts us, restrict per-route with
+  `Content-Security-Policy: frame-ancestors <host-origins>` — never `X-Frame-Options: DENY`.
+- **Links escape the frame.** In-app deep-links use `target="_top"` so a click
+  navigates the *host* page, not the iframe. Destination host is still relative
+  (`/?property=…`) — point it at the deployed app origin once decided.
+- **Self-sizing.** No `min-h-screen`; the surface sizes to content (body bg is
+  `main-black`). The host sets iframe height — add resize-`postMessage` only if
+  auto-height is needed.
+- **Shell-free.** An embed renders only its section: no `TopBar`, no dashboard
+  contexts, no Maps script.
+
 ## Persistence
 - SQLite via `sqlx` (`runtime-tokio`, `sqlite`). One pool, schema run on startup.
 - File bytes: `./data/properties/<property_id>/<file_id>__<filename>`.
@@ -82,6 +103,10 @@ npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch &
 # 2. Fullstack dev server (SSR + server fns + wasm client):
 cd .. && dx serve --package real_estate_allocation
 ```
+
+The brand logo at `assets/logo.svg` is **generated, not committed** (gitignored):
+the `ev_assets` flake input (pinned `github:EV-invest/assets`) is copied in by the
+devShell / `nix run .#dev` / the pure build. Refresh it with `nix flake update ev_assets`.
 
 Seeding runs on first launch when the DB is empty (~6 properties across all three
 states, plus a sample pic). Config (incl. `maps_api_key`, `admin_token`) is read

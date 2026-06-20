@@ -5,8 +5,11 @@
     flake-utils.url = "github:numtide/flake-utils";
     pre-commit-hooks.url = "github:cachix/git-hooks.nix";
     v_flakes.url = "github:valeratrades/v_flakes?ref=v1.6";
+    # Brand assets. Not a flake — just a pinned source tree we copy the logo out
+    # of. "Latest logo" = `nix flake update ev_assets` (bumps flake.lock).
+    ev_assets = { url = "github:EV-invest/assets"; flake = false; };
   };
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes, ev_assets }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -25,6 +28,10 @@
         pname = manifest.name;
         stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
 
+        # Brand logo from the pinned `ev_assets` input, copied into the served
+        # assets dir (gitignored; declaratively populated, never hand-edited).
+        logoSrc = "${ev_assets}/logo/logo.svg";
+
         rs = v_flakes.rs {
           inherit pkgs rust;
           build = {
@@ -41,6 +48,7 @@
           jobs.default = true;
           gitignore.extra = ''
             real_estate_allocation/assets/tokens.css
+            real_estate_allocation/assets/logo.svg
           '';
         };
         readme = v_flakes.readme-fw {
@@ -67,6 +75,8 @@
           text = ''
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo/real_estate_allocation"
+
+            cp -f ${logoSrc} ./assets/logo.svg
 
             # Tailwind v4 standalone CLI needs `tailwindcss` resolvable from
             # node_modules; install once, then build + watch.
@@ -112,6 +122,10 @@
 
               cargoLock.lockFile = ./Cargo.lock;
               src = pkgs.lib.cleanSource ./.;
+
+              # `asset!("/assets/logo.svg")` needs the file present at compile
+              # time; the gitignored copy isn't in the pure source, so stage it.
+              postPatch = "cp -f ${logoSrc} real_estate_allocation/assets/logo.svg";
             };
           };
 
@@ -124,6 +138,7 @@
               + combined.shellHook
               + ''
                 cp -f ${(v_flakes.files.treefmt) { inherit pkgs; }} ./.treefmt.toml
+                cp -f ${logoSrc} ./real_estate_allocation/assets/logo.svg
               '';
 
             packages = [
