@@ -3,20 +3,25 @@
 //! renders a placeholder so the inline-JS extern is never linked off-target.
 
 use dioxus::prelude::*;
-use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, ToggleGroup, ToggleGroupItem};
+use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
 
-use crate::{app::Selected, domain::PropertyState};
+use crate::{app::Selected, domain::PropertyStateKind};
 
 #[component]
 pub fn MapPanel() -> Element {
 	let selected = use_context::<Selected>();
 
-	// State filter for the map; default = Purchased only.
-	let filter = use_signal(|| vec![PropertyState::Purchased]);
+	// Shared with the heatmap so both show the same set.
+	let filter = use_context::<crate::app::Filter>();
 
 	let properties = use_resource(move || {
 		let states = filter();
-		async move { crate::api::list_properties(Some(states)).await.unwrap_or_default() }
+		async move {
+			crate::api::list_properties(Some(states))
+				.await
+				.inspect_err(|e| dioxus::logger::tracing::error!(%e, "map: list_properties failed"))
+				.unwrap_or_default()
+		}
 	});
 
 	// Push the property list + current selection into the JS layer whenever either
@@ -69,39 +74,48 @@ pub fn MapPanel() -> Element {
 	}
 }
 
+/// Filter chips — plain `<button>`s. An active chip is filled with its state's own
+/// marker colour (so it reads at a glance and matches the map pins); inactive ones
+/// are a muted outline.
+//TODO: switch to the lib's `ToggleGroup` once its interface is fixed.
 #[component]
-fn StateFilter(filter: Signal<Vec<PropertyState>>) -> Element {
-	let toggle = move |state: PropertyState| {
-		move |pressed: bool| {
-			let mut cur = filter();
-			if pressed {
-				if !cur.contains(&state) {
-					cur.push(state);
-				}
-			} else {
-				cur.retain(|s| *s != state);
-			}
-			filter.set(cur);
-		}
-	};
+fn StateFilter(filter: Signal<Vec<PropertyStateKind>>) -> Element {
 	let cur = filter();
-
 	rsx! {
-		ToggleGroup {
-			ToggleGroupItem {
-				pressed: cur.contains(&PropertyState::Purchased),
-				on_pressed_change: toggle(PropertyState::Purchased),
-				"Purchased"
-			}
-			ToggleGroupItem {
-				pressed: cur.contains(&PropertyState::Interesting),
-				on_pressed_change: toggle(PropertyState::Interesting),
-				"Interesting"
-			}
-			ToggleGroupItem {
-				pressed: cur.contains(&PropertyState::Purchasing),
-				on_pressed_change: toggle(PropertyState::Purchasing),
-				"Purchasing"
+		div { class: "flex items-center gap-1.5",
+			for state in [PropertyStateKind::Purchased, PropertyStateKind::Interesting, PropertyStateKind::Purchasing] {
+				{
+					let on = cur.contains(&state);
+					// On: filled with the state colour + dark text. Off: outlined + muted.
+					let active = match state {
+						PropertyStateKind::Purchased => "bg-main-accent-t2",
+						PropertyStateKind::Interesting => "bg-main-accent-t3",
+						PropertyStateKind::Purchasing => "bg-main-accent-t4",
+					};
+					let cls = if on {
+						format!("h-7 rounded-md px-2.5 text-xs font-semibold text-main-black transition hover:brightness-110 {active}")
+					} else {
+						"h-7 rounded-md border border-border bg-transparent px-2.5 text-xs font-medium text-muted-foreground transition hover:border-main-mist/40 hover:text-foreground".to_string()
+					};
+					rsx! {
+						button {
+							key: "{state}",
+							r#type: "button",
+							class: cls,
+							"aria-pressed": on,
+							onclick: move |_| {
+								let mut c = filter();
+								if on {
+									c.retain(|s| *s != state);
+								} else {
+									c.push(state);
+								}
+								filter.set(c);
+							},
+							"{state}"
+						}
+					}
+				}
 			}
 		}
 	}
@@ -117,7 +131,9 @@ let __reaFitted = false;
 window.__reaMapsReady = function () { window.__reaMapsLoaded = true; };
 
 function __reaColor(state) {
-  switch (state) {
+  // `Purchased` serialises as `{Purchased: <ts>}`; the unit variants as plain strings.
+  const kind = (typeof state === 'string') ? state : Object.keys(state)[0];
+  switch (kind) {
     case 'Purchased': return '#2e9e5b';
     case 'Interesting': return '#f2c94c';
     case 'Purchasing': return '#e58aae';
@@ -186,6 +202,17 @@ export function rea_sync_url(selectedId) {
 export function rea_url_property() {
   return new URL(window.location.href).searchParams.get('property') || '';
 }
+
+export function rea_sync_selection(csv) {
+  const url = new URL(window.location.href);
+  if (csv) { url.searchParams.set('selection', csv); }
+  else { url.searchParams.delete('selection'); }
+  window.history.replaceState({}, '', url);
+}
+
+export function rea_url_selection() {
+  return new URL(window.location.href).searchParams.get('selection') || '';
+}
 "#)]
 extern "C" {
 	#[wasm_bindgen(js_name = rea_render_markers)]
@@ -195,4 +222,8 @@ extern "C" {
 	fn sync_url(selected_id: &str);
 	#[wasm_bindgen(js_name = rea_url_property)]
 	pub fn url_property() -> String;
+	#[wasm_bindgen(js_name = rea_sync_selection)]
+	pub fn sync_selection(csv: &str);
+	#[wasm_bindgen(js_name = rea_url_selection)]
+	pub fn url_selection() -> String;
 }

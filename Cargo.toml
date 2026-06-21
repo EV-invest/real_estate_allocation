@@ -2,6 +2,7 @@ cargo-features = ["codegen-backend"]
 
 [workspace]
 members = ["real_estate_allocation", "real_estate_allocation_*"]
+default-members = ["real_estate_allocation"]
 resolver = "3"
 
 [workspace.lints.clippy]
@@ -21,7 +22,7 @@ unused_features = "allow"
 clap = { version = "^4.6", features = ["derive"] }
 color-eyre = "^0.6"
 derive-new = "^0.7"
-dockview_dioxus = { git = "https://github.com/EV-invest/dockview_dioxus.git", rev = "b343087" }
+dockview_dioxus = "^0.1"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 v_utils = { version = "^2.15", features = ["io", "macros", "cli"] }
@@ -29,7 +30,7 @@ v_utils = { version = "^2.15", features = ["io", "macros", "cli"] }
 # microfrontend stack — pinned to the exact revs `site` verified against.
 async-trait = "^0.1"
 dioxus = { version = "^0.7" }
-ev = { git = "https://github.com/EV-invest/lib.git", rev = "4cb3b1abc5f9ff3b5db8494aa687a44d995ec9cc", default-features = false }
+ev_lib = { git = "https://github.com/EV-invest/lib.git", rev = "dc3d7d3f9be38ec782e52282788edf973fbadfd8" }
 getrandom = { version = "^0.4", features = ["wasm_js"] }
 jiff = { version = "^0.2", features = ["serde"] }
 secrecy = "^0.10"
@@ -37,11 +38,12 @@ serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
 smart-default = "^0.7"
 sqlx = { version = "^0.9", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
+strum = "0.28.0"
 thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
 
 # Local checkout overrides the git source — we edit the lib alongside the app.
-[patch."https://github.com/EV-invest/dockview_dioxus.git"]
-dockview_dioxus = { path = "../dockview_dioxus/dockview_dioxus" }
+[patch."https://github.com/EV-invest/lib.git"]
+ev_lib = { path = "../lib/rust" }

@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
+use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
 
 use crate::{
 	app::SelectedProperty,
@@ -40,9 +40,13 @@ fn Details(property: Property) -> Element {
 				DeveloperKv { name: dev.clone() }
 			}
 
-			match property.construction {
-				ConstructionStatus::Completed => rsx! { Kv { label: "Construction", value_class: "text-main-accent-t2", "Completed" } },
-				ConstructionStatus::UnderConstruction => rsx! { Kv { label: "Construction", value_class: "text-warn", "Under construction" } },
+			Kv {
+				label: "Construction",
+				value_class: match property.construction {
+					ConstructionStatus::Completed => "text-main-accent-t2",
+					ConstructionStatus::UnderConstruction => "text-warn",
+				},
+				"{property.construction}"
 			}
 
 			if let Some(deal) = property.deal.as_ref() {

@@ -1,18 +1,22 @@
 use dioxus::prelude::*;
-use ev::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
+use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
 
 use crate::{
 	app::Selected,
-	domain::{Property, PropertyId},
+	domain::{Property, PropertyId, PropertyStateKind},
 };
 
 /// Portfolio heatmap: a treemap of every holding, area ∝ price, colour ∝ recent
 /// value change, with the selected property highlighted and each tile clickable.
 #[component]
 pub fn PortfolioHeatmap() -> Element {
-	// The whole portfolio (defaults to Purchased holdings), independent of the
-	// per-property selection.
-	let properties = use_resource(|| async move { crate::api::list_properties(None).await.unwrap_or_default() });
+	// Shares the map's `?selection=` filter so both react to the same set. Owned tiles
+	// are solid; prospects (interesting / purchasing) are striped over the heat fill.
+	let filter = use_context::<crate::app::Filter>();
+	let properties = use_resource(move || {
+		let states = filter();
+		async move { crate::api::list_properties(Some(states)).await.unwrap_or_default() }
+	});
 
 	rsx! {
 		Card {
@@ -38,30 +42,60 @@ pub fn PortfolioHeatmap() -> Element {
 	}
 }
 
+/// One fully-resolved tile: geometry + everything needed to paint it. Built once
+/// from the property list so the view is a single pass over `Vec<Tile>` — no
+/// parallel `rects[i]` indexing, no per-tile recomputation mid-render.
+#[derive(Clone, PartialEq)]
+struct Tile {
+	id: PropertyId,
+	name: String,
+	rect: Rect,
+	change: f64,
+	/// Not-yet-owned (under-construction / interesting): drawn provisional —
+	/// dimmed + hatched over the heat fill.
+	prospect: bool,
+}
+
+impl Tile {
+	fn layout(properties: &[Property]) -> Vec<Self> {
+		// Unknown price → minimal tile area rather than dropping the holding.
+		let values: Vec<f64> = properties.iter().map(|p| p.price.map_or(1.0, |m| m.amount()).max(1.0)).collect();
+		let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
+		properties
+			.iter()
+			.zip(rects)
+			.map(|(p, rect)| Tile {
+				id: p.id,
+				name: p.name.clone(),
+				rect,
+				change: mock_change(p.id),
+				prospect: p.state.kind() != PropertyStateKind::Purchased,
+			})
+			.collect()
+	}
+}
+
 #[component]
 fn Treemap(properties: Vec<Property>) -> Element {
 	let mut selected = use_context::<Selected>();
-	// Unknown price → minimal tile area rather than dropping the holding.
-	let values: Vec<f64> = properties.iter().map(|p| p.price.map_or(1.0, |m| m.amount()).max(1.0)).collect();
-	let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
+	let tiles = Tile::layout(&properties);
 
 	rsx! {
 		div { class: "relative h-[300px] w-full overflow-hidden rounded-lg bg-main-surface",
-			for (i , p) in properties.iter().enumerate() {
+			for t in tiles {
 				{
-					let r = rects[i];
-					let pid = p.id;
-					let change = mock_change(pid);
-					let is_sel = selected() == Some(pid);
+					let Tile { id, name, rect: r, change, prospect } = t;
+					let is_sel = selected() == Some(id);
 					let ring = if is_sel { "ring-2 ring-main-accent-t1 z-10" } else { "" };
+					let (dim, stripes) = crate::uikit::provisional(prospect);
 					rsx! {
 						button {
-							key: "{i}",
-							class: "absolute flex flex-col justify-between overflow-hidden rounded-md p-2.5 text-left transition-[filter] hover:brightness-110 {ring}",
-							style: "left:calc({r.x:.4}% + 2px);top:calc({r.y:.4}% + 2px);width:calc({r.w:.4}% - 4px);height:calc({r.h:.4}% - 4px);background-color:{heat_color(change)}",
-							onclick: move |_| selected.set(Some(pid)),
+							key: "{id}",
+							class: "absolute flex flex-col justify-between overflow-hidden rounded-md p-2.5 text-left transition-[filter] hover:brightness-110 {ring} {dim}",
+							style: "left:calc({r.x:.4}% + 2px);top:calc({r.y:.4}% + 2px);width:calc({r.w:.4}% - 4px);height:calc({r.h:.4}% - 4px);background-color:{heat_color(change)}{stripes}",
+							onclick: move |_| selected.set(Some(id)),
 							div { class: "flex min-w-0 flex-col gap-0.5",
-								span { class: "truncate text-sm font-semibold text-white", "{p.name}" }
+								span { class: "truncate text-sm font-semibold text-white", "{name}" }
 								span { class: "text-xs text-white/80", "{change:+.1}%" }
 							}
 							if is_sel {
@@ -110,7 +144,7 @@ fn lerp_rgb(a: (u8, u8, u8), b: (u8, u8, u8), t: f64) -> String {
 	format!("rgb({},{},{})", c(a.0, b.0), c(a.1, b.1), c(a.2, b.2))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 struct Rect {
 	x: f64,
 	y: f64,

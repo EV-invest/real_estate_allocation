@@ -12,7 +12,7 @@ server = ["dioxus/server"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
-ev = { workspace = true, features = ["architecture", "uikit"] }
+ev_lib = { workspace = true, features = ["architecture", "uikit"] }
 # `config` (with its SmartDefault'd AppConfig) is server-only.
 smart-default.workspace = true
 sqlx.workspace = true
@@ -27,7 +27,7 @@ v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "web"] }
-ev = { workspace = true, features = ["architecture", "uikit", "wasm"] }
+ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm"] }
 getrandom.workspace = true
 uuid = { workspace = true, features = ["js"] }
 wasm-bindgen.workspace = true
@@ -45,6 +45,7 @@ real_estate_allocation_macros.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+strum = { workspace = true, features = ["strum_macros", "derive"] }
 thiserror.workspace = true
 uuid.workspace = true
 

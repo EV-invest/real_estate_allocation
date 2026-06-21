@@ -27,7 +27,7 @@ async fn main() {
 			priced += 1;
 		}
 		let price = p.price.map(|m| m.to_string()).unwrap_or_else(|| "?".into());
-		println!("{:<42} {:>9}  {:<18} {} pics  dev={}", p.name, price, p.construction.as_str(), files.len(), dev);
+		println!("{:<42} {price:>9}  {:<18} {} pics  dev={dev}", p.name, p.construction.as_ref(), files.len());
 	}
 	assert_eq!(priced, 4, "the 4 built properties are priced; the 2 under-construction are not");
 	println!("OK");

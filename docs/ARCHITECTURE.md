@@ -59,13 +59,13 @@ validating value object so a bad one can't enter the domain; optional fields are
 | `id` | `PropertyId` (`Id<PropertyTag>`, Uuid) | yes | minted on insert |
 | `coords` | `Coords { lat, lng }` | yes | Google-Maps marker position |
 | `price` | `Money` | yes | non-negative, finite |
-| `state` | `PropertyState` | yes | `Purchased` \| `Interesting` \| `Purchasing` |
+| `state` | `PropertyState` | yes | `Purchased(Timestamp)` (carries the purchase instant) \| `Interesting` \| `Purchasing` |
 | `research_url` | `ResearchUrl` | yes | non-empty http(s) — the reasoning post |
 | `terms` | `Option<String>` | no | deal terms, free text |
 | `deal` | `Option<DealStructure { equity_pct, debt_pct, notes }>` | no | deal structure |
 | `loan` | `Option<LoanRates { rate_pct, term_years, lender }>` | no | rates if not bought outright |
 | `additional_reasoning` | `Option<String>` | no | miscellaneous notes worth surfacing |
-| `price_series` | `Vec<f64>` | — | **mock**, filled on read, never persisted |
+| `price_series` | `Vec<(Timestamp, f64)>` | — | dated weekly value estimates; **mock**, filled on read, never persisted |
 
 Associated media (pics / pitch-deck / documents) are separate `PropertyFile`
 records (`{ id, property_id, kind: Pic|PitchDeck|Document, filename, content_type }`),
@@ -90,7 +90,9 @@ there must keep these invariants:
 - SQLite via `sqlx` (`runtime-tokio`, `sqlite`). One pool, schema run on startup.
 - File bytes: `./data/properties/<property_id>/<file_id>__<filename>`.
 - `price_series` is a **mock** (`v_utils::laplace_random_walk`, seeded per id),
-  filled by `api::get_property` and never persisted.
+  filled by `api::get_property` and never persisted. Points carry real dates anchored
+  to the purchase instant, so a long-held property's series runs out before today and
+  the chart projects a dotted tail to now.
 
 ## Build / run
 Requires `nix develop` (provides `dx`, `nodejs`, the `wasm32` target).

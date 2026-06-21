@@ -8,6 +8,7 @@ pub mod embed;
 pub mod error;
 pub mod map;
 pub mod panels;
+mod uikit;
 
 // Server-only: `config` pulls v_utils' xdg/io (native-gated) + filesystem
 // `LiveSettings`; `store` is the persistence layer. Neither is linked into the
@@ -19,4 +20,4 @@ pub mod store;
 
 pub use app::App;
 #[cfg(not(target_arch = "wasm32"))]
-pub use ev::architecture;
+pub use ev_lib::architecture;

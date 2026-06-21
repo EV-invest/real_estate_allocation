@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyState};
+use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyStateKind};
 
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
 /// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
@@ -20,8 +20,8 @@ pub struct AppState {
 // `FullstackContext` is the one handle available in both the SSR render path and
 // the server-fn POST path.
 #[server]
-pub async fn list_properties(filter: Option<Vec<PropertyState>>) -> Result<Vec<Property>, ServerFnError> {
-	use ev::architecture::Specification;
+pub async fn list_properties(filter: Option<Vec<PropertyStateKind>>) -> Result<Vec<Property>, ServerFnError> {
+	use ev_lib::architecture::Specification;
 
 	use crate::{domain::InState, store::PropertyRepository};
 
@@ -29,7 +29,7 @@ pub async fn list_properties(filter: Option<Vec<PropertyState>>) -> Result<Vec<P
 
 	// Or-combine the requested states; default = Purchased. The `Fn(&T)->bool`
 	// blanket impl makes the disjunction itself a `Specification`.
-	let states = filter.unwrap_or_else(|| vec![PropertyState::Purchased]);
+	let states = filter.unwrap_or_else(|| vec![PropertyStateKind::Purchased]);
 	let spec = move |p: &Property| states.iter().any(|s| InState(*s).holds(p));
 	let props = store.list(Some(&spec)).await.map_err(to_server_err)?;
 	Ok(props)
@@ -41,12 +41,11 @@ pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnEr
 	let store = app_state().await?.store;
 	let mut prop = store.get(id).await.map_err(to_server_err)?;
 	if let Some(p) = prop.as_mut() {
-		// Deterministic mock series, seeded from the id so it is stable per property.
-		let seed = id.raw().as_u64_pair().0;
-		p.price_series = v_utils::distributions::laplace_random_walk(100.0, 1000, 0.1, 0.0, Some(seed));
+		p.price_series = mock_series(id, p.state);
 	}
 	Ok(prop)
 }
+
 #[server]
 pub async fn get_developer(name: String) -> Result<Option<crate::domain::Developer>, ServerFnError> {
 	use crate::store::PropertyRepository;
@@ -108,6 +107,37 @@ pub async fn maps_api_key() -> Result<String, ServerFnError> {
 
 	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
+}
+/// Deterministic mock value series, seeded from the id so it is stable per property.
+/// Anchored to the purchase instant (a few weeks of pre-purchase tracking, then a
+/// fixed run of weekly estimates clipped to now). A long-ago purchase therefore
+/// produces a series that ends well before today — the chart fills that tail with a
+/// dotted projection. Non-purchased properties anchor to a trailing window.
+#[cfg(not(target_arch = "wasm32"))]
+fn mock_series(id: PropertyId, state: crate::domain::PropertyState) -> Vec<(jiff::Timestamp, f64)> {
+	use crate::domain::PropertyState;
+
+	const WEEK: i64 = 7 * 24 * 3600;
+	const LEAD: i64 = 8; // weeks of pre-purchase estimate tracking (drawn dimmed)
+	const SPAN: usize = 30; // weeks of estimates generated
+
+	let now = jiff::Timestamp::now();
+	let anchor = match state {
+		PropertyState::Purchased(ts) => ts,
+		_ => jiff::Timestamp::from_second(now.as_second() - (SPAN as i64) * WEEK).expect("trailing window in range"),
+	};
+	let start = anchor.as_second() - LEAD * WEEK;
+
+	let seed = id.raw().as_u64_pair().0;
+	let walk = v_utils::distributions::laplace_random_walk(100.0, SPAN, 0.1, 0.0, Some(seed));
+	walk.into_iter()
+		.enumerate()
+		// ~1 week in 8 has no estimate (stable per seed): a genuine gap the line spans.
+		.filter(|(i, _)| (seed as usize).wrapping_add(i * 7) % 8 != 0)
+		.map(|(i, v)| (start + i as i64 * WEEK, v))
+		.take_while(|(t, _)| *t <= now.as_second())
+		.map(|(t, v)| (jiff::Timestamp::from_second(t).expect("week within range"), v))
+		.collect()
 }
 #[cfg(not(target_arch = "wasm32"))]
 async fn app_state() -> Result<AppState, ServerFnError> {

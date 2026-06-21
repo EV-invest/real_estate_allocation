@@ -5,7 +5,7 @@
 //! two tiles (market note + ROI calculator) are self-contained.
 
 use dioxus::prelude::*;
-use ev::uikit::{Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Slider};
+use ev_lib::uikit::{Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Slider};
 
 use crate::domain::Property;
 
@@ -20,21 +20,21 @@ pub fn Overview() -> Element {
 	let mut tab = use_signal(|| "all".to_string());
 
 	rsx! {
-		section { class: "border-t border-main-mist/10 py-16 sm:py-24",
-			div { class: "mx-auto w-full max-w-[1200px] px-6",
+		section { id: "portfolio", class: "relative border-t border-main-mist/10 py-24",
+			div { class: "mx-auto w-full max-w-[90rem] px-4",
 				// Section header
-				div { class: "mb-12 flex flex-col justify-between md:flex-row md:items-end",
+				div { class: "mb-16 flex flex-col justify-between md:flex-row md:items-end",
 					div {
 						span { class: "mb-3 block font-mono text-xs uppercase tracking-[0.3em] text-main-accent-t1",
 							"Investment Scope"
 						}
 						h2 { class: "font-serif text-3xl font-light text-white sm:text-5xl",
 							"Premium Asset "
-							span { class: "italic text-main-accent-t1", "Portfolio" }
+							span { class: "font-serif italic text-main-accent-t1", "Portfolio" }
 						}
 					}
-					p { class: "mt-4 max-w-md text-muted-foreground md:mt-0",
-						"Curated, premium, high-yield developments across Quy Nhơn city, focusing on high-appreciation seaside villas and urban luxury residences."
+					p { class: "mt-4 max-w-md font-light text-sm text-main-mist/70 md:mt-0",
+						"Curated, premium, high-yield developments across Quy Nhon city, focusing on high appreciation seaside villas and urban luxury residences."
 					}
 				}
 
@@ -43,7 +43,7 @@ pub fn Overview() -> Element {
 					for t in ["all", "villas", "commercial", "land"] {
 						button {
 							key: "{t}",
-							class: if tab() == t { "bg-main-accent-t1 px-5 py-2.5 font-bold uppercase text-main-black transition-all" } else { "px-5 py-2.5 uppercase text-main-mist/60 transition-all hover:bg-main-mist/5 hover:text-white" },
+							class: if tab() == t { "bg-main-accent-t1 px-5 py-2.5 font-bold uppercase text-main-black transition-all duration-300" } else { "px-5 py-2.5 uppercase text-main-mist/60 transition-all duration-300 hover:bg-main-mist/5 hover:text-white" },
 							onclick: move |_| tab.set(t.to_string()),
 							"{t}"
 						}
@@ -100,8 +100,8 @@ fn FeaturedCard(property: Property) -> Element {
 					IconPin {}
 					"Quy Nhơn, Bình Định"
 				}
-				h3 { class: "font-serif text-2xl font-semibold text-white", "{property.name}" }
-				p { class: "mb-6 mt-2 line-clamp-3 max-w-xl text-muted-foreground", "{property.reasoning_or_terms()}" }
+				h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "{property.name}" }
+				p { class: "mb-6 max-w-xl font-light text-sm text-main-mist/70 line-clamp-3", "{property.reasoning_or_terms()}" }
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
 					match property.price {
 						Some(p) => rsx! { Stat { label: "Price", value_class: "text-main-accent-t3", "{p}" } },
@@ -133,8 +133,8 @@ fn SideCard(property: Property) -> Element {
 					IconPin {}
 					"Quy Nhơn, Bình Định"
 				}
-				h3 { class: "font-serif text-xl font-semibold text-white", "{property.name}" }
-				p { class: "mb-6 mt-2 line-clamp-3 text-muted-foreground", "{property.reasoning_or_terms()}" }
+				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "{property.name}" }
+				p { class: "mb-6 font-light text-sm text-main-mist/70 line-clamp-3", "{property.reasoning_or_terms()}" }
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
 					match property.price {
 						Some(p) => rsx! { Stat { label: "Price", value_class: "text-white", "{p}" } },
@@ -160,9 +160,9 @@ fn WhyCard() -> Element {
 					IconTrend {}
 					"Market Growth"
 				}
-				h3 { class: "font-serif text-xl font-semibold text-white", "Why Quy Nhơn?" }
-				p { class: "mb-6 mt-2 text-muted-foreground",
-					"Positioned as the new gateway of Central Vietnam, Quy Nhơn is undergoing a multi-billion dollar infrastructure upgrade, transforming into a global science and beach-tourism destination."
+				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "Why Quy Nhon?" }
+				p { class: "mb-6 font-light text-sm text-main-mist/70",
+					"Positioned as the new gateway of Central Vietnam, Quy Nhon is undergoing a multi-billion dollar infrastructure upgrade, transforming into a global science and beach tourism destination."
 				}
 			}
 			ul { class: "space-y-3 border-t border-main-mist/10 pt-6 font-mono text-xs",
@@ -194,15 +194,16 @@ fn Calculator() -> Element {
 					span { class: "mb-3 block font-mono text-xs uppercase tracking-widest text-main-accent-t1",
 						"Yield Terminal"
 					}
-					h3 { class: "font-serif text-2xl font-semibold text-white", "Investment Calculator" }
-					p { class: "mb-6 mt-2 text-muted-foreground",
-						"Project your returns across different asset classes in Quy Nhơn based on our current fund advisory models."
+					h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "Investment Calculator" }
+					p { class: "mb-6 font-light text-sm text-main-mist/70",
+						"Project your returns across different asset classes in Quy Nhon based on our current fund advisory models."
 					}
 				}
 				div { class: "space-y-4 font-mono text-xs",
 					div {
 						label { class: "mb-3 block uppercase text-muted-foreground", "Principal Investment ($ USD)" }
 						Slider {
+							class: "[&_[data-slot=slider-track]]:bg-main-black/50 [&_[data-slot=slider-range]]:bg-main-accent-t1 [&_[data-slot=slider-thumb]]:border-main-accent-t1",
 							min: 50_000.0,
 							max: 1_000_000.0,
 							step: 10_000.0,
@@ -223,7 +224,7 @@ fn Calculator() -> Element {
 								on_value_change: move |v: String| {
 									if let Ok(y) = v.parse() { term.set(y); }
 								},
-								SelectTrigger { class: "w-full", SelectValue {} }
+								SelectTrigger { class: "w-full border-main-mist/20 bg-main-black/60 font-mono", SelectValue {} }
 								SelectContent {
 									for y in [3u32, 5, 7, 10] {
 										SelectItem { value: "{y}", "{y} Years" }
@@ -236,7 +237,7 @@ fn Calculator() -> Element {
 							Select {
 								value: if commercial() { "commercial".to_string() } else { "residential".to_string() },
 								on_value_change: move |v: String| commercial.set(v == "commercial"),
-								SelectTrigger { class: "w-full", SelectValue {} }
+								SelectTrigger { class: "w-full border-main-mist/20 bg-main-black/60 font-mono", SelectValue {} }
 								SelectContent {
 									SelectItem { value: "residential", "Luxury Villa" }
 									SelectItem { value: "commercial", "Commercial Hub" }
@@ -269,7 +270,7 @@ fn Calculator() -> Element {
 					p { class: "mb-4 text-[10px] font-light leading-relaxed text-muted-foreground",
 						"*Projections are based on historical performance and regional growth targets. Actual results may vary."
 					}
-					Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist",
+					Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist hover:text-main-brand",
 						"Request advisory"
 					}
 				}
@@ -321,11 +322,13 @@ fn usd(n: f64) -> String {
 	format!("${out}")
 }
 
+// The icons mirror the landing's lucide-react output byte-for-byte (same
+// wrapper attrs, classes and path data) so the embed is a faithful port.
 #[component]
 fn IconPin() -> Element {
 	rsx! {
-		svg { class: "size-3.5", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round",
-			path { d: "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" }
+		svg { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round", class: "lucide lucide-map-pin w-3.5 h-3.5",
+			path { d: "M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" }
 			circle { cx: "12", cy: "10", r: "3" }
 		}
 	}
@@ -334,7 +337,7 @@ fn IconPin() -> Element {
 #[component]
 fn IconArrow() -> Element {
 	rsx! {
-		svg { class: "size-3.5", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round",
+		svg { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round", class: "lucide lucide-arrow-up-right ml-1 w-3.5 h-3.5",
 			path { d: "M7 7h10v10" }
 			path { d: "M7 17 17 7" }
 		}
@@ -344,9 +347,9 @@ fn IconArrow() -> Element {
 #[component]
 fn IconTrend() -> Element {
 	rsx! {
-		svg { class: "size-3", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round",
-			path { d: "M22 7 13.5 15.5 8.5 10.5 2 17" }
-			path { d: "M16 7h6v6" }
+		svg { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round", class: "lucide lucide-trending-up w-3 h-3",
+			polyline { points: "22 7 13.5 15.5 8.5 10.5 2 17" }
+			polyline { points: "16 7 22 7 22 13" }
 		}
 	}
 }

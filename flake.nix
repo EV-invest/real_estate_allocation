@@ -87,8 +87,18 @@
             npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch & css=$!
             trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
 
+            # No `exec`: keep this shell as parent so the trap above reaps
+            # tailwind on exit. `--interactive false` stops dx from detaching
+            # into its own session (TUI mode does setsid) — that detachment is
+            # what let it survive fish's ctrl-c and orphan the server holding
+            # the port.
             cd "$repo"
-            exec dx serve --package real_estate_allocation --port 59079
+            # Reap any fullstack server orphaned by a previous run (dx doesn't
+            # always propagate SIGINT to its spawned server child, leaving a
+            # `server-<hash>` binary holding the port).
+            pkill -f 'target/dx/real_estate_allocation/.*/server-' 2>/dev/null || true
+            echo "  ▶ serving on http://127.0.0.1:59079"
+            dx serve --package real_estate_allocation --port 59079 #--interactive false
           '';
         };
       in

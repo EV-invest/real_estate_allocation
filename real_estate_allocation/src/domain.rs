@@ -1,4 +1,5 @@
-use ev::architecture::{AggregateRoot, Entity, Id, Specification};
+use ev_lib::architecture::{AggregateRoot, Entity, Id, Specification};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -11,55 +12,43 @@ pub struct FileTag;
 
 pub struct PropertyTag;
 
+/// Our acquisition lifecycle for a property. `Purchased` carries the UTC instant we
+/// bought it — jiff models a UTC instant as `Timestamp` (there is no `DateTime<Utc>`).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum PropertyState {
-	Purchased,
+	Purchased(Timestamp),
 	Interesting,
 	Purchasing,
 }
 
 impl PropertyState {
-	pub fn as_str(self) -> &'static str {
+	pub fn kind(self) -> PropertyStateKind {
 		match self {
-			Self::Purchased => "purchased",
-			Self::Interesting => "interesting",
-			Self::Purchasing => "purchasing",
+			Self::Purchased(_) => PropertyStateKind::Purchased,
+			Self::Interesting => PropertyStateKind::Interesting,
+			Self::Purchasing => PropertyStateKind::Purchasing,
 		}
 	}
+}
 
-	pub fn parse(raw: &str) -> Result<Self, DomainError> {
-		match raw {
-			"purchased" => Ok(Self::Purchased),
-			"interesting" => Ok(Self::Interesting),
-			"purchasing" => Ok(Self::Purchasing),
-			other => Err(DomainError::Validation(format!("unknown property state: {other}"))),
-		}
-	}
+/// The state *category*, stripped of the purchase instant — what filters, badges and
+/// map colours switch on. `PropertyState::kind` projects onto it, and it is the value
+/// persisted in the `state` text column.
+#[derive(strum::AsRefStr, Clone, Copy, Debug, Deserialize, strum::Display, strum::EnumString, Eq, PartialEq, Serialize)]
+#[strum(serialize_all = "title_case")]
+pub enum PropertyStateKind {
+	Purchased,
+	Interesting,
+	Purchasing,
 }
 
 /// Build progress, orthogonal to `PropertyState` (which tracks *our* acquisition
 /// lifecycle, not the asset's physical state).
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(strum::AsRefStr, Clone, Copy, Debug, Deserialize, strum::Display, strum::EnumString, Eq, PartialEq, Serialize)]
+#[strum(serialize_all = "title_case")]
 pub enum ConstructionStatus {
 	UnderConstruction,
 	Completed,
-}
-
-impl ConstructionStatus {
-	pub fn as_str(self) -> &'static str {
-		match self {
-			Self::UnderConstruction => "under_construction",
-			Self::Completed => "completed",
-		}
-	}
-
-	pub fn parse(raw: &str) -> Result<Self, DomainError> {
-		match raw {
-			"under_construction" => Ok(Self::UnderConstruction),
-			"completed" => Ok(Self::Completed),
-			other => Err(DomainError::Validation(format!("unknown construction status: {other}"))),
-		}
-	}
 }
 
 /// A developer we know. Referenced by `Property::developer` (by `name`); the store
@@ -182,10 +171,10 @@ pub struct Property {
 	pub deal: Option<DealStructure>,
 	pub loan: Option<LoanRates>,
 	pub additional_reasoning: Option<String>,
-	/// Mocked weekly estimate series, filled by `api::get_property` via a
-	/// random walk. Never persisted.
+	/// Mocked weekly value estimates with their real (UTC) dates, filled by
+	/// `api::get_property`. A missing week is simply an absent entry. Never persisted.
 	#[serde(default)]
-	pub price_series: Vec<f64>,
+	pub price_series: Vec<(Timestamp, f64)>,
 }
 
 impl Entity for Property {
@@ -200,30 +189,12 @@ impl AggregateRoot for Property {
 	const NAME: &'static str = "property";
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(strum::AsRefStr, Clone, Copy, Debug, Deserialize, strum::EnumString, Eq, PartialEq, Serialize)]
+#[strum(serialize_all = "snake_case")]
 pub enum FileKind {
 	Pic,
 	PitchDeck,
 	Document,
-}
-
-impl FileKind {
-	pub fn as_str(self) -> &'static str {
-		match self {
-			Self::Pic => "pic",
-			Self::PitchDeck => "pitch_deck",
-			Self::Document => "document",
-		}
-	}
-
-	pub fn parse(raw: &str) -> Result<Self, DomainError> {
-		match raw {
-			"pic" => Ok(Self::Pic),
-			"pitch_deck" => Ok(Self::PitchDeck),
-			"document" => Ok(Self::Document),
-			other => Err(DomainError::Validation(format!("unknown file kind: {other}"))),
-		}
-	}
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -237,11 +208,11 @@ pub struct PropertyFile {
 
 /// Map / portfolio filter. The portfolio default is `InState(Purchased)`; richer
 /// views compose via `.or`, e.g. `InState(Interesting).or(InState(Purchasing))`.
-pub struct InState(pub PropertyState);
+pub struct InState(pub PropertyStateKind);
 
 impl Specification<Property> for InState {
 	fn holds(&self, candidate: &Property) -> bool {
-		candidate.state == self.0
+		candidate.state.kind() == self.0
 	}
 }
 

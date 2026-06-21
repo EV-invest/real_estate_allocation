@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
-use ev::uikit::{Badge, BadgeVariant};
+use ev_lib::uikit::{Badge, BadgeVariant};
 
 use crate::{
 	app::SelectedProperty,
-	domain::{Property, PropertyState},
+	domain::{Property, PropertyStateKind},
 };
 
 /// Persistent page header: breadcrumb, price headline, state badge, and the one
@@ -33,13 +33,13 @@ pub fn TopBar() -> Element {
 
 #[component]
 fn Loaded(property: Property) -> Element {
-	let (variant, label) = badge_for(property.state);
+	let kind = property.state.kind();
 	rsx! {
 		Breadcrumb { tail: property.name.clone() }
 		div { class: "flex flex-wrap items-center justify-between gap-3",
 			div { class: "flex items-center gap-3",
 				h1 { class: "font-serif text-3xl font-semibold tracking-tight", "{property.name}" }
-				Badge { variant, "{label}" }
+				Badge { variant: badge_variant(kind), "{kind}" }
 				match property.price {
 					Some(p) => rsx! { span { class: "text-sm font-medium text-muted-foreground", "{p}" } },
 					None => rsx! { span { class: "text-sm font-medium text-warn", "?" } },
@@ -75,10 +75,10 @@ fn Breadcrumb(tail: String) -> Element {
 	}
 }
 
-fn badge_for(state: PropertyState) -> (BadgeVariant, &'static str) {
-	match state {
-		PropertyState::Purchased => (BadgeVariant::Success, "Purchased"),
-		PropertyState::Interesting => (BadgeVariant::Outline, "Interesting"),
-		PropertyState::Purchasing => (BadgeVariant::Secondary, "Purchasing"),
+fn badge_variant(kind: PropertyStateKind) -> BadgeVariant {
+	match kind {
+		PropertyStateKind::Purchased => BadgeVariant::Success,
+		PropertyStateKind::Interesting => BadgeVariant::Outline,
+		PropertyStateKind::Purchasing => BadgeVariant::Secondary,
 	}
 }

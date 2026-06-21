@@ -1,5 +1,5 @@
 use dioxus::{html::HasFileData, prelude::*};
-use ev::uikit::{AspectRatio, Button, ButtonVariant, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
+use ev_lib::uikit::{AspectRatio, Button, ButtonVariant, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
 
 use crate::{
 	app::Selected,
@@ -192,7 +192,7 @@ fn data_url(content_type: &str, bytes: &[u8]) -> String {
 }
 
 /// Minimal base64 (standard alphabet) so file bytes can ride in a `data:` URL
-/// without pulling a crate outside the `ev` + `v_utils` + renderer boundary.
+/// without pulling a crate outside the `ev_lib` + `v_utils` + renderer boundary.
 fn b64(input: &[u8]) -> String {
 	const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	let mut out = String::with_capacity(input.len().div_ceil(3) * 4);

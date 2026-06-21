@@ -4,14 +4,16 @@ use std::{
 };
 
 use async_trait::async_trait;
-use ev::architecture::{Reader, Repository, Specification};
+use ev_lib::architecture::{Reader, Repository, Specification};
 use sqlx::{
 	FromRow, Row as _, SqlitePool,
 	sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 
 use crate::{
-	domain::{ConstructionStatus, DealStructure, Developer, FileId, FileKind, GooglePlace, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, ResearchUrl},
+	domain::{
+		ConstructionStatus, DealStructure, Developer, FileId, FileKind, GooglePlace, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, PropertyStateKind, ResearchUrl,
+	},
 	error::DomainError,
 };
 
@@ -27,6 +29,7 @@ CREATE TABLE IF NOT EXISTS properties (
 	place_id TEXT NOT NULL,
 	price REAL,
 	state TEXT NOT NULL,
+	purchased_at TEXT,
 	construction TEXT NOT NULL,
 	developer TEXT REFERENCES developers(name),
 	research_url TEXT NOT NULL,
@@ -44,7 +47,7 @@ CREATE TABLE IF NOT EXISTS property_files (
 );
 ";
 
-/// Leaf port over the `ev` repository markers. No `UnitOfWork`: every write here
+/// Leaf port over the `ev_lib` repository markers. No `UnitOfWork`: every write here
 /// is a single row, so a transaction boundary would buy nothing.
 #[async_trait]
 pub trait PropertyRepository: Repository<Aggregate = Property> + Reader<Aggregate = Property> {
@@ -118,12 +121,18 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	const JPG: &str = "image/jpeg";
 	const PNG: &str = "image/png";
 
+	// Purchase instants are relative to now so the demo holds regardless of when the
+	// DB is seeded. Melody is deliberately old: its mock series ends long before today,
+	// so the chart shows the dotted "stale" projection out to the present.
+	let now = jiff::Timestamp::now();
+	let weeks_ago = |w: i64| jiff::Timestamp::from_second(now.as_second() - w * 7 * 24 * 3600).expect("seed purchase date in range");
+
 	let seeds = [
 		Seed {
 			name: "Quy Nhơn Melody",
 			place: "ChIJOYTnE0ZtbzERRZnbRLfEIU8", // Căn Hộ Quy Nhơn Melody
 			price: Some(96_000.0),
-			state: PropertyState::Purchased,
+			state: PropertyState::Purchased(weeks_ago(54)),
 			construction: ConstructionStatus::Completed,
 			developer: "Hưng Thịnh",
 			research_url: "https://www.hungthinhland.com/en/projects/detail/QUY-NHON-MELODY.html",
@@ -135,7 +144,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "Vina2 Panorama Quy Nhơn",
 			place: "ChIJTX0aij9rbzERvgC-Y2tqNxw", // VINA2 Panorama
 			price: Some(60_000.0),
-			state: PropertyState::Purchased,
+			state: PropertyState::Purchased(weeks_ago(20)),
 			construction: ConstructionStatus::Completed,
 			developer: "VINA2",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/can-ho-vina2-panorama/",
@@ -151,7 +160,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "Ecolife Riverside Quy Nhơn",
 			place: "ChIJGb0UXFRrbzER9Ym2RZ7csFE", // Ecolife Riverside Quy Nhơn
 			price: Some(59_000.0),
-			state: PropertyState::Purchased,
+			state: PropertyState::Purchased(weeks_ago(14)),
 			construction: ConstructionStatus::Completed,
 			developer: "Capital House",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/ecolife-riverside/",
@@ -167,7 +176,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			name: "The Calla (Calla Apartment Quy Nhơn)",
 			place: "ChIJt5jJjCxtbzERKfYIEUv0i-A", // The Calla (matches the shared map pin)
 			price: Some(80_000.0),
-			state: PropertyState::Purchased,
+			state: PropertyState::Purchased(weeks_ago(9)),
 			construction: ConstructionStatus::Completed,
 			developer: "Armo",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/calla-apartment-quy-nhon/",
@@ -216,11 +225,23 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	// Developers first: the FK on properties.developer requires them to exist.
 	let developers: [(&str, &str, Option<&str>); 6] = [
-		("Hưng Thịnh", "Large national developer; ecosystem includes Hưng Thịnh Land & Incons. 2022–23 liquidity stress — watch counterparty risk.", Some("https://hungthinhcorp.com.vn/")),
-		("VINA2", "Listed contractor-developer (HNX: VC2) that builds its own projects. Smaller balance sheet.", Some("https://vina2.com.vn/")),
+		(
+			"Hưng Thịnh",
+			"Large national developer; ecosystem includes Hưng Thịnh Land & Incons. 2022–23 liquidity stress — watch counterparty risk.",
+			Some("https://hungthinhcorp.com.vn/"),
+		),
+		(
+			"VINA2",
+			"Listed contractor-developer (HNX: VC2) that builds its own projects. Smaller balance sheet.",
+			Some("https://vina2.com.vn/"),
+		),
 		("Capital House", "Hà Nội green-building specialist behind the Ecolife / Ecohome brands.", None),
 		("Armo", "Local Bình Định developer; The Calla is its flagship tower.", None),
-		("Phát Đạt", "Major listed developer (HOSE: PDR), HCMC-centric. Bình Định pipeline slipped to ~2027.", Some("https://phatdat.com.vn/")),
+		(
+			"Phát Đạt",
+			"Major listed developer (HOSE: PDR), HCMC-centric. Bình Định pipeline slipped to ~2027.",
+			Some("https://phatdat.com.vn/"),
+		),
 		("Arita", "Local developer; Triton is early-stage with a limited track record.", None),
 	];
 	for (name, note, page) in developers {
@@ -235,13 +256,17 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	for s in seeds {
 		let id = PropertyId::new();
-		sqlx::query("INSERT INTO properties (id, name, place_id, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		sqlx::query("INSERT INTO properties (id, name, place_id, price, state, purchased_at, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			.bind(id.raw().to_string())
 			.bind(s.name)
 			.bind(s.place)
 			.bind(s.price)
-			.bind(s.state.as_str())
-			.bind(s.construction.as_str())
+			.bind(s.state.kind().as_ref())
+			.bind(match s.state {
+				PropertyState::Purchased(ts) => Some(ts.to_string()),
+				_ => None,
+			})
+			.bind(s.construction.as_ref())
 			.bind(s.developer)
 			.bind(s.research_url)
 			.bind(s.terms)
@@ -282,6 +307,7 @@ struct PropertyRow {
 	place_id: String,
 	price: Option<f64>,
 	state: String,
+	purchased_at: Option<String>,
 	construction: String,
 	developer: Option<String>,
 	research_url: String,
@@ -313,8 +339,24 @@ impl TryFrom<PropertyRow> for Property {
 			name: row.name,
 			place: GooglePlace::parse(row.place_id).map_err(corrupt_row)?,
 			price: row.price.map(Money::parse).transpose().map_err(corrupt_row)?,
-			state: PropertyState::parse(&row.state).map_err(corrupt_row)?,
-			construction: ConstructionStatus::parse(&row.construction).map_err(corrupt_row)?,
+			state: match row
+				.state
+				.parse::<PropertyStateKind>()
+				.map_err(|e| corrupt_row(DomainError::Repository(format!("unknown property state: {e}"))))?
+			{
+				PropertyStateKind::Purchased => {
+					let raw = row
+						.purchased_at
+						.ok_or_else(|| corrupt_row(DomainError::Repository("purchased property row missing purchased_at".into())))?;
+					PropertyState::Purchased(raw.parse().map_err(|e| corrupt_row(DomainError::Repository(format!("bad purchased_at: {e}"))))?)
+				}
+				PropertyStateKind::Interesting => PropertyState::Interesting,
+				PropertyStateKind::Purchasing => PropertyState::Purchasing,
+			},
+			construction: row
+				.construction
+				.parse()
+				.map_err(|e| corrupt_row(DomainError::Repository(format!("unknown construction status: {e}"))))?,
 			developer: row.developer,
 			research_url: ResearchUrl::parse(row.research_url).map_err(corrupt_row)?,
 			terms: row.terms,
@@ -349,7 +391,7 @@ impl TryFrom<FileRow> for PropertyFile {
 		Ok(Self {
 			id: crate::domain::parse_file_id(&row.id).map_err(corrupt_row)?,
 			property_id: crate::domain::parse_property_id(&row.property_id).map_err(corrupt_row)?,
-			kind: FileKind::parse(&row.kind).map_err(corrupt_row)?,
+			kind: row.kind.parse().map_err(|e| corrupt_row(DomainError::Repository(format!("unknown file kind: {e}"))))?,
 			filename: row.filename,
 			content_type: row.content_type,
 		})
@@ -369,10 +411,12 @@ impl PropertyRepository for SqliteStore {
 	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
 	/// in-memory by design; SQL pushdown is explicitly descoped.
 	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
-		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, name, place_id, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
-			.fetch_all(&self.pool)
-			.await
-			.map_err(map_sqlx_error)?;
+		let rows = sqlx::query_as::<_, PropertyRow>(
+			"SELECT id, name, place_id, price, state, purchased_at, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties",
+		)
+		.fetch_all(&self.pool)
+		.await
+		.map_err(map_sqlx_error)?;
 		let mut out = Vec::new();
 		for row in rows {
 			let p = Property::try_from(row)?;
@@ -384,11 +428,13 @@ impl PropertyRepository for SqliteStore {
 	}
 
 	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
-		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, name, place_id, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
-			.bind(id.raw().to_string())
-			.fetch_optional(&self.pool)
-			.await
-			.map_err(map_sqlx_error)?;
+		let row = sqlx::query_as::<_, PropertyRow>(
+			"SELECT id, name, place_id, price, state, purchased_at, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?",
+		)
+		.bind(id.raw().to_string())
+		.fetch_optional(&self.pool)
+		.await
+		.map_err(map_sqlx_error)?;
 		row.map(Property::try_from).transpose()
 	}
 
@@ -409,7 +455,7 @@ impl PropertyRepository for SqliteStore {
 		sqlx::query("INSERT INTO property_files (id, property_id, kind, filename, content_type) VALUES (?, ?, ?, ?, ?)")
 			.bind(f.id.raw().to_string())
 			.bind(f.property_id.raw().to_string())
-			.bind(f.kind.as_str())
+			.bind(f.kind.as_ref())
 			.bind(&f.filename)
 			.bind(&f.content_type)
 			.execute(&self.pool)
