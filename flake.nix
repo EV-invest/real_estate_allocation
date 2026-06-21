@@ -87,10 +87,8 @@
             npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch & css=$!
             trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
 
-            # `--interactive false`: dx's default full-screen TUI assumes it owns
-            # the terminal and corrupts when it shares stdout with the css watcher.
             cd "$repo"
-            exec dx serve --package real_estate_allocation --port 3000 --interactive false
+            exec dx serve --package real_estate_allocation --port 59079
           '';
         };
       in

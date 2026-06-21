@@ -21,6 +21,7 @@ unused_features = "allow"
 clap = { version = "^4.6", features = ["derive"] }
 color-eyre = "^0.6"
 derive-new = "^0.7"
+dockview_dioxus = { git = "https://github.com/EV-invest/dockview_dioxus.git", rev = "b343087" }
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 v_utils = { version = "^2.15", features = ["io", "macros", "cli"] }
@@ -40,3 +41,7 @@ thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
+
+# Local checkout overrides the git source — we edit the lib alongside the app.
+[patch."https://github.com/EV-invest/dockview_dioxus.git"]
+dockview_dioxus = { path = "../dockview_dioxus/dockview_dioxus" }

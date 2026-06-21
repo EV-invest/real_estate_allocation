@@ -15,6 +15,6 @@ pub struct AppConfig {
 	#[serde(default)]
 	pub admins: Vec<String>,
 	/// Address the fullstack server binds to. Overrides dioxus' `127.0.0.1:8080` default.
-	#[default(SocketAddr::from(([127, 0, 0, 1], 8080)))]
+	#[default(SocketAddr::from(([127, 0, 0, 1], 59079)))]
 	pub socket_addr: SocketAddr,
 }
