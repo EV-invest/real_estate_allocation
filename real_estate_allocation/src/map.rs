@@ -111,6 +111,8 @@ fn StateFilter(filter: Signal<Vec<PropertyState>>) -> Element {
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
 let __reaMap = null;
 let __reaMarkers = {};
+let __reaPos = {};
+let __reaFitted = false;
 
 window.__reaMapsReady = function () { window.__reaMapsLoaded = true; };
 
@@ -123,30 +125,51 @@ function __reaColor(state) {
   }
 }
 
+// Resolve a Google Place ID to {lat,lng} via the Places API (New), cached per id.
+async function __reaResolve(placeId) {
+  if (__reaPos[placeId]) return __reaPos[placeId];
+  const { Place } = await google.maps.importLibrary('places');
+  const place = new Place({ id: placeId });
+  await place.fetchFields({ fields: ['location'] });
+  const loc = place.location;
+  const pos = { lat: loc.lat(), lng: loc.lng() };
+  __reaPos[placeId] = pos;
+  return pos;
+}
+
 export function rea_render_markers(elId, propsJson, selectedId) {
   if (!window.google || !window.google.maps) { setTimeout(() => rea_render_markers(elId, propsJson, selectedId), 300); return; }
   const el = document.getElementById(elId);
   if (!el) return;
   const props = JSON.parse(propsJson);
   if (!__reaMap) {
-    __reaMap = new google.maps.Map(el, { center: { lat: 25, lng: 0 }, zoom: 2, disableDefaultUI: true, backgroundColor: '#070d18' });
+    __reaMap = new google.maps.Map(el, { center: { lat: 13.78, lng: 109.22 }, zoom: 12, disableDefaultUI: true, backgroundColor: '#070d18' });
   }
   const seen = {};
+  const bounds = new google.maps.LatLngBounds();
+  let pending = props.length;
   props.forEach(p => {
     const id = p.id;
     seen[id] = true;
-    const pos = { lat: p.coords.lat, lng: p.coords.lng };
     const color = __reaColor(p.state);
     const scale = id === selectedId ? 11 : 7;
     const icon = { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#070d18', strokeWeight: 2, scale: scale };
-    let m = __reaMarkers[id];
-    if (!m) {
-      m = new google.maps.Marker({ position: pos, map: __reaMap, icon: icon });
-      m.addListener('click', () => { if (window.__reaSelect) window.__reaSelect(id); });
-      __reaMarkers[id] = m;
-    } else {
-      m.setPosition(pos); m.setIcon(icon); m.setMap(__reaMap);
-    }
+    __reaResolve(p.place).then(pos => {
+      bounds.extend(pos);
+      let m = __reaMarkers[id];
+      if (!m) {
+        m = new google.maps.Marker({ position: pos, map: __reaMap, icon: icon });
+        m.addListener('click', () => { if (window.__reaSelect) window.__reaSelect(id); });
+        __reaMarkers[id] = m;
+      } else {
+        m.setPosition(pos); m.setIcon(icon); m.setMap(__reaMap);
+      }
+    }).catch(e => console.warn('rea: place resolve failed', p.place, e))
+      .finally(() => {
+        pending -= 1;
+        // Fit once, so later selection re-renders don't yank the viewport around.
+        if (pending === 0 && !__reaFitted && !bounds.isEmpty()) { __reaMap.fitBounds(bounds, 48); __reaFitted = true; }
+      });
   });
   Object.keys(__reaMarkers).forEach(id => { if (!seen[id]) { __reaMarkers[id].setMap(null); delete __reaMarkers[id]; } });
 }

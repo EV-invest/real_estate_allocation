@@ -77,10 +77,25 @@ pub struct Developer {
 	pub page: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Coords {
-	pub lat: f64,
-	pub lng: f64,
+/// A Google Place ID — our canonical handle on a property's location. The map
+/// resolves it to a pin via Google; name / address / coordinates are derived from
+/// it at render time rather than stored by hand.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct GooglePlace(String);
+
+impl GooglePlace {
+	pub fn parse(raw: String) -> Result<Self, DomainError> {
+		let trimmed = raw.trim();
+		if trimmed.is_empty() {
+			return Err(DomainError::Validation("google place id must not be empty".into()));
+		}
+		Ok(Self(trimmed.to_owned()))
+	}
+
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
 }
 
 /// Required link to the research backing a property. A value object so the one
@@ -154,7 +169,7 @@ pub struct LoanRates {
 pub struct Property {
 	pub id: PropertyId,
 	pub name: String,
-	pub coords: Coords,
+	pub place: GooglePlace,
 	/// `None` until we have a real number — rendered as a `?` in the warn colour
 	/// rather than a fabricated figure.
 	pub price: Option<Money>,

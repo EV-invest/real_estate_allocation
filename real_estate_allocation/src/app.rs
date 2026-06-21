@@ -54,7 +54,7 @@ fn Home() -> Element {
 	// emitted with the right key (Maps JS keys are public, restricted by referrer).
 	let maps_key = use_resource(crate::api::maps_api_key);
 	let maps_src = match &*maps_key.read() {
-		Some(Ok(key)) if !key.is_empty() => Some(format!("https://maps.googleapis.com/maps/api/js?key={key}&callback=__reaMapsReady")),
+		Some(Ok(key)) if !key.is_empty() => Some(format!("https://maps.googleapis.com/maps/api/js?key={key}&libraries=places&v=weekly&callback=__reaMapsReady")),
 		_ => None,
 	};
 

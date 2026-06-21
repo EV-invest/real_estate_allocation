@@ -11,7 +11,7 @@ use sqlx::{
 };
 
 use crate::{
-	domain::{ConstructionStatus, Coords, DealStructure, Developer, FileId, FileKind, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, ResearchUrl},
+	domain::{ConstructionStatus, DealStructure, Developer, FileId, FileKind, GooglePlace, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, ResearchUrl},
 	error::DomainError,
 };
 
@@ -24,8 +24,7 @@ CREATE TABLE IF NOT EXISTS developers (
 CREATE TABLE IF NOT EXISTS properties (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
-	lat REAL NOT NULL,
-	lng REAL NOT NULL,
+	place_id TEXT NOT NULL,
 	price REAL,
 	state TEXT NOT NULL,
 	construction TEXT NOT NULL,
@@ -102,7 +101,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	struct Seed {
 		name: &'static str,
-		coords: Coords,
+		place: &'static str,
 		/// `None` where we have no real number yet (the two under-construction towers).
 		price: Option<f64>,
 		state: PropertyState,
@@ -122,7 +121,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	let seeds = [
 		Seed {
 			name: "Quy Nhơn Melody",
-			coords: Coords { lat: 13.7686, lng: 109.2278 },
+			place: "ChIJOYTnE0ZtbzERRZnbRLfEIU8", // Căn Hộ Quy Nhơn Melody
 			price: Some(96_000.0),
 			state: PropertyState::Purchased,
 			construction: ConstructionStatus::Completed,
@@ -134,7 +133,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		},
 		Seed {
 			name: "Vina2 Panorama Quy Nhơn",
-			coords: Coords { lat: 13.8050, lng: 109.2070 },
+			place: "ChIJTX0aij9rbzERvgC-Y2tqNxw", // VINA2 Panorama
 			price: Some(60_000.0),
 			state: PropertyState::Purchased,
 			construction: ConstructionStatus::Completed,
@@ -150,7 +149,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		},
 		Seed {
 			name: "Ecolife Riverside Quy Nhơn",
-			coords: Coords { lat: 13.7720, lng: 109.2120 },
+			place: "ChIJGb0UXFRrbzER9Ym2RZ7csFE", // Ecolife Riverside Quy Nhơn
 			price: Some(59_000.0),
 			state: PropertyState::Purchased,
 			construction: ConstructionStatus::Completed,
@@ -166,7 +165,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		},
 		Seed {
 			name: "The Calla (Calla Apartment Quy Nhơn)",
-			coords: Coords { lat: 13.7542045, lng: 109.2073247 },
+			place: "ChIJt5jJjCxtbzERKfYIEUv0i-A", // The Calla (matches the shared map pin)
 			price: Some(80_000.0),
 			state: PropertyState::Purchased,
 			construction: ConstructionStatus::Completed,
@@ -183,7 +182,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		},
 		Seed {
 			name: "Q1 Tower (Cadia Quy Nhơn)",
-			coords: Coords { lat: 13.7710, lng: 109.2360 },
+			place: "ChIJDQMq0yFtbzERY32pkB70paY", // Q1 Tower Quy Nhơn, 1 Ngô Mây
 			price: None,
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
@@ -199,7 +198,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		},
 		Seed {
 			name: "Triton — Quy Nhơn Sky Residence",
-			coords: Coords { lat: 13.7820, lng: 109.2190 },
+			place: "ChIJ7QjTJQBtbzERetFnxYHlsUM", // Triton Sky Residence, 72B Tây Sơn
 			price: None,
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
@@ -236,11 +235,10 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	for s in seeds {
 		let id = PropertyId::new();
-		sqlx::query("INSERT INTO properties (id, name, lat, lng, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		sqlx::query("INSERT INTO properties (id, name, place_id, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			.bind(id.raw().to_string())
 			.bind(s.name)
-			.bind(s.coords.lat)
-			.bind(s.coords.lng)
+			.bind(s.place)
 			.bind(s.price)
 			.bind(s.state.as_str())
 			.bind(s.construction.as_str())
@@ -281,8 +279,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 struct PropertyRow {
 	id: String,
 	name: String,
-	lat: f64,
-	lng: f64,
+	place_id: String,
 	price: Option<f64>,
 	state: String,
 	construction: String,
@@ -314,7 +311,7 @@ impl TryFrom<PropertyRow> for Property {
 		Ok(Self {
 			id,
 			name: row.name,
-			coords: Coords { lat: row.lat, lng: row.lng },
+			place: GooglePlace::parse(row.place_id).map_err(corrupt_row)?,
 			price: row.price.map(Money::parse).transpose().map_err(corrupt_row)?,
 			state: PropertyState::parse(&row.state).map_err(corrupt_row)?,
 			construction: ConstructionStatus::parse(&row.construction).map_err(corrupt_row)?,
@@ -372,7 +369,7 @@ impl PropertyRepository for SqliteStore {
 	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
 	/// in-memory by design; SQL pushdown is explicitly descoped.
 	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
-		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
+		let rows = sqlx::query_as::<_, PropertyRow>("SELECT id, name, place_id, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties")
 			.fetch_all(&self.pool)
 			.await
 			.map_err(map_sqlx_error)?;
@@ -387,7 +384,7 @@ impl PropertyRepository for SqliteStore {
 	}
 
 	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
-		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, name, lat, lng, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
+		let row = sqlx::query_as::<_, PropertyRow>("SELECT id, name, place_id, price, state, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?")
 			.bind(id.raw().to_string())
 			.fetch_optional(&self.pool)
 			.await

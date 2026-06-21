@@ -1,15 +1,7 @@
 # Framework gaps hit while seeding the 6 Quy Nhơn properties
 
-Snapshot of remaining gaps. Items 1–4 are now DONE (see "Resolved" at the bottom);
-item 5 is next; 6/7/9 wait for the building/apartment split.
-
-## Next up
-5. **Drop hand-entered lat/lng for a Google Place reference.** Coords are still bare
-   `Coords { lat, lng }`, hand-set and mostly approximate. Decided: store a Google
-   **Place ID**, resolve the map pin via the Places API, and derive name/address/
-   coords from it later. Touches `map.rs` (JS marker rendering), the Maps loader in
-   `app.rs` (needs `libraries=places`), and the model (`Coords` → place id). Needs a
-   real Place ID per property (only The Calla's is known so far).
+Snapshot of remaining gaps. Items 1–5 are now DONE (see "Resolved" at the bottom);
+6/7/9 wait for the building/apartment split.
 
 ## Deferred to the building/apartment model split
 6. **No specs**: floors, unit count, area m², price/m², #towers, unit mix, year.
@@ -34,6 +26,14 @@ apartment.
 4. **research_url — no change needed.** It points at *our* own article; developer
    homepage lives in `developers.page`, per-property brochures in documents, and the
    map pin becomes the Google Place (item 5).
+5. **Google Place location — DONE.** `Coords { lat, lng }` replaced by
+   `GooglePlace(place_id)`; column `lat/lng` → `place_id TEXT NOT NULL`. The map
+   (`map.rs`) resolves each id to a pin via the Places API (New)
+   `Place.fetchFields(['location'])`, caches it, and fits bounds once; loader in
+   `app.rs` now requests `libraries=places&v=weekly`. All 6 Place IDs verified
+   against Google (The Calla matches the originally-shared pin). Lookup script lived
+   in `./tmp` (throwaway). Note: client resolution needs the key's Places API (New)
+   enabled (it is); the legacy Places/Geocoding REST APIs are NOT enabled on it.
 
 ## Medium — missing structured attributes (all currently crammed into reasoning)
 5. **No address/location text** — only `lat/lng`. Real addresses stored nowhere;
