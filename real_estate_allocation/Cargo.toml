@@ -46,5 +46,21 @@ strum = { workspace = true, features = ["strum_macros", "derive"] }
 thiserror.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+dioxus-ssr = { workspace = true }
+
+# examples live at the repo root, not under the crate.
+[[example]]
+name = "portfolio_diff"
+path = "../examples/portfolio_diff.rs"
+
+[[example]]
+name = "seed_smoke"
+path = "../examples/seed_smoke.rs"
+
+[[example]]
+name = "uikit_compare"
+path = "../examples/uikit_compare.rs"
+
 [lints]
 workspace = true

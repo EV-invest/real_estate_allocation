@@ -1,27 +1,23 @@
 //! Iframe-embeddable marketing surface (`/embed/overview`). A standalone port of
 //! the landing "Premium Asset Portfolio" bento section — no app shell, so a host
-//! page can `<iframe>` it. The two property tiles deep-link into the full app
-//! (`/?property=<id>`, `target=_top` so the click escapes the frame); the other
-//! two tiles (market note + ROI calculator) are self-contained.
+//! page can `<iframe>` it. Static content mirroring the landing source; the only
+//! interactive tile is the self-contained ROI calculator.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::{Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Slider};
+use ev_lib::uikit::{Button, ButtonVariant, Container, Select, SelectContent, SelectItem, SelectTrigger, SelectValue};
 
-use crate::domain::Property;
-
-// Curated hero renders from the landing CDN — design fidelity over per-property
-// pics for the marketing tile. Swap for real property images later if wanted.
+// Hero renders from the landing CDN — the same `ASSETS.luxury_villa` /
+// `ASSETS.quynhon_future` the original section references.
 const HERO_VILLA: &str = "https://d2xsxph8kpxj0f.cloudfront.net/310519663075853325/SPbgMPRFEXcrCSr7Bo27uM/luxury_villa-64wseo7dGJUQNbg7HMSNPo.webp";
 const HERO_BAY: &str = "https://d2xsxph8kpxj0f.cloudfront.net/310519663075853325/SPbgMPRFEXcrCSr7Bo27uM/quynhon_future-ExoshVjhhPWYbYR4Zf3xJn.webp";
 
 #[component]
 pub fn Overview() -> Element {
-	let properties = use_resource(|| async move { crate::api::list_properties(None).await.unwrap_or_default() });
 	let mut tab = use_signal(|| "all".to_string());
 
 	rsx! {
 		section { id: "portfolio", class: "relative border-t border-main-mist/10 py-24",
-			div { class: "mx-auto w-full max-w-[90rem] px-4",
+			Container {
 				// Section header
 				div { class: "mb-16 flex flex-col justify-between md:flex-row md:items-end",
 					div {
@@ -52,24 +48,8 @@ pub fn Overview() -> Element {
 
 				// Bento grid
 				div { class: "grid grid-cols-1 gap-6 md:grid-cols-3",
-					match &*properties.read() {
-						None => rsx! {
-							Skeleton { class: "min-h-[450px] md:col-span-2" }
-							Skeleton { class: "min-h-[450px]" }
-						},
-						Some(list) => {
-							let featured = list.first().cloned();
-							let side = list.get(1).cloned();
-							rsx! {
-								if let Some(p) = featured {
-									FeaturedCard { property: p }
-								}
-								if let Some(p) = side {
-									SideCard { property: p }
-								}
-							}
-						}
-					}
+					FeaturedCard {}
+					SideCard {}
 					WhyCard {}
 					Calculator {}
 				}
@@ -78,15 +58,12 @@ pub fn Overview() -> Element {
 	}
 }
 
-/// Large featured tile (spans two columns). The whole tile is a deep-link into
-/// the full app at the property's selection URL.
+/// Large featured tile (spans two columns). Static marketing content, mirroring
+/// the landing source byte-for-byte.
 #[component]
-fn FeaturedCard(property: Property) -> Element {
-	let href = format!("/?property={}", property.id.raw());
+fn FeaturedCard() -> Element {
 	rsx! {
-		a {
-			href,
-			target: "_top",
+		div {
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
@@ -98,31 +75,27 @@ fn FeaturedCard(property: Property) -> Element {
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
 					IconPin {}
-					"Quy Nhơn, Bình Định"
+					"Nhon Ly Beach, Quy Nhon"
 				}
-				h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "{property.name}" }
-				p { class: "mb-6 max-w-xl font-light text-sm text-main-mist/70 line-clamp-3", "{property.reasoning_or_terms()}" }
+				h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "The Horizon Premium Villas" }
+				p { class: "mb-6 max-w-xl font-light text-sm text-main-mist/70",
+					"Exclusive ultra-luxury oceanfront villas with private pools, nestled between pristine limestone cliffs and crystal-clear turquoise waters."
+				}
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
-					match property.price {
-						Some(p) => rsx! { Stat { label: "Price", value_class: "text-main-accent-t3", "{p}" } },
-						None => rsx! { Stat { label: "Price", value_class: "text-warn", "?" } },
-					}
-					Stat { label: "Status", value_class: "text-main-accent-t2", "Purchased" }
-					Stat { label: "Action", value_class: "text-white", "Open ↗" }
+					Stat { label: "Target Yield", value_class: "text-main-accent-t2", "12.5% p.a." }
+					Stat { label: "Appreciation", value_class: "text-main-accent-t3", "18% YoY" }
+					Stat { label: "Status", value_class: "text-white", "Pre-Launch" }
 				}
 			}
 		}
 	}
 }
 
-/// Standard side tile. Also a deep-link into the full app.
+/// Standard side tile. Static marketing content.
 #[component]
-fn SideCard(property: Property) -> Element {
-	let href = format!("/?property={}", property.id.raw());
+fn SideCard() -> Element {
 	rsx! {
-		a {
-			href,
-			target: "_top",
+		div {
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
@@ -131,16 +104,20 @@ fn SideCard(property: Property) -> Element {
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
 					IconPin {}
-					"Quy Nhơn, Bình Định"
+					"Quy Nhon Center"
 				}
-				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "{property.name}" }
-				p { class: "mb-6 font-light text-sm text-main-mist/70 line-clamp-3", "{property.reasoning_or_terms()}" }
+				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "Quy Nhon Bay Residences" }
+				p { class: "mb-6 font-light text-sm text-main-mist/70",
+					"Premium high-rise apartments with panoramic views of the bay, integrating luxury amenities and smart-home technology."
+				}
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
-					match property.price {
-						Some(p) => rsx! { Stat { label: "Price", value_class: "text-white", "{p}" } },
-						None => rsx! { Stat { label: "Price", value_class: "text-warn", "?" } },
+					div {
+						span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "LTV Ratio" }
+						span { class: "text-sm font-serif font-bold text-white", "55% Max" }
 					}
-					span { class: "inline-flex items-center gap-1 font-mono text-xs tracking-wider text-main-accent-t1 group-hover:text-white",
+					Button {
+						variant: ButtonVariant::Ghost,
+						class: "p-0 font-mono text-xs tracking-wider text-main-accent-t1 hover:bg-transparent hover:text-white",
 						"Deal Sheet"
 						IconArrow {}
 					}
@@ -174,6 +151,18 @@ fn WhyCard() -> Element {
 	}
 }
 
+// Principal slider bounds, in USD. The slider below is hand-inlined from the uikit
+// `Slider`'s compiled markup (colours applied directly, not via arbitrary-variant
+// overrides), so the track fill and round thumb don't depend on `cn!` merge survival.
+const A_MIN: f64 = 50_000.0;
+const A_MAX: f64 = 1_000_000.0;
+const A_STEP: f64 = 10_000.0;
+
+fn snap(v: f64) -> f64 {
+	let v = v.clamp(A_MIN, A_MAX);
+	(((v - A_MIN) / A_STEP).round() * A_STEP + A_MIN).clamp(A_MIN, A_MAX)
+}
+
 /// Client-side ROI projector (spans two columns). Mirrors the landing model:
 /// per-class annual yield + appreciation, compounded over the term.
 #[component]
@@ -182,13 +171,19 @@ fn Calculator() -> Element {
 	let mut term = use_signal(|| 5_u32);
 	let mut commercial = use_signal(|| false);
 
+	// Slider drag state: the track's measured origin/width on the x-axis.
+	let mut track = use_signal(|| Option::<std::rc::Rc<MountedData>>::None);
+	let mut bounds = use_signal(|| (0.0_f64, 1.0_f64));
+	let mut dragging = use_signal(|| false);
+	let pct = ((amount() - A_MIN) / (A_MAX - A_MIN) * 100.0).clamp(0.0, 100.0);
+
 	let (rate, appr): (f64, f64) = if commercial() { (0.12, 0.18) } else { (0.085, 0.15) };
 	let total = amount() * (1.0 + rate + appr).powi(term() as i32);
 	let profit = total - amount();
 	let roi = profit / amount() * 100.0;
 
 	rsx! {
-		div { class: "grid grid-cols-1 gap-8 border border-main-mist/10 bg-main-card p-8 md:col-span-2 md:grid-cols-2",
+		div { id: "calculator", class: "grid grid-cols-1 gap-8 border border-main-mist/10 bg-main-card p-8 md:col-span-2 md:grid-cols-2",
 			div { class: "flex flex-col justify-between",
 				div {
 					span { class: "mb-3 block font-mono text-xs uppercase tracking-widest text-main-accent-t1",
@@ -201,14 +196,56 @@ fn Calculator() -> Element {
 				}
 				div { class: "space-y-4 font-mono text-xs",
 					div {
-						label { class: "mb-3 block uppercase text-muted-foreground", "Principal Investment ($ USD)" }
-						Slider {
-							class: "[&_[data-slot=slider-track]]:bg-main-black/50 [&_[data-slot=slider-range]]:bg-main-accent-t1 [&_[data-slot=slider-thumb]]:border-main-accent-t1",
-							min: 50_000.0,
-							max: 1_000_000.0,
-							step: 10_000.0,
-							value: amount(),
-							on_value_change: move |v| amount.set(v),
+						label { class: "mb-3 block uppercase text-main-mist/40", "Principal Investment ($ USD)" }
+						span {
+		//TODO!!!: replace with kit's Slider
+							class: "relative flex w-full touch-none select-none items-center",
+							onpointerdown: move |e: PointerEvent| async move {
+								let Some(t) = track() else { return };
+								let Ok(rect) = t.get_client_rect().await else { return };
+								bounds.set((rect.origin.x, rect.size.width));
+								dragging.set(true);
+								let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
+								amount.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+							},
+							onpointermove: move |e: PointerEvent| {
+								if !dragging() {
+									return;
+								}
+								let (ox, w) = bounds();
+								let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
+								amount.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+							},
+							onpointerup: move |_| dragging.set(false),
+							onpointerleave: move |_| dragging.set(false),
+							span {
+								class: "relative h-1.5 w-full grow overflow-hidden rounded-full bg-main-black/50",
+								onmounted: move |e: MountedEvent| track.set(Some(e.data())),
+								span {
+									class: "absolute h-full bg-main-accent-t1",
+									style: "width: {pct}%;",
+								}
+							}
+							span {
+								class: "block size-4 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
+								style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
+								role: "slider",
+								tabindex: "0",
+								"aria-valuenow": amount(),
+								"aria-valuemin": A_MIN,
+								"aria-valuemax": A_MAX,
+								onkeydown: move |e: KeyboardEvent| {
+									let next = match e.key() {
+										Key::ArrowRight | Key::ArrowUp => amount() + A_STEP,
+										Key::ArrowLeft | Key::ArrowDown => amount() - A_STEP,
+										Key::Home => A_MIN,
+										Key::End => A_MAX,
+										_ => return,
+									};
+									e.prevent_default();
+									amount.set(snap(next));
+								},
+							}
 						}
 						div { class: "mt-2 flex justify-between font-bold text-main-accent-t1",
 							span { "$50k" }
@@ -218,7 +255,7 @@ fn Calculator() -> Element {
 					}
 					div { class: "grid grid-cols-2 gap-4",
 						div {
-							label { class: "mb-2 block uppercase text-muted-foreground", "Term (Years)" }
+							label { class: "mb-2 block uppercase text-main-mist/40", "Term (Years)" }
 							Select {
 								value: term().to_string(),
 								on_value_change: move |v: String| {
@@ -233,7 +270,7 @@ fn Calculator() -> Element {
 							}
 						}
 						div {
-							label { class: "mb-2 block uppercase text-muted-foreground", "Asset Type" }
+							label { class: "mb-2 block uppercase text-main-mist/40", "Asset Type" }
 							Select {
 								value: if commercial() { "commercial".to_string() } else { "residential".to_string() },
 								on_value_change: move |v: String| commercial.set(v == "commercial"),
@@ -252,22 +289,22 @@ fn Calculator() -> Element {
 			div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-black/40 p-6",
 				div { class: "space-y-4",
 					div {
-						span { class: "mb-1 block font-mono text-[10px] uppercase text-muted-foreground", "Estimated ROI" }
+						span { class: "mb-1 block font-mono text-[10px] uppercase text-main-mist/40", "Estimated ROI" }
 						span { class: "font-serif text-4xl font-bold text-main-accent-t3", "{roi:.1}%" }
 					}
 					div { class: "grid grid-cols-2 gap-4 border-t border-main-mist/10 pt-4",
 						div {
-							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-muted-foreground", "Total Payout" }
+							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Total Payout" }
 							span { class: "font-mono text-sm font-bold text-white", "{usd(total)}" }
 						}
 						div {
-							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-muted-foreground", "Net Profit" }
+							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Net Profit" }
 							span { class: "font-mono text-sm font-bold text-main-accent-t2", "{usd(profit)}" }
 						}
 					}
 				}
 				div { class: "mt-6",
-					p { class: "mb-4 text-[10px] font-light leading-relaxed text-muted-foreground",
+					p { class: "mb-4 text-[10px] font-light leading-relaxed text-main-mist/40",
 						"*Projections are based on historical performance and regional growth targets. Actual results may vary."
 					}
 					Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist hover:text-main-brand",
@@ -283,7 +320,7 @@ fn Calculator() -> Element {
 fn Stat(label: String, #[props(default)] value_class: String, children: Element) -> Element {
 	rsx! {
 		div {
-			span { class: "mb-1 block font-mono text-[10px] uppercase text-muted-foreground", "{label}" }
+			span { class: "mb-1 block font-mono text-[10px] uppercase text-main-mist/40", "{label}" }
 			span { class: "text-lg font-serif font-bold {value_class}", {children} }
 		}
 	}
@@ -293,17 +330,9 @@ fn Stat(label: String, #[props(default)] value_class: String, children: Element)
 fn Row(label: String, #[props(default)] value_class: String, children: Element) -> Element {
 	rsx! {
 		li { class: "flex justify-between",
-			span { class: "text-muted-foreground", "{label}" }
+			span { class: "text-main-mist/40", "{label}" }
 			span { class: "font-bold {value_class}", {children} }
 		}
-	}
-}
-
-impl Property {
-	/// Short blurb for the marketing tiles: prefer the (richer) reasoning, fall
-	/// back to terms. `line-clamp` keeps it to a few lines in the card.
-	fn reasoning_or_terms(&self) -> &str {
-		self.additional_reasoning.as_deref().or(self.terms.as_deref()).unwrap_or_default()
 	}
 }
 

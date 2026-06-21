@@ -1,22 +1,19 @@
-//! Visual-parity aid for the iframe overview. Diffs our live `/embed/overview`
-//! against the persisted landing "Premium Asset Portfolio" section
-//! (`portfolio_original.html`) so we can see where our port drifts.
+//! Visual-parity aid for the iframe overview. SSR-renders our `Overview`
+//! component in-process and diffs it against the persisted landing "Premium
+//! Asset Portfolio" section (`portfolio_original.html`) so we can see where our
+//! port drifts. No running server needed — `cargo r --example portfolio_diff`.
 //!
 //! NOT a pass/fail test. Exact HTML equality is the wrong oracle here:
-//!   - our SSR render injects hydration markers (`data-node-hydration`,
-//!     `<!--node-id-->`) the Next.js original never has,
 //!   - our rsx emits the same Tailwind classes in a different token order,
-//!   - the two property tiles sit behind an async `use_resource`, so the SSR
-//!     snapshot shows `Skeleton`s, not cards — compare those by screenshot.
-//! So we normalize away the noise (strip markers/comments, sort class tokens)
-//! and print a `diff` of the *static chrome*. What's left is real drift to fix
-//! by hand (e.g. `font-mono-tech` → `font-mono`, `font-serif-display` →
-//! `font-serif`). Intentional differences (live data, renamed stats) stay.
-//!
-//! Run `dx serve` first; point at it with `OVERVIEW_URL`.
+//!   - the landing uses token *names* (`font-mono-tech`, `font-serif-display`,
+//!     `text-muted-foreground`) that compile to identical CSS as ours.
+//! So we normalize the noise away (strip comments/`data-slot`, canonicalize the
+//! equivalent class names, sort class tokens) and print a `diff` of what's left
+//! — the real drift to fix by hand.
 use std::{path::Path, process::Command};
 
-const DEFAULT_URL: &str = "http://localhost:8080/embed/overview";
+use dioxus::prelude::*;
+use real_estate_allocation::embed::Overview;
 
 const VOID: &[&str] = &["meta", "link", "img", "br", "hr", "input", "source", "path", "circle", "rect", "line"];
 /// The landing's design tokens vs ours — different *names*, identical CSS in our
@@ -28,16 +25,17 @@ const EQUIV: &[(&str, &str)] = &[
 	("text-muted-foreground", "text-main-mist/40"),
 ];
 fn main() {
-	let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+	let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples");
 	let original = std::fs::read_to_string(dir.join("portfolio_original.html")).expect("persisted original section");
 
-	let url = std::env::var("OVERVIEW_URL").unwrap_or_else(|_| DEFAULT_URL.into());
-	let out = Command::new("curl").args(["-sf", "-m", "10", &url]).output().expect("spawn curl");
-	assert!(out.status.success(), "fetch {url} failed — is `dx serve` up? set OVERVIEW_URL to override");
-	let ours = String::from_utf8(out.stdout).expect("overview is utf-8");
+	let mut dom = VirtualDom::new(Overview);
+	dom.rebuild_in_place();
+	let ours = dioxus_ssr::render(&dom);
 
-	let orig = pretty(section(&strip_comments(&original)));
-	let ours = pretty(section(&strip_comments(&ours)));
+	// Dioxus SSR and Next.js encode the same entities differently (`&#38;` vs
+	// `&amp;`, `&#39;` vs `&#x27;`); canonicalize both so the diff ignores it.
+	let orig = decode_entities(&pretty(section(&strip_comments(&original))));
+	let ours = decode_entities(&pretty(section(&strip_comments(&ours))));
 
 	let tmp = std::env::temp_dir();
 	let (a, b) = (tmp.join("portfolio_original.pretty.html"), tmp.join("portfolio_ours.pretty.html"));
@@ -47,7 +45,7 @@ fn main() {
 	Command::new("diff").arg("-u").arg(&a).arg(&b).status().expect("spawn diff");
 
 	let differing = orig.lines().zip(ours.lines()).filter(|(a, b)| a != b).count();
-	println!("\n{differing} differing chrome lines (ignoring hydration/class-order noise). Property tiles render as Skeletons over SSR — compare those by screenshot.");
+	println!("\n{differing} differing lines (ignoring class-order / equivalent-name noise).");
 }
 
 /// Strip HTML comments — Dioxus SSR node markers (`<!--node-id5-->`, `<!--#-->`)
@@ -109,6 +107,23 @@ fn pretty(html: &str) -> String {
 		}
 	}
 	out
+}
+
+/// Collapse the entity forms the two SSR engines disagree on to raw characters.
+fn decode_entities(s: &str) -> String {
+	[
+		("&#38;", "&"),
+		("&amp;", "&"),
+		("&#39;", "'"),
+		("&#x27;", "'"),
+		("&#62;", ">"),
+		("&gt;", ">"),
+		("&#60;", "<"),
+		("&lt;", "<"),
+		("&quot;", "\""),
+	]
+	.iter()
+	.fold(s.to_string(), |acc, (from, to)| acc.replace(from, to))
 }
 
 fn tag_name(tag: &str) -> &str {

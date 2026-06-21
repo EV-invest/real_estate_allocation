@@ -15,7 +15,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-playfair), "Playfair Display", ui-serif, Georgia, serif;
+  --font-serif: var(--font-playfair), "Playfair", "Playfair Display", ui-serif, Georgia, serif;
   --font-mono: var(--font-inter), "Inter", ui-monospace, monospace;
 
   /* shadcn semantic utilities */

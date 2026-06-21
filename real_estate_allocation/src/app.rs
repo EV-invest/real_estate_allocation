@@ -22,11 +22,21 @@ pub type SelectedProperty = Resource<Option<Property>>;
 pub fn App() -> Element {
 	rsx! {
 		document::Stylesheet { href: asset!("/assets/tailwind.css") }
-		document::Link { rel: "preconnect", href: "https://fonts.googleapis.com" }
-		document::Link {
-			rel: "stylesheet",
-			href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap",
-		}
+		// Self-hosted webfonts (staged into assets/fonts by the flake, bundled via
+		// `asset!`) so the dashboard renders identically offline / behind a CSP
+		// instead of depending on the Google Fonts CDN. Family names match the
+		// `--font-sans` / `--font-serif` token chains; variable TTFs, so one face
+		// per style spans the whole weight axis.
+		document::Style { {format!(
+			"@font-face{{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url('{INTER}') format('truetype')}}\
+			 @font-face{{font-family:'Inter';font-style:italic;font-weight:100 900;font-display:swap;src:url('{INTER_ITALIC}') format('truetype')}}\
+			 @font-face{{font-family:'Playfair Display';font-style:normal;font-weight:300 900;font-display:swap;src:url('{PLAYFAIR}') format('truetype')}}\
+			 @font-face{{font-family:'Playfair Display';font-style:italic;font-weight:300 900;font-display:swap;src:url('{PLAYFAIR_ITALIC}') format('truetype')}}",
+			INTER = asset!("/assets/fonts/Inter.ttf"),
+			INTER_ITALIC = asset!("/assets/fonts/Inter-Italic.ttf"),
+			PLAYFAIR = asset!("/assets/fonts/PlayfairDisplay.ttf"),
+			PLAYFAIR_ITALIC = asset!("/assets/fonts/PlayfairDisplay-Italic.ttf"),
+		)} }
 		Router::<Route> {}
 	}
 }

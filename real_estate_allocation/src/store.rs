@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS properties (
 	state TEXT NOT NULL,
 	purchased_at TEXT,
 	construction TEXT NOT NULL,
+	target_appreciation REAL NOT NULL DEFAULT 0,
 	developer TEXT REFERENCES developers(name),
 	research_url TEXT NOT NULL,
 	terms TEXT,
@@ -109,6 +110,8 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		price: Option<f64>,
 		state: PropertyState,
 		construction: ConstructionStatus,
+		/// Target appreciation (% / yr). Ignored (stored 0) for under-construction towers.
+		target_appreciation: f64,
 		developer: &'static str,
 		research_url: &'static str,
 		terms: &'static str,
@@ -134,6 +137,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			price: Some(96_000.0),
 			state: PropertyState::Purchased(weeks_ago(54)),
 			construction: ConstructionStatus::Completed,
+			target_appreciation: 18.0,
 			developer: "Hưng Thịnh",
 			research_url: "https://www.hungthinhland.com/en/projects/detail/QUY-NHON-MELODY.html",
 			terms: "Handed over early 2024 (topped out 2021, completed Dec 2023). 4-star seafront tourism-apartment standard.",
@@ -146,6 +150,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			price: Some(60_000.0),
 			state: PropertyState::Purchased(weeks_ago(20)),
 			construction: ConstructionStatus::Completed,
+			target_appreciation: 12.0,
 			developer: "VINA2",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/can-ho-vina2-panorama/",
 			terms: "Built and handed over from early 2024; residents occupying. Move-in available from 30% of unit value.",
@@ -162,6 +167,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			price: Some(59_000.0),
 			state: PropertyState::Purchased(weeks_ago(14)),
 			construction: ConstructionStatus::Completed,
+			target_appreciation: 10.0,
 			developer: "Capital House",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/ecolife-riverside/",
 			terms: "Completed and handed over; red book (sổ hồng) issued — move in immediately.",
@@ -178,6 +184,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			price: Some(80_000.0),
 			state: PropertyState::Purchased(weeks_ago(9)),
 			construction: ConstructionStatus::Completed,
+			target_appreciation: 14.0,
 			developer: "Armo",
 			research_url: "https://quynhonhomes.vn/can-ho-quy-nhon/calla-apartment-quy-nhon/",
 			terms: "Completed, sổ hồng available. Bank financing up to 80% LTV with interest grace through handover.",
@@ -195,6 +202,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			price: None,
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
+			target_appreciation: 0.0,
 			developer: "Phát Đạt",
 			research_url: "https://q1-tower.vn/",
 			terms: "Under construction (broke ground Jun 2022). Beachfront 5-star branded-residence; not yet handed over.",
@@ -211,6 +219,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			price: None,
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
+			target_appreciation: 0.0,
 			developer: "Arita",
 			research_url: "https://tritonquynhonsky.vn/",
 			terms: "Under construction (launched 2025); pricing still being released. Not yet handed over.",
@@ -256,7 +265,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	for s in seeds {
 		let id = PropertyId::new();
-		sqlx::query("INSERT INTO properties (id, name, place_id, price, state, purchased_at, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+		sqlx::query("INSERT INTO properties (id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 			.bind(id.raw().to_string())
 			.bind(s.name)
 			.bind(s.place)
@@ -267,6 +276,10 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 				_ => None,
 			})
 			.bind(s.construction.as_ref())
+			.bind(match s.construction {
+				ConstructionStatus::Completed => s.target_appreciation,
+				ConstructionStatus::UnderConstruction => 0.0,
+			})
 			.bind(s.developer)
 			.bind(s.research_url)
 			.bind(s.terms)
@@ -309,6 +322,7 @@ struct PropertyRow {
 	state: String,
 	purchased_at: Option<String>,
 	construction: String,
+	target_appreciation: f64,
 	developer: Option<String>,
 	research_url: String,
 	terms: Option<String>,
@@ -324,6 +338,10 @@ impl TryFrom<PropertyRow> for Property {
 	/// the row is corrupt — a repository error, never a client-facing validation.
 	fn try_from(row: PropertyRow) -> Result<Self, Self::Error> {
 		let id = crate::domain::parse_property_id(&row.id).map_err(corrupt_row)?;
+		let construction: ConstructionStatus = row
+			.construction
+			.parse()
+			.map_err(|e| corrupt_row(DomainError::Repository(format!("unknown construction status: {e}"))))?;
 		let deal = row
 			.deal_json
 			.map(|j| serde_json::from_str::<DealStructure>(&j))
@@ -353,10 +371,12 @@ impl TryFrom<PropertyRow> for Property {
 				PropertyStateKind::Interesting => PropertyState::Interesting,
 				PropertyStateKind::Purchasing => PropertyState::Purchasing,
 			},
-			construction: row
-				.construction
-				.parse()
-				.map_err(|e| corrupt_row(DomainError::Repository(format!("unknown construction status: {e}"))))?,
+			construction,
+			// The rule's single source of truth: an unfinished building has no target.
+			target_appreciation: match construction {
+				ConstructionStatus::Completed => row.target_appreciation,
+				ConstructionStatus::UnderConstruction => 0.0,
+			},
 			developer: row.developer,
 			research_url: ResearchUrl::parse(row.research_url).map_err(corrupt_row)?,
 			terms: row.terms,
@@ -413,7 +433,7 @@ impl PropertyRepository for SqliteStore {
 	/// in-memory by design; SQL pushdown is explicitly descoped.
 	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
 		let rows = sqlx::query_as::<_, PropertyRow>(
-			"SELECT id, name, place_id, price, state, purchased_at, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties",
+			"SELECT id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties",
 		)
 		.fetch_all(&self.pool)
 		.await
@@ -430,7 +450,7 @@ impl PropertyRepository for SqliteStore {
 
 	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
 		let row = sqlx::query_as::<_, PropertyRow>(
-			"SELECT id, name, place_id, price, state, purchased_at, construction, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?",
+			"SELECT id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?",
 		)
 		.bind(id.raw().to_string())
 		.fetch_optional(&self.pool)

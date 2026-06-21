@@ -45,6 +45,10 @@ fn Details(property: Property) -> Element {
 				"{property.construction}"
 			}
 
+			if property.target_appreciation > 0.0 {
+				Kv { label: "Target appreciation", value_class: "text-main-accent-t3", "{property.target_appreciation:.0}% / yr" }
+			}
+
 			if let Some(deal) = property.deal.as_ref() {
 				Kv { label: "Equity / Debt", "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
 			}

@@ -157,6 +157,9 @@ pub struct Property {
 	pub price: Option<Money>,
 	pub state: PropertyState,
 	pub construction: ConstructionStatus,
+	/// Target appreciation (% per year). Only meaningful for a finished building —
+	/// forced to 0 while `construction` is `UnderConstruction` (enforced on load).
+	pub target_appreciation: f64,
 	/// Developer name; must resolve to a row in the developers table when set.
 	pub developer: Option<String>,
 	pub research_url: ResearchUrl,

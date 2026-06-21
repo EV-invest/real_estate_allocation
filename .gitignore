@@ -73,4 +73,5 @@ venv/
 **/rustc-ice*
 real_estate_allocation/assets/tokens.css
 real_estate_allocation/assets/logo.svg
+real_estate_allocation/assets/fonts/
 

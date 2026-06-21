@@ -25,8 +25,8 @@ derive-new = "^0.7"
 dockview_dioxus = "^0.1"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
-reqwest = { version = "^0.12", default-features = false, features = ["json", "rustls-tls"] }
-v_utils = { version = "^2.15.53", features = ["io", "macros", "cli"] }
+reqwest = { version = "^0.13", default-features = false, features = ["json", "rustls"] }
+v_utils = { version = "^2.15.52", features = ["io", "macros", "cli"] }
 
 # microfrontend stack — pinned to the exact revs `site` verified against.
 async-trait = "^0.1"
@@ -44,7 +44,11 @@ thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
+dioxus-ssr = "0.7"
 
 # Local checkout overrides the git source — we edit the lib alongside the app.
 [patch."https://github.com/EV-invest/lib.git"]
 ev_lib = { path = "../lib/rust" }
+
+[patch.crates-io]
+dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"

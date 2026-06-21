@@ -32,6 +32,27 @@
         # assets dir (gitignored; declaratively populated, never hand-edited).
         logoSrc = "${ev_assets}/logo/logo.svg";
 
+        # Self-hosted webfonts. We serve the families ourselves instead of the
+        # Google Fonts CDN so a deploy renders identically offline / behind a CSP.
+        # Variable TTFs (full unicode incl. Vietnamese) pinned by content hash;
+        # `@font-face` lives in input.css, staged into the gitignored assets/fonts.
+        ttf = name: hash: pkgs.fetchurl {
+          inherit name hash;
+          url = "https://raw.githubusercontent.com/google/fonts/main/${
+            { "Inter.ttf" = "ofl/inter/Inter%5Bopsz,wght%5D.ttf";
+              "Inter-Italic.ttf" = "ofl/inter/Inter-Italic%5Bopsz,wght%5D.ttf";
+              "PlayfairDisplay.ttf" = "ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf";
+              "PlayfairDisplay-Italic.ttf" = "ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf";
+            }.${name}
+          }";
+        };
+        fontsDir = pkgs.linkFarm "rea-fonts" [
+          { name = "Inter.ttf"; path = ttf "Inter.ttf" "sha256-KRYKgP9J3cqyyXcRJH4IsfqyekhKMpzouBPYINxVkDE="; }
+          { name = "Inter-Italic.ttf"; path = ttf "Inter-Italic.ttf" "sha256-rNmOZHlXgbIFjwexhHXg7O4qD+K0Kkni+eN9DWv2bOY="; }
+          { name = "PlayfairDisplay.ttf"; path = ttf "PlayfairDisplay.ttf" "sha256-xA8ik3ZqUDvHDM6eUS74RKTMt8vN55L+LqMdGRkX2NY="; }
+          { name = "PlayfairDisplay-Italic.ttf"; path = ttf "PlayfairDisplay-Italic.ttf" "sha256-peJtxeLnf7KAOgvwL9T4HuE27I3qhjzNsMWaJjshN4s="; }
+        ];
+
         rs = v_flakes.rs {
           inherit pkgs rust;
           build = {
@@ -49,6 +70,7 @@
           gitignore.extra = ''
             real_estate_allocation/assets/tokens.css
             real_estate_allocation/assets/logo.svg
+            real_estate_allocation/assets/fonts/
           '';
         };
         readme = v_flakes.readme-fw {
@@ -77,6 +99,7 @@
             cd "$repo/real_estate_allocation"
 
             cp -f ${logoSrc} ./assets/logo.svg
+            mkdir -p ./assets/fonts && cp -fL ${fontsDir}/* ./assets/fonts/
 
             # Tailwind v4 standalone CLI needs `tailwindcss` resolvable from
             # node_modules; install once, then build + watch.
@@ -133,7 +156,11 @@
 
               # `asset!("/assets/logo.svg")` needs the file present at compile
               # time; the gitignored copy isn't in the pure source, so stage it.
-              postPatch = "cp -f ${logoSrc} real_estate_allocation/assets/logo.svg";
+              postPatch = ''
+                cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
+                mkdir -p real_estate_allocation/assets/fonts
+                cp -fL ${fontsDir}/* real_estate_allocation/assets/fonts/
+              '';
             };
           };
 
@@ -147,6 +174,8 @@
               + ''
                 cp -f ${(v_flakes.files.treefmt) { inherit pkgs; }} ./.treefmt.toml
                 cp -f ${logoSrc} ./real_estate_allocation/assets/logo.svg
+                mkdir -p ./real_estate_allocation/assets/fonts
+                cp -fL ${fontsDir}/* ./real_estate_allocation/assets/fonts/
               '';
 
             packages = [
