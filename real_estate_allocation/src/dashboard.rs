@@ -92,19 +92,31 @@ pub fn Dashboard() -> Element {
 		applied.set(true);
 	});
 
-	// Alt+S → save the live arrangement as the global default, registered as a `PackedArea` host
+	// `s` → save the live arrangement as the global default, registered as a `PackedArea` host
 	// action. The closure gets the same `PackedApi` `on_ready` handed us and POSTs its serialized
-	// grid; only fires browser-side (the listener is wasm-only) but compiles everywhere.
-	let save_layout = Callback::new(|api: PackedApi| {
+	// grid; only fires browser-side (the listener is wasm-only) but compiles everywhere. The toast
+	// gives the user feedback that the save landed (or didn't), auto-clearing after a beat.
+	let mut toast = use_signal(|| None::<&'static str>);
+	let save_layout = Callback::new(move |api: PackedApi| {
 		let json = api.save();
 		spawn(async move {
-			if let Err(e) = crate::api::save_default_layout(json).await {
-				dioxus::logger::tracing::error!(%e, "save default layout failed");
+			let msg = match crate::api::save_default_layout(json).await {
+				Ok(()) => "Layout saved",
+				Err(e) => {
+					dioxus::logger::tracing::error!(%e, "save default layout failed");
+					"Save failed"
+				}
+			};
+			toast.set(Some(msg));
+			#[cfg(target_arch = "wasm32")]
+			{
+				gloo_timers::future::TimeoutFuture::new(2500).await;
+				toast.set(None);
 			}
 		});
 	});
 	let config = Config {
-		actions: vec![(Keybind { key: "s", alt: true, ctrl: false }, save_layout)],
+		actions: vec![(Keybind { key: "s", alt: false, ctrl: false }, save_layout)],
 		..Default::default()
 	};
 
@@ -118,6 +130,14 @@ pub fn Dashboard() -> Element {
 			TopBar {}
 			div { class: "relative min-h-0 flex-1",
 				PackedArea { panels, on_ready: Some(on_ready), config: Some(config) }
+			}
+			if let Some(msg) = toast() {
+				div {
+					class: "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded
+						border border-main-mist/20 bg-main-black/90 px-4 py-2 font-mono text-xs
+						tracking-wider text-main-accent-t1 shadow-lg",
+					"{msg}"
+				}
 			}
 		}
 	}

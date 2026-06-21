@@ -22,7 +22,7 @@ unused_features = "allow"
 clap = { version = "^4.6", features = ["derive"] }
 color-eyre = "^0.6"
 derive-new = "^0.7"
-dockview_dioxus = "^0.1"
+dockview_dioxus = "^0.1.1"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 reqwest = { version = "^0.13", default-features = false, features = ["json", "rustls"] }
@@ -32,7 +32,7 @@ v_utils = { version = "^2.15.52", features = ["io", "macros", "cli"] }
 async-trait = "^0.1"
 dioxus = { version = "^0.7" }
 dioxus-ssr = "0.7"
-ev_lib = { git = "https://github.com/EV-invest/lib.git", rev = "dc3d7d3f9be38ec782e52282788edf973fbadfd8" }
+ev_lib = "^0.3"
 getrandom = { version = "^0.4", features = ["wasm_js"] }
 jiff = { version = "^0.2", features = ["serde"] }
 secrecy = "^0.10"
@@ -47,8 +47,8 @@ uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
 
 # Local checkout overrides the git source — we edit the lib alongside the app.
-[patch."https://github.com/EV-invest/lib.git"]
-ev_lib = { path = "../lib/rust" }
+#[patch."https://github.com/EV-invest/lib.git"]
+#ev_lib = { path = "../lib/rust" }
 
-[patch.crates-io]
-dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"
+#[patch.crates-io]
+#dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"

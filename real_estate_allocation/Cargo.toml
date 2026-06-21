@@ -25,6 +25,7 @@ dioxus = { workspace = true, features = ["fullstack", "web"] }
 ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm"] }
 getrandom.workspace = true
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
 uuid = { workspace = true, features = ["js"] }
 v_utils = { version = "^2.15.53", default-features = false, features = ["trades"] }
 wasm-bindgen.workspace = true
