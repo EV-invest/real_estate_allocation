@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use dockview_dioxus::{DockApi, DockArea, DockPanel, PanelId, Position};
 
 use crate::{
 	map::MapPanel,
@@ -7,23 +8,33 @@ use crate::{
 
 #[component]
 pub fn Dashboard() -> Element {
+	let panels = vec![
+		DockPanel { id: PanelId("map".into()), title: "Map".into(), content: rsx! { MapPanel {} } },
+		DockPanel { id: PanelId("chart".into()), title: "Chart".into(), content: rsx! { ChartPanel {} } },
+		DockPanel { id: PanelId("heatmap".into()), title: "Portfolio".into(), content: rsx! { PortfolioHeatmap {} } },
+		DockPanel { id: PanelId("media".into()), title: "Media".into(), content: rsx! { MediaPanel {} } },
+		DockPanel { id: PanelId("details".into()), title: "Details".into(), content: rsx! { DetailsPanel {} } },
+	];
+	// Order = stable overlay render order; do NOT reorder later (it remounts panels).
+
+	// Seed an arrangement on first load that roughly mirrors the old layout; fires once,
+	// only when there's no saved layout. Same code path a real drag uses.
+	//   ┌ map+media ┬ chart   ┐
+	//   ├ heatmap   ┴ details ┘
+	let seed = Callback::new(move |mut api: DockApi| {
+		api.move_panel(PanelId("chart".into()), vec![], Position::Right);
+		api.move_panel(PanelId("details".into()), vec![1], Position::Bottom);
+		api.move_panel(PanelId("heatmap".into()), vec![0], Position::Bottom);
+	});
+
 	rsx! {
-		div { class: "min-h-screen bg-background text-foreground",
+		div { class: "flex h-screen flex-col bg-background text-foreground",
 			TopBar {}
-			// Amazon-style centered column: content is capped and guttered so it never
-			// stretches edge-to-edge on wide monitors (which read flat/sparse). The cap
-			// restores the portrait proportions of the Figma.
-			main { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-6 py-6 lg:px-8",
-				// Location + price chart. 5/3 split on desktop, stacked on mobile.
-				div { class: "grid grid-cols-1 gap-6 lg:grid-cols-5",
-					div { class: "lg:col-span-3", MapPanel {} }
-					div { class: "lg:col-span-2", ChartPanel {} }
-				}
-				PortfolioHeatmap {}
-				// Media + deal terms. Grid stretch keeps the two cards equal height.
-				div { class: "grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2",
-					MediaPanel {}
-					DetailsPanel {}
+			div { class: "relative min-h-0 flex-1",
+				DockArea {
+					panels,
+					storage_key: Some("rea-dashboard-layout".to_string()),
+					on_ready: Some(seed),
 				}
 			}
 		}
