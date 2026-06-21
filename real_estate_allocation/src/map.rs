@@ -3,7 +3,7 @@
 //! renders a placeholder so the inline-JS extern is never linked off-target.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
+use ev_lib::uikit::{Card, CardContent, Skeleton};
 
 use crate::{app::Selected, domain::PropertyStateKind};
 
@@ -56,16 +56,14 @@ pub fn MapPanel() -> Element {
 	let _ = (selected, &properties);
 
 	rsx! {
-		Card { class: "flex h-[400px] flex-col overflow-hidden",
-			CardHeader { class: "flex flex-row items-start justify-between gap-2",
-				div {
-					CardTitle { class: "font-serif text-main-accent-t1", "Location" }
-					CardDescription { "Portfolio sites — click a marker to inspect" }
-				}
-				StateFilter { filter }
-			}
+		// h-full so the map fills (and resizes with) its dock pane; the tab already labels it,
+		// so the redundant card header is gone — only the live state filter survives, overlaid.
+		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex-1 relative p-0",
 				div { id: "rea-map", class: "absolute inset-0" }
+				div { class: "absolute right-3 top-3 z-10",
+					StateFilter { filter }
+				}
 				if properties.read().is_none() {
 					Skeleton { class: "absolute inset-0" }
 				}
@@ -125,7 +123,6 @@ fn StateFilter(filter: Signal<Vec<PropertyStateKind>>) -> Element {
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
 let __reaMap = null;
 let __reaMarkers = {};
-let __reaPos = {};
 let __reaFitted = false;
 
 window.__reaMapsReady = function () { window.__reaMapsLoaded = true; };
@@ -141,18 +138,6 @@ function __reaColor(state) {
   }
 }
 
-// Resolve a Google Place ID to {lat,lng} via the Places API (New), cached per id.
-async function __reaResolve(placeId) {
-  if (__reaPos[placeId]) return __reaPos[placeId];
-  const { Place } = await google.maps.importLibrary('places');
-  const place = new Place({ id: placeId });
-  await place.fetchFields({ fields: ['location'] });
-  const loc = place.location;
-  const pos = { lat: loc.lat(), lng: loc.lng() };
-  __reaPos[placeId] = pos;
-  return pos;
-}
-
 export function rea_render_markers(elId, propsJson, selectedId) {
   if (!window.google || !window.google.maps) { setTimeout(() => rea_render_markers(elId, propsJson, selectedId), 300); return; }
   const el = document.getElementById(elId);
@@ -163,31 +148,28 @@ export function rea_render_markers(elId, propsJson, selectedId) {
   }
   const seen = {};
   const bounds = new google.maps.LatLngBounds();
-  let pending = props.length;
   props.forEach(p => {
+    // Coords are resolved + cached server-side; an unresolved place just has no pin.
+    if (!p.coords) return;
     const id = p.id;
     seen[id] = true;
+    const pos = { lat: p.coords.lat, lng: p.coords.lng };
     const color = __reaColor(p.state);
     const scale = id === selectedId ? 11 : 7;
     const icon = { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#070d18', strokeWeight: 2, scale: scale };
-    __reaResolve(p.place).then(pos => {
-      bounds.extend(pos);
-      let m = __reaMarkers[id];
-      if (!m) {
-        m = new google.maps.Marker({ position: pos, map: __reaMap, icon: icon });
-        m.addListener('click', () => { if (window.__reaSelect) window.__reaSelect(id); });
-        __reaMarkers[id] = m;
-      } else {
-        m.setPosition(pos); m.setIcon(icon); m.setMap(__reaMap);
-      }
-    }).catch(e => console.warn('rea: place resolve failed', p.place, e))
-      .finally(() => {
-        pending -= 1;
-        // Fit once, so later selection re-renders don't yank the viewport around.
-        if (pending === 0 && !__reaFitted && !bounds.isEmpty()) { __reaMap.fitBounds(bounds, 48); __reaFitted = true; }
-      });
+    bounds.extend(pos);
+    let m = __reaMarkers[id];
+    if (!m) {
+      m = new google.maps.Marker({ position: pos, map: __reaMap, icon: icon });
+      m.addListener('click', () => { if (window.__reaSelect) window.__reaSelect(id); });
+      __reaMarkers[id] = m;
+    } else {
+      m.setPosition(pos); m.setIcon(icon); m.setMap(__reaMap);
+    }
   });
   Object.keys(__reaMarkers).forEach(id => { if (!seen[id]) { __reaMarkers[id].setMap(null); delete __reaMarkers[id]; } });
+  // Fit once, so later selection re-renders don't yank the viewport around.
+  if (!__reaFitted && !bounds.isEmpty()) { __reaMap.fitBounds(bounds, 48); __reaFitted = true; }
 }
 
 export function rea_on_select(cb) { window.__reaSelect = cb; }

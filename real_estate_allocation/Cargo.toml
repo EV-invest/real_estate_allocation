@@ -14,22 +14,19 @@ server = ["dioxus/server"]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
 ev_lib = { workspace = true, features = ["architecture", "uikit"] }
 # `config` (with its SmartDefault'd AppConfig) is server-only.
+reqwest.workspace = true
 smart-default.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
-# v_utils is native-only: the wasm client uses none of it directly, and its
-# `io`/`distributions` features pull `ustr`→`ahash` and `rand`, both of which
-# drag in a `getrandom` with no wasm backend. `distributions` →
-# `laplace_random_walk` (price-series mock); `io` → `ExpandedPath`/`LiveSettings`.
-# `tracing` + `xdg`: route `clientside!` logs to a file under the XDG state dir
-# instead of stdout (otherwise the macro warns and only prints to the terminal).
 v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli", "tracing", "xdg"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "web"] }
 ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm"] }
 getrandom.workspace = true
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 uuid = { workspace = true, features = ["js"] }
+v_utils = { version = "^2.15.53", default-features = false, features = ["trades"] }
 wasm-bindgen.workspace = true
 
 [dependencies]

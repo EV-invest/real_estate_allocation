@@ -14,6 +14,31 @@ use ev_lib::uikit::{Button, Select, SelectContent, SelectItem, SelectTrigger, Se
 
 const REFERENCE: &str = include_str!("portfolio_original.html");
 
+// Mirrors `src/main.rs`: native is the fullstack *server* (calling
+// `dioxus::launch` natively boots the web renderer and panics in wasm-bindgen);
+// wasm is the client. This app has no backend, so the server just SSRs + serves.
+// Embedded so a bare `cargo run` serves it directly: the `asset!` macro only
+// resolves to a real URL under `dx`'s asset pipeline, so we sidestep it.
+#[cfg(not(target_arch = "wasm32"))]
+const CSS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/tailwind.css"));
+
+const HEAD: &str = "border-b border-main-mist/10 pb-2 font-mono text-xs uppercase tracking-wider text-main-mist/60";
+#[cfg(not(target_arch = "wasm32"))]
+fn main() {
+	use dioxus::server::axum::{Router, routing::get};
+	// `dioxus::server` serves static assets from `<exe-dir>/public` and panics if
+	// it's absent. `dx serve` populates it (and the wasm client, so the page
+	// hydrates); a bare `cargo run` never does, so make it exist — the server then
+	// SSRs the styled page (no client hydration; use `dx serve --example` for that).
+	let exe = std::env::current_exe().expect("exe path");
+	std::fs::create_dir_all(exe.parent().expect("exe has parent").join("public")).expect("create public dir");
+	dioxus::server::serve(move || async move {
+		let css = get(|| async { ([("Content-Type", "text/css; charset=utf-8")], CSS) });
+		Ok(Router::new().route("/style.css", css).merge(dioxus::server::router(app)))
+	});
+}
+
+#[cfg(target_arch = "wasm32")]
 fn main() {
 	dioxus::launch(app);
 }
@@ -23,49 +48,101 @@ fn app() -> Element {
 	let mut term = use_signal(|| 5_u32);
 
 	rsx! {
-		document::Stylesheet { href: asset!("/assets/tailwind.css") }
+		document::Link { rel: "stylesheet", r#type: "text/css", href: "/style.css" }
 		document::Link { rel: "preconnect", href: "https://fonts.googleapis.com" }
 		document::Link {
 			rel: "stylesheet",
 			href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap",
 		}
 		div { class: "dark min-h-screen bg-main-black p-10 font-sans text-white",
+			// Shared readout so the three columns are visibly one whole: drag any
+			// slider / pick any select and every column reflects the same state.
+			div { class: "mb-8 font-mono text-sm text-main-accent-t1",
+				"principal ${amount} · term {term}y"
+			}
 			div {
 				class: "grid items-center gap-x-8 gap-y-8",
-				style: "grid-template-columns: 130px 360px 360px",
+				style: "grid-template-columns: 120px 320px 320px 320px",
 
 				div {}
-				div { class: "border-b border-main-mist/10 pb-2 font-mono text-xs uppercase tracking-wider text-main-mist/60", "Reference (landing)" }
-				div { class: "border-b border-main-mist/10 pb-2 font-mono text-xs uppercase tracking-wider text-main-mist/60", "Our uikit" }
+				div { class: HEAD, "Reference (landing)" }
+				div { class: HEAD, "Our uikit" }
+				div { class: HEAD, "Native HTML" }
 
-				Row { label: "Slider", reference: extract(REFERENCE, "data-slot=\"slider\"", "span"),
-					Slider {
-						class: "[&_[data-slot=slider-track]]:bg-main-black/50 [&_[data-slot=slider-range]]:bg-main-accent-t1 [&_[data-slot=slider-thumb]]:border-main-accent-t1",
-						min: 50_000.0,
-						max: 1_000_000.0,
-						step: 10_000.0,
-						value: amount(),
-						on_value_change: move |v| amount.set(v),
-					}
+				Row {
+					label: "Slider",
+					reference: extract(REFERENCE, "data-slot=\"slider\"", "span"),
+					ours: rsx! {
+						Slider {
+							class: "[&_[data-slot=slider-track]]:bg-main-black/50 [&_[data-slot=slider-range]]:bg-main-accent-t1 [&_[data-slot=slider-thumb]]:border-main-accent-t1",
+							min: 50_000.0,
+							max: 1_000_000.0,
+							step: 10_000.0,
+							value: amount(),
+							on_value_change: move |v| amount.set(v),
+						}
+					},
+					native: rsx! {
+						input {
+							r#type: "range",
+							class: "w-full",
+							// native control recolour — `accent-color` themes the fill + thumb;
+							// no `accent-*` utility is compiled into the app's CSS to reuse here.
+							style: "accent-color: #2a9d8f",
+							min: "50000",
+							max: "1000000",
+							step: "10000",
+							value: "{amount}",
+							oninput: move |e| {
+								if let Ok(v) = e.value().parse::<f64>() {
+									amount.set(v);
+								}
+							},
+						}
+					},
 				}
 
-				Row { label: "Select trigger", reference: extract(REFERENCE, "data-slot=\"select-trigger\"", "button"),
-					Select {
-						value: term().to_string(),
-						on_value_change: move |v: String| { if let Ok(y) = v.parse() { term.set(y); } },
-						SelectTrigger { class: "w-full border-main-mist/20 bg-main-black/60 font-mono", SelectValue {} }
-						SelectContent {
-							for y in [3_u32, 5, 7, 10] {
-								SelectItem { value: "{y}", "{y} Years" }
+				Row {
+					label: "Select",
+					reference: extract(REFERENCE, "data-slot=\"select-trigger\"", "button"),
+					ours: rsx! {
+						Select {
+							value: term().to_string(),
+							on_value_change: move |v: String| { if let Ok(y) = v.parse() { term.set(y); } },
+							SelectTrigger { class: "w-full border-main-mist/20 bg-main-black/60 font-mono", SelectValue {} }
+							SelectContent {
+								for y in [3_u32, 5, 7, 10] {
+									SelectItem { value: "{y}", "{y} Years" }
+								}
 							}
 						}
-					}
+					},
+					native: rsx! {
+						select {
+							class: "w-full rounded-md border border-main-mist/20 bg-main-black/60 px-3 py-2 text-sm",
+							onchange: move |e| {
+								if let Ok(y) = e.value().parse::<u32>() {
+									term.set(y);
+								}
+							},
+							for y in [3_u32, 5, 7, 10] {
+								option { value: "{y}", selected: y == term(), "{y} Years" }
+							}
+						}
+					},
 				}
 
-				Row { label: "Button", reference: extract(REFERENCE, "Request advisory", "button"),
-					Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist hover:text-main-brand",
-						"Request advisory"
-					}
+				Row {
+					label: "Button",
+					reference: extract(REFERENCE, "Request advisory", "button"),
+					ours: rsx! {
+						Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist hover:text-main-brand",
+							"Request advisory"
+						}
+					},
+					native: rsx! {
+						button { r#type: "button", class: "w-full", "Request advisory" }
+					},
 				}
 			}
 		}
@@ -73,14 +150,18 @@ fn app() -> Element {
 }
 
 #[component]
-fn Row(label: String, reference: String, children: Element) -> Element {
+fn Row(label: String, reference: String, ours: Element, native: Element) -> Element {
+	let cell = "flex min-h-[3.75rem] items-center border border-main-mist/10 bg-main-black/40 p-5";
 	rsx! {
 		div { class: "font-semibold", "{label}" }
-		div { class: "flex min-h-[60px] items-center border border-main-mist/10 bg-main-black/40 p-5",
+		div { class: cell,
 			div { class: "w-full", dangerous_inner_html: reference }
 		}
-		div { class: "flex min-h-[60px] items-center border border-main-mist/10 bg-main-black/40 p-5",
-			div { class: "w-full", {children} }
+		div { class: cell,
+			div { class: "w-full", {ours} }
+		}
+		div { class: cell,
+			div { class: "w-full", {native} }
 		}
 	}
 }

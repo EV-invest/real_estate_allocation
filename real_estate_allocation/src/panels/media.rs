@@ -1,5 +1,5 @@
 use dioxus::{html::HasFileData, prelude::*};
-use ev_lib::uikit::{AspectRatio, Button, ButtonVariant, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
+use ev_lib::uikit::{AspectRatio, Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
 
 use crate::{
 	app::Selected,
@@ -28,10 +28,6 @@ pub fn MediaPanel() -> Element {
 
 	rsx! {
 		Card { class: "flex h-full flex-col overflow-hidden",
-			CardHeader {
-				CardTitle { class: "font-serif text-main-accent-t1", "Media & documents" }
-				CardDescription { "Photos, pitch deck, and legal files" }
-			}
 			CardContent { class: "flex-1 overflow-y-auto",
 				match selected() {
 					None => rsx! { p { class: "text-muted-foreground text-sm", "Select a property to view its media." } },

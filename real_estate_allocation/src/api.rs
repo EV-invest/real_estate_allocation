@@ -2,6 +2,8 @@ use dioxus::prelude::*;
 
 use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyStateKind};
 
+#[cfg(not(target_arch = "wasm32"))]
+const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
 /// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
 /// `main`), and is called as an async fn from the wasm client.
@@ -25,23 +27,27 @@ pub async fn list_properties(filter: Option<Vec<PropertyStateKind>>) -> Result<V
 
 	use crate::{domain::InState, store::PropertyRepository};
 
-	let store = app_state().await?.store;
+	let state = app_state().await?;
 
 	// Or-combine the requested states; default = Purchased. The `Fn(&T)->bool`
 	// blanket impl makes the disjunction itself a `Specification`.
 	let states = filter.unwrap_or_else(|| vec![PropertyStateKind::Purchased]);
 	let spec = move |p: &Property| states.iter().any(|s| InState(*s).holds(p));
-	let props = store.list(Some(&spec)).await.map_err(to_server_err)?;
+	let mut props = state.store.list(Some(&spec)).await.map_err(to_server_err)?;
+	for p in props.iter_mut() {
+		p.coords = resolve_coords(p.id, &p.place, &state.config).await;
+	}
 	Ok(props)
 }
 #[server]
 pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnError> {
 	use crate::store::PropertyRepository;
 
-	let store = app_state().await?.store;
-	let mut prop = store.get(id).await.map_err(to_server_err)?;
+	let state = app_state().await?;
+	let mut prop = state.store.get(id).await.map_err(to_server_err)?;
 	if let Some(p) = prop.as_mut() {
 		p.price_series = mock_series(id, p.state);
+		p.coords = resolve_coords(id, &p.place, &state.config).await;
 	}
 	Ok(prop)
 }
@@ -101,6 +107,29 @@ pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
+/// Persist the current dock arrangement as the global default (served from
+/// `config.layout_path`), so every visitor opens onto this layout until it's saved again.
+#[server]
+pub async fn save_default_layout(json: String) -> Result<(), ServerFnError> {
+	let path = app_state().await?.config.layout_path;
+	let path = path.as_ref();
+	if let Some(parent) = path.parent() {
+		std::fs::create_dir_all(parent).map_err(|e| ServerFnError::new(format!("create layout dir: {e}")))?;
+	}
+	std::fs::write(path, json).map_err(|e| ServerFnError::new(format!("write layout: {e}")))?;
+	Ok(())
+}
+/// The saved global default, or `None` when none has been saved yet (the client then
+/// falls back to the built-in seed). A genuine read failure surfaces as an error.
+#[server]
+pub async fn load_default_layout() -> Result<Option<String>, ServerFnError> {
+	let path = app_state().await?.config.layout_path;
+	match std::fs::read_to_string(path.as_ref()) {
+		Ok(s) => Ok(Some(s)),
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+		Err(e) => Err(ServerFnError::new(format!("read layout: {e}"))),
+	}
+}
 #[server]
 pub async fn maps_api_key() -> Result<String, ServerFnError> {
 	use secrecy::ExposeSecret as _;
@@ -139,6 +168,89 @@ fn mock_series(id: PropertyId, state: crate::domain::PropertyState) -> Vec<(jiff
 		.map(|(t, v)| (jiff::Timestamp::from_second(t).expect("week within range"), v))
 		.collect()
 }
+/// On-disk pin cache at `<data_dir>/<id>/place.json`. `place_id` is stored so a
+/// changed place invalidates the entry; `fetched_at` drives the monthly refresh.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(serde::Deserialize, serde::Serialize)]
+struct CachedPlace {
+	place_id: String,
+	coords: crate::domain::Coords,
+	fetched_at: jiff::Timestamp,
+}
+
+/// Resolve a property's pin, reading the disk cache and only hitting Google's
+/// Places API when the entry is missing, stale (>1 month), or points at a
+/// different place. A failed resolve yields `None` (no pin) rather than failing
+/// the whole listing — one unresolvable place must not blank the map.
+#[cfg(not(target_arch = "wasm32"))]
+async fn resolve_coords(id: PropertyId, place: &crate::domain::GooglePlace, cfg: &crate::config::AppConfig) -> Option<crate::domain::Coords> {
+	use secrecy::ExposeSecret as _;
+
+	let path = cfg.data_dir.as_ref().join(id.raw().to_string()).join("place.json");
+
+	if let Ok(bytes) = std::fs::read(&path) {
+		// A corrupt/old-schema cache file is simply ignored and re-fetched below.
+		if let Ok(c) = serde_json::from_slice::<CachedPlace>(&bytes) {
+			let age = jiff::Timestamp::now().as_second() - c.fetched_at.as_second();
+			if c.place_id == place.as_str() && age < CACHE_TTL_SECS {
+				return Some(c.coords);
+			}
+		}
+	}
+
+	let coords = fetch_place(place.as_str(), cfg.maps_api_key.expose_secret())
+		.await
+		.inspect_err(|e| dioxus::logger::tracing::warn!(%e, place = place.as_str(), "place resolve failed"))
+		// Resolve failure (e.g. quota exhausted) drops just this pin; logged above.
+		.ok()?;
+
+	let cached = CachedPlace {
+		place_id: place.as_str().to_owned(),
+		coords,
+		fetched_at: jiff::Timestamp::now(),
+	};
+	let write = (|| -> std::io::Result<()> {
+		if let Some(parent) = path.parent() {
+			std::fs::create_dir_all(parent)?;
+		}
+		std::fs::write(&path, serde_json::to_vec_pretty(&cached).expect("CachedPlace serialises"))
+	})();
+	// A cache-write failure only costs us next request's fetch; the coords are still good.
+	if let Err(e) = write {
+		dioxus::logger::tracing::warn!(%e, "cache place coords failed");
+	}
+	Some(coords)
+}
+
+/// One GET against the Places API (New): `location` field only.
+#[cfg(not(target_arch = "wasm32"))]
+async fn fetch_place(place_id: &str, key: &str) -> Result<crate::domain::Coords, String> {
+	#[derive(serde::Deserialize)]
+	struct Location {
+		latitude: f64,
+		longitude: f64,
+	}
+	#[derive(serde::Deserialize)]
+	struct PlaceResp {
+		location: Location,
+	}
+
+	let resp = reqwest::Client::new()
+		.get(format!("https://places.googleapis.com/v1/places/{place_id}"))
+		.header("X-Goog-Api-Key", key)
+		.header("X-Goog-FieldMask", "location")
+		.send()
+		.await
+		.map_err(|e| e.to_string())?
+		.error_for_status()
+		.map_err(|e| e.to_string())?;
+	let body: PlaceResp = resp.json().await.map_err(|e| e.to_string())?;
+	Ok(crate::domain::Coords {
+		lat: body.location.latitude,
+		lng: body.location.longitude,
+	})
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 async fn app_state() -> Result<AppState, ServerFnError> {
 	use dioxus::{fullstack::FullstackContext, server::axum::Extension};

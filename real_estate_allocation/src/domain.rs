@@ -129,14 +129,7 @@ impl Money {
 
 impl std::fmt::Display for Money {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let a = self.0;
-		if a >= 1_000_000.0 {
-			write!(f, "${:.2}M", a / 1_000_000.0)
-		} else if a >= 1_000.0 {
-			write!(f, "${:.0}K", a / 1_000.0)
-		} else {
-			write!(f, "${a:.0}")
-		}
+		write!(f, "${}", v_utils::LargeNumber::new(self.0))
 	}
 }
 
@@ -175,6 +168,17 @@ pub struct Property {
 	/// `api::get_property`. A missing week is simply an absent entry. Never persisted.
 	#[serde(default)]
 	pub price_series: Vec<(Timestamp, f64)>,
+	/// Lat/lng for `place`, resolved server-side from a monthly-refreshed on-disk
+	/// cache (`<data_dir>/<id>/place.json`). `None` while unresolved — the map
+	/// simply draws no pin. Never persisted to the DB.
+	#[serde(default)]
+	pub coords: Option<Coords>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Coords {
+	pub lat: f64,
+	pub lng: f64,
 }
 
 impl Entity for Property {

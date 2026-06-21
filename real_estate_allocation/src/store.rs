@@ -364,6 +364,7 @@ impl TryFrom<PropertyRow> for Property {
 			loan,
 			additional_reasoning: row.additional_reasoning,
 			price_series: Vec::new(),
+			coords: None,
 		})
 	}
 }

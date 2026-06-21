@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
+use ev_lib::uikit::{Card, CardContent, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
 
 use crate::{
 	app::SelectedProperty,
@@ -12,10 +12,6 @@ pub fn DetailsPanel() -> Element {
 
 	rsx! {
 		Card { class: "flex h-full flex-col",
-			CardHeader {
-				CardTitle { class: "font-serif text-main-accent-t1", "Deal terms & structure" }
-				CardDescription { "Pricing, leverage, and return profile" }
-			}
 			CardContent { class: "flex-1 overflow-y-auto",
 				match &*property.read() {
 					Some(Some(p)) => rsx! { Details { property: p.clone() } },

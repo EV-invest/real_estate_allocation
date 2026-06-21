@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 use dockview_dioxus::{DockPanel, Group, GroupId, MinSize, PackedApi, PackedArea, PanelId, Step};
 
 use crate::{
+	api::load_default_layout,
 	map::MapPanel,
 	panels::{ChartPanel, DetailsPanel, MediaPanel, PortfolioHeatmap, TopBar},
 };
@@ -38,25 +39,84 @@ pub fn Dashboard() -> Element {
 		]
 	});
 
-	// Seed once after the first measure (real column count). map+media share one tabbed tile;
-	// the rest each get their own. `place` skyline-packs them left→right onto the grid.
+	// `PackedArea` hands us its imperative handle once, after the first measure. Stash it so the
+	// load-or-seed effect and the save shortcut can both drive the grid from outside that callback.
+	let mut api_handle = use_signal(|| None::<PackedApi>);
+	let on_ready = Callback::new(move |api: PackedApi| api_handle.set(Some(api)));
+
+	let layout = use_resource(|| async move { load_default_layout().await });
+
+	// First time both the grid handle and the layout fetch are ready: restore the saved global
+	// default, else fall back to the built-in arrangement (map+media tabbed, the rest packed beside).
+	let mut applied = use_signal(|| false);
 	let min = MinSize::Steps { w: Step(2), h: Step(2) };
-	let seed = Callback::new(move |mut api: PackedApi| {
-		let map_group = {
-			let mut g = api.grid.write();
-			let id = g.mint_group_id();
-			Group {
-				id,
-				tabs: vec![PanelId("map".into()), PanelId("media".into())],
-				active: 0,
+	use_effect(move || {
+		if applied() {
+			return;
+		}
+		let Some(mut api) = api_handle() else { return };
+		let resolved = layout.read();
+		let Some(result) = resolved.as_ref() else { return };
+
+		let seed = |api: &mut PackedApi| {
+			let map_group = {
+				let id = api.grid.write().mint_group_id();
+				Group {
+					id,
+					tabs: vec![PanelId("map".into()), PanelId("media".into())],
+					active: 0,
+				}
+			};
+			api.place(map_group, 4, 3, min);
+			for panel in ["chart", "heatmap", "details"] {
+				let group = Group::new(api.grid.write().mint_group_id(), PanelId(panel.into()));
+				api.place(group, 4, 3, min);
 			}
 		};
-		api.place(map_group, 4, 3, min);
-		for panel in ["chart", "heatmap", "details"] {
-			let group = Group::new(api.grid.write().mint_group_id(), PanelId(panel.into()));
-			api.place(group, 4, 3, min);
+
+		match result {
+			Ok(Some(json)) => {
+				if let Err(e) = api.load(json) {
+					// A corrupt saved layout must not blank the dashboard; log it and seed the default.
+					dioxus::logger::tracing::error!(?e, "saved layout corrupt — using built-in seed");
+					seed(&mut api);
+				}
+			}
+			Ok(None) => seed(&mut api),
+			Err(e) => {
+				// A fetch failure for the optional default likewise degrades to the built-in seed.
+				dioxus::logger::tracing::error!(%e, "load_default_layout failed — using built-in seed");
+				seed(&mut api);
+			}
 		}
+		applied.set(true);
 	});
+
+	// Alt+Shift+S → save the live arrangement as the global default. A JS keydown listener bumps a
+	// signal (writes from the listener run on the global runtime, like the map's click bridge); the
+	// effect reacts and POSTs the serialized grid. Browser-only — there is no keyboard server-side.
+	#[cfg(target_arch = "wasm32")]
+	{
+		let mut save_tick = use_signal(|| 0u32);
+		use_hook(move || {
+			let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || save_tick += 1);
+			rea_on_save_shortcut(&cb);
+			// Leak so the listener outlives this scope; the page owns it for its lifetime.
+			cb.forget();
+		});
+		use_effect(move || {
+			if save_tick() == 0 {
+				return;
+			}
+			let Some(api) = api_handle() else { return };
+			let json = api.save();
+			spawn(async move {
+				if let Err(e) = crate::api::save_default_layout(json).await {
+					dioxus::logger::tracing::error!(%e, "save default layout failed");
+				}
+			});
+		});
+	}
 
 	// The packed grid's `+` ("add window as a tab") button asks the host to open a tab in `group`.
 	// This dashboard has a fixed panel set with nothing to spawn, so the button is inert.
@@ -67,8 +127,21 @@ pub fn Dashboard() -> Element {
 		div { class: "flex h-screen flex-col bg-background text-foreground",
 			TopBar {}
 			div { class: "relative min-h-0 flex-1",
-				PackedArea { panels, on_ready: Some(seed) }
+				PackedArea { panels, on_ready: Some(on_ready) }
 			}
 		}
 	}
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+export function rea_on_save_shortcut(cb) {
+  window.addEventListener('keydown', (e) => {
+    if (e.altKey && e.shiftKey && e.code === 'KeyS') { e.preventDefault(); cb(); }
+  });
+}
+"#)]
+extern "C" {
+	#[wasm_bindgen(js_name = rea_on_save_shortcut)]
+	fn rea_on_save_shortcut(cb: &wasm_bindgen::closure::Closure<dyn FnMut()>);
 }

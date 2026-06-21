@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
+use ev_lib::uikit::{Card, CardContent, Skeleton};
 
 use crate::{app::SelectedProperty, domain::Money};
 
@@ -8,11 +8,7 @@ pub fn ChartPanel() -> Element {
 	let property = use_context::<SelectedProperty>();
 
 	rsx! {
-		Card { class: "flex h-[400px] flex-col overflow-hidden",
-			CardHeader {
-				CardTitle { class: "font-serif text-main-accent-t1", "Weekly price estimates" }
-				CardDescription { "Estimated value · dimmed before purchase, dotted where stale" }
-			}
+		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex flex-1 flex-col gap-4",
 				match &*property.read() {
 					Some(Some(p)) => rsx! { ChartBody { price: p.price } },

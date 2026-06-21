@@ -25,7 +25,8 @@ derive-new = "^0.7"
 dockview_dioxus = "^0.1"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
-v_utils = { version = "^2.15", features = ["io", "macros", "cli"] }
+reqwest = { version = "^0.12", default-features = false, features = ["json", "rustls-tls"] }
+v_utils = { version = "^2.15.53", features = ["io", "macros", "cli"] }
 
 # microfrontend stack — pinned to the exact revs `site` verified against.
 async-trait = "^0.1"

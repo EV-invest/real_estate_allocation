@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton};
+use ev_lib::uikit::{Card, CardContent, Skeleton};
 
 use crate::{
 	app::Selected,
@@ -19,19 +19,17 @@ pub fn PortfolioHeatmap() -> Element {
 	});
 
 	rsx! {
-		Card {
-			CardHeader { class: "flex flex-row items-start justify-between gap-2",
-				div {
-					CardTitle { class: "font-serif text-main-accent-t1", "Portfolio heatmap" }
-					CardDescription { "Estimated value change across all holdings · last 30 days" }
+		// h-full so the treemap fills (and reflows with) its dock pane; the tab already labels it,
+		// so the redundant card header is gone — only the loss/gain legend survives, overlaid.
+		Card { class: "flex h-full flex-col",
+			CardContent { class: "relative flex-1",
+				div { class: "absolute right-3 top-3 z-10 rounded-md bg-background/80 px-2 py-1 backdrop-blur",
+					Legend {}
 				}
-				Legend {}
-			}
-			CardContent {
 				match &*properties.read() {
-					None => rsx! { Skeleton { class: "h-[300px] w-full" } },
+					None => rsx! { Skeleton { class: "h-full w-full" } },
 					Some(list) if list.is_empty() => rsx! {
-						div { class: "flex h-[300px] items-center justify-center text-sm text-muted-foreground",
+						div { class: "flex h-full items-center justify-center text-sm text-muted-foreground",
 							"No holdings to display."
 						}
 					},
@@ -81,7 +79,7 @@ fn Treemap(properties: Vec<Property>) -> Element {
 	let tiles = Tile::layout(&properties);
 
 	rsx! {
-		div { class: "relative h-[300px] w-full overflow-hidden rounded-lg bg-main-surface",
+		div { class: "relative h-full w-full overflow-hidden rounded-lg bg-main-surface",
 			for t in tiles {
 				{
 					let Tile { id, name, rect: r, change, prospect } = t;
