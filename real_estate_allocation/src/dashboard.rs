@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dockview_dioxus::{DockPanel, Group, GroupId, MinSize, PackedApi, PackedArea, PanelId, Step};
+use dockview_dioxus::{Config, DockPanel, Group, GroupId, Keybind, MinSize, PackedApi, PackedArea, PanelId, Step};
 
 use crate::{
 	api::load_default_layout,
@@ -92,31 +92,21 @@ pub fn Dashboard() -> Element {
 		applied.set(true);
 	});
 
-	// Alt+Shift+S → save the live arrangement as the global default. A JS keydown listener bumps a
-	// signal (writes from the listener run on the global runtime, like the map's click bridge); the
-	// effect reacts and POSTs the serialized grid. Browser-only — there is no keyboard server-side.
-	#[cfg(target_arch = "wasm32")]
-	{
-		let mut save_tick = use_signal(|| 0u32);
-		use_hook(move || {
-			let cb = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || save_tick += 1);
-			rea_on_save_shortcut(&cb);
-			// Leak so the listener outlives this scope; the page owns it for its lifetime.
-			cb.forget();
-		});
-		use_effect(move || {
-			if save_tick() == 0 {
-				return;
+	// Alt+S → save the live arrangement as the global default, registered as a `PackedArea` host
+	// action. The closure gets the same `PackedApi` `on_ready` handed us and POSTs its serialized
+	// grid; only fires browser-side (the listener is wasm-only) but compiles everywhere.
+	let save_layout = Callback::new(|api: PackedApi| {
+		let json = api.save();
+		spawn(async move {
+			if let Err(e) = crate::api::save_default_layout(json).await {
+				dioxus::logger::tracing::error!(%e, "save default layout failed");
 			}
-			let Some(api) = api_handle() else { return };
-			let json = api.save();
-			spawn(async move {
-				if let Err(e) = crate::api::save_default_layout(json).await {
-					dioxus::logger::tracing::error!(%e, "save default layout failed");
-				}
-			});
 		});
-	}
+	});
+	let config = Config {
+		actions: vec![(Keybind { key: "s", alt: true, ctrl: false }, save_layout)],
+		..Default::default()
+	};
 
 	// The packed grid's `+` ("add window as a tab") button asks the host to open a tab in `group`.
 	// This dashboard has a fixed panel set with nothing to spawn, so the button is inert.
@@ -127,21 +117,8 @@ pub fn Dashboard() -> Element {
 		div { class: "flex h-screen flex-col bg-background text-foreground",
 			TopBar {}
 			div { class: "relative min-h-0 flex-1",
-				PackedArea { panels, on_ready: Some(on_ready) }
+				PackedArea { panels, on_ready: Some(on_ready), config: Some(config) }
 			}
 		}
 	}
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
-export function rea_on_save_shortcut(cb) {
-  window.addEventListener('keydown', (e) => {
-    if (e.altKey && e.shiftKey && e.code === 'KeyS') { e.preventDefault(); cb(); }
-  });
-}
-"#)]
-extern "C" {
-	#[wasm_bindgen(js_name = rea_on_save_shortcut)]
-	fn rea_on_save_shortcut(cb: &wasm_bindgen::closure::Closure<dyn FnMut()>);
 }
