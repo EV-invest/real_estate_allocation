@@ -47,7 +47,7 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-dioxus-ssr = { workspace = true }
+dioxus-ssr.workspace = true
 
 # examples live at the repo root, not under the crate.
 [[example]]

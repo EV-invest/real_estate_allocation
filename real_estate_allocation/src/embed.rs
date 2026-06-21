@@ -11,6 +11,9 @@ use ev_lib::uikit::{Button, ButtonVariant, Container, Select, SelectContent, Sel
 const HERO_VILLA: &str = "https://d2xsxph8kpxj0f.cloudfront.net/310519663075853325/SPbgMPRFEXcrCSr7Bo27uM/luxury_villa-64wseo7dGJUQNbg7HMSNPo.webp";
 const HERO_BAY: &str = "https://d2xsxph8kpxj0f.cloudfront.net/310519663075853325/SPbgMPRFEXcrCSr7Bo27uM/quynhon_future-ExoshVjhhPWYbYR4Zf3xJn.webp";
 
+const A_MIN: f64 = 50_000.0;
+const A_MAX: f64 = 1_000_000.0;
+const A_STEP: f64 = 10_000.0;
 #[component]
 pub fn Overview() -> Element {
 	let mut tab = use_signal(|| "all".to_string());
@@ -154,9 +157,6 @@ fn WhyCard() -> Element {
 // Principal slider bounds, in USD. The slider below is hand-inlined from the uikit
 // `Slider`'s compiled markup (colours applied directly, not via arbitrary-variant
 // overrides), so the track fill and round thumb don't depend on `cn!` merge survival.
-const A_MIN: f64 = 50_000.0;
-const A_MAX: f64 = 1_000_000.0;
-const A_STEP: f64 = 10_000.0;
 
 fn snap(v: f64) -> f64 {
 	let v = v.clamp(A_MIN, A_MAX);
