@@ -4,12 +4,6 @@ use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyStateK
 
 #[cfg(not(target_arch = "wasm32"))]
 const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
-/// Epoch second until which the Places API has told us to back off (via a `429`
-/// `Retry-After`). Process-global because the whole API key is what's throttled,
-/// not any one place. ponytail: in-memory, so a server restart costs one probe
-/// request that simply re-arms it; persist to disk if that ever matters.
-#[cfg(not(target_arch = "wasm32"))]
-static PLACES_BLOCKED_UNTIL: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
 /// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
 /// `main`), and is called as an async fn from the wasm client.
@@ -22,11 +16,6 @@ pub struct AppState {
 	pub store: crate::store::SqliteStore,
 	pub config: crate::config::AppConfig,
 }
-
-//HACK: see `main` — `LaunchBuilder::with_context` doesn't reach server fns in
-// dioxus-server 0.7.9, so we read our state from the request extension instead.
-// `FullstackContext` is the one handle available in both the SSR render path and
-// the server-fn POST path.
 #[server]
 pub async fn list_properties(filter: Option<Vec<PropertyStateKind>>) -> Result<Vec<Property>, ServerFnError> {
 	use ev_lib::architecture::Specification;
@@ -57,7 +46,6 @@ pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnEr
 	}
 	Ok(prop)
 }
-
 #[server]
 pub async fn get_developer(name: String) -> Result<Option<crate::domain::Developer>, ServerFnError> {
 	use crate::store::PropertyRepository;
@@ -143,6 +131,18 @@ pub async fn maps_api_key() -> Result<String, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
 }
+/// Epoch second until which the Places API has told us to back off (via a `429`
+/// `Retry-After`). Process-global because the whole API key is what's throttled,
+/// not any one place. ponytail: in-memory, so a server restart costs one probe
+/// request that simply re-arms it; persist to disk if that ever matters.
+#[cfg(not(target_arch = "wasm32"))]
+static PLACES_BLOCKED_UNTIL: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+//HACK: see `main` — `LaunchBuilder::with_context` doesn't reach server fns in
+// dioxus-server 0.7.9, so we read our state from the request extension instead.
+// `FullstackContext` is the one handle available in both the SSR render path and
+// the server-fn POST path.
+
 /// Deterministic mock value series, seeded from the id so it is stable per property.
 /// Anchored to the purchase instant (a few weeks of pre-purchase tracking, then a
 /// fixed run of weekly estimates clipped to now). A long-ago purchase therefore

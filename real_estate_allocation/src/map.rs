@@ -93,7 +93,7 @@ fn StateFilter(filter: Signal<Vec<PropertyStateKind>>) -> Element {
 					let cls = if on {
 						format!("h-7 rounded-md px-2.5 text-xs font-semibold text-main-black transition hover:brightness-110 {active}")
 					} else {
-						"h-7 rounded-md border border-border bg-transparent px-2.5 text-xs font-medium text-muted-foreground transition hover:border-main-mist/40 hover:text-foreground".to_string()
+						"h-7 rounded-md border border-border bg-main-surface px-2.5 text-xs font-medium text-muted-foreground transition hover:border-main-mist/40 hover:text-foreground".to_string()
 					};
 					rsx! {
 						button {

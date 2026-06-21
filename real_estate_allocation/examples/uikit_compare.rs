@@ -23,6 +23,15 @@ const REFERENCE: &str = include_str!("portfolio_original.html");
 const CSS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/tailwind.css"));
 
 const HEAD: &str = "border-b border-main-mist/10 pb-2 font-mono text-xs uppercase tracking-wider text-main-mist/60";
+const KIT_RANGE_CSS: &str = "\
+.kit-range { -webkit-appearance: none; appearance: none; width: 100%; height: 1rem; background: transparent; cursor: pointer; }
+.kit-range::-webkit-slider-runnable-track { height: 0.375rem; border-radius: 9999px; background: linear-gradient(#2a9d8f, #2a9d8f) no-repeat left center / var(--p, 0%) 100%, #0c1626; }
+.kit-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 1rem; width: 1rem; margin-top: -0.3125rem; border-radius: 9999px; background: #e6e1d3; transition: box-shadow 0.15s ease; }
+.kit-range:hover::-webkit-slider-thumb, .kit-range:active::-webkit-slider-thumb { box-shadow: 0 0 0 0.25rem color-mix(in oklab, #2a9d8f 50%, transparent); }
+.kit-range::-moz-range-track { height: 0.375rem; border-radius: 9999px; background: #0c1626; }
+.kit-range::-moz-range-progress { height: 0.375rem; border-radius: 9999px; background: #2a9d8f; }
+.kit-range::-moz-range-thumb { height: 1rem; width: 1rem; border: none; border-radius: 9999px; background: #e6e1d3; transition: box-shadow 0.15s ease; }
+.kit-range:hover::-moz-range-thumb, .kit-range:active::-moz-range-thumb { box-shadow: 0 0 0 0.25rem color-mix(in oklab, #2a9d8f 50%, transparent); }";
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
 	use dioxus::server::axum::{Router, routing::get};
@@ -48,15 +57,6 @@ fn main() {
 // that grows a ring/50 on hover/drag like the kit's `hover:ring-4`. Pseudo-element
 // selectors can't be Tailwind utilities (this example isn't in the content scan),
 // hence raw CSS; colours mirror `tailwind.css`, sizes are rem.
-const KIT_RANGE_CSS: &str = "\
-.kit-range { -webkit-appearance: none; appearance: none; width: 100%; height: 1rem; background: transparent; cursor: pointer; }
-.kit-range::-webkit-slider-runnable-track { height: 0.375rem; border-radius: 9999px; background: linear-gradient(#2a9d8f, #2a9d8f) no-repeat left center / var(--p, 0%) 100%, #0c1626; }
-.kit-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 1rem; width: 1rem; margin-top: -0.3125rem; border-radius: 9999px; background: #e6e1d3; transition: box-shadow 0.15s ease; }
-.kit-range:hover::-webkit-slider-thumb, .kit-range:active::-webkit-slider-thumb { box-shadow: 0 0 0 0.25rem color-mix(in oklab, #2a9d8f 50%, transparent); }
-.kit-range::-moz-range-track { height: 0.375rem; border-radius: 9999px; background: #0c1626; }
-.kit-range::-moz-range-progress { height: 0.375rem; border-radius: 9999px; background: #2a9d8f; }
-.kit-range::-moz-range-thumb { height: 1rem; width: 1rem; border: none; border-radius: 9999px; background: #e6e1d3; transition: box-shadow 0.15s ease; }
-.kit-range:hover::-moz-range-thumb, .kit-range:active::-moz-range-thumb { box-shadow: 0 0 0 0.25rem color-mix(in oklab, #2a9d8f 50%, transparent); }";
 
 fn app() -> Element {
 	let mut amount = use_signal(|| 100_000.0_f64);
