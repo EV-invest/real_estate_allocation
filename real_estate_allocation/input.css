@@ -4,15 +4,6 @@
 /* Scan Dioxus RSX source for class names */
 @source "./src/**/*.rs";
 
-/* The shared token chains lead with `var(--font-inter)` / `var(--font-playfair)`,
- * which next/font sets on the landing. The standalone app has no next/font, so an
- * undefined leading var would poison the whole `font-family` and drop the browser
- * back to its default sans — we supply them here. */
-:root {
-  --font-inter: "Inter";
-  --font-playfair: "Playfair Display";
-}
-
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;

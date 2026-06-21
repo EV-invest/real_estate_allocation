@@ -31,6 +31,7 @@ v_utils = { version = "^2.15.52", features = ["io", "macros", "cli"] }
 # microfrontend stack — pinned to the exact revs `site` verified against.
 async-trait = "^0.1"
 dioxus = { version = "^0.7" }
+dioxus-ssr = "0.7"
 ev_lib = { git = "https://github.com/EV-invest/lib.git", rev = "dc3d7d3f9be38ec782e52282788edf973fbadfd8" }
 getrandom = { version = "^0.4", features = ["wasm_js"] }
 jiff = { version = "^0.2", features = ["serde"] }
@@ -44,7 +45,6 @@ thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
-dioxus-ssr = "0.7"
 
 # Local checkout overrides the git source — we edit the lib alongside the app.
 [patch."https://github.com/EV-invest/lib.git"]

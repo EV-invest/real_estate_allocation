@@ -3,8 +3,8 @@
 @layer theme, base, components, utilities;
 @layer theme {
   :root, :host {
-    --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-    --font-serif: var(--font-playfair), "Playfair", "Playfair Display", ui-serif, Georgia, serif;
+    --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+    --font-serif: var(--font-playfair, "Playfair Display"), ui-serif, Georgia, serif;
     --color-white: #fff;
     --spacing: 0.25rem;
     --container-xs: 20rem;
@@ -39,8 +39,8 @@
     --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     --default-transition-duration: 150ms;
     --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    --default-font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-    --default-mono-font-family: var(--font-inter), "Inter", ui-monospace, monospace;
+    --default-font-family: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+    --default-mono-font-family: var(--font-inter, "Inter"), ui-monospace, monospace;
   }
 }
 @layer base {
@@ -643,10 +643,10 @@
     text-align: right;
   }
   .font-mono {
-    font-family: var(--font-inter), "Inter", ui-monospace, monospace;
+    font-family: var(--font-inter, "Inter"), ui-monospace, monospace;
   }
   .font-serif {
-    font-family: var(--font-playfair), "Playfair", "Playfair Display", ui-serif, Georgia, serif;
+    font-family: var(--font-playfair, "Playfair Display"), ui-serif, Georgia, serif;
   }
   .text-2xl {
     font-size: var(--text-2xl);
@@ -752,9 +752,6 @@
   }
   .text-muted-foreground {
     color: var(--muted-foreground);
-  }
-  .text-warn {
-    color: var(--warn);
   }
   .text-white {
     color: var(--color-white);
@@ -1014,11 +1011,10 @@
   --accent-foreground: white;
   --destructive: #da251d;
   --destructive-foreground: #e6e1d3;
-  --warn: #e0a72c;
   --border: color-mix(in srgb, #e6e1d3 10%, transparent);
   --input: color-mix(in srgb, #e6e1d3 20%, transparent);
   --ring: #2a9d8f;
-  --radius: 0.5rem;
+  --radius: 0.375rem;
   --sidebar: #0c1626;
   --sidebar-foreground: white;
   --sidebar-primary: #001e4e;
@@ -1028,10 +1024,19 @@
   --sidebar-border: color-mix(in srgb, #e6e1d3 10%, transparent);
   --sidebar-ring: #2a9d8f;
   --sidebar-width: 14rem;
+  --page-max: 90rem;
+  --page-px: 1rem;
 }
-:root {
-  --font-inter: "Inter";
-  --font-playfair: "Playfair Display";
+@media (min-width: 640px) {
+  :root {
+    --radius: 0.5rem;
+    --page-px: 1.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --page-px: 3rem;
+  }
 }
 @layer base {
   *, *::before, *::after {
