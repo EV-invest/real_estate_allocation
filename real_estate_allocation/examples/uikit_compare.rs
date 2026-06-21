@@ -43,9 +43,25 @@ fn main() {
 	dioxus::launch(app);
 }
 
+// Matches the native range to our kit slider: a main-card shaft (h-1.5 ≡
+// 0.375rem) filled to `--p` with the accent, a main-mist thumb (size-4 ≡ 1rem)
+// that grows a ring/50 on hover/drag like the kit's `hover:ring-4`. Pseudo-element
+// selectors can't be Tailwind utilities (this example isn't in the content scan),
+// hence raw CSS; colours mirror `tailwind.css`, sizes are rem.
+const KIT_RANGE_CSS: &str = "\
+.kit-range { -webkit-appearance: none; appearance: none; width: 100%; height: 1rem; background: transparent; cursor: pointer; }
+.kit-range::-webkit-slider-runnable-track { height: 0.375rem; border-radius: 9999px; background: linear-gradient(#2a9d8f, #2a9d8f) no-repeat left center / var(--p, 0%) 100%, #0c1626; }
+.kit-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 1rem; width: 1rem; margin-top: -0.3125rem; border-radius: 9999px; background: #e6e1d3; transition: box-shadow 0.15s ease; }
+.kit-range:hover::-webkit-slider-thumb, .kit-range:active::-webkit-slider-thumb { box-shadow: 0 0 0 0.25rem color-mix(in oklab, #2a9d8f 50%, transparent); }
+.kit-range::-moz-range-track { height: 0.375rem; border-radius: 9999px; background: #0c1626; }
+.kit-range::-moz-range-progress { height: 0.375rem; border-radius: 9999px; background: #2a9d8f; }
+.kit-range::-moz-range-thumb { height: 1rem; width: 1rem; border: none; border-radius: 9999px; background: #e6e1d3; transition: box-shadow 0.15s ease; }
+.kit-range:hover::-moz-range-thumb, .kit-range:active::-moz-range-thumb { box-shadow: 0 0 0 0.25rem color-mix(in oklab, #2a9d8f 50%, transparent); }";
+
 fn app() -> Element {
 	let mut amount = use_signal(|| 100_000.0_f64);
 	let mut term = use_signal(|| 5_u32);
+	let pct = ((amount() - 50_000.0) / 950_000.0 * 100.0).clamp(0.0, 100.0);
 
 	rsx! {
 		document::Link { rel: "stylesheet", r#type: "text/css", href: "/style.css" }
@@ -54,6 +70,7 @@ fn app() -> Element {
 			rel: "stylesheet",
 			href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap",
 		}
+		style { dangerous_inner_html: KIT_RANGE_CSS }
 		div { class: "dark min-h-screen bg-main-black p-10 font-sans text-white",
 			// Shared readout so the three columns are visibly one whole: drag any
 			// slider / pick any select and every column reflects the same state.
@@ -85,10 +102,8 @@ fn app() -> Element {
 					native: rsx! {
 						input {
 							r#type: "range",
-							class: "w-full",
-							// native control recolour — `accent-color` themes the fill + thumb;
-							// no `accent-*` utility is compiled into the app's CSS to reuse here.
-							style: "accent-color: #2a9d8f",
+							class: "kit-range",
+							style: "--p: {pct}%",
 							min: "50000",
 							max: "1000000",
 							step: "10000",

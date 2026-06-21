@@ -4,6 +4,12 @@ use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyStateK
 
 #[cfg(not(target_arch = "wasm32"))]
 const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
+/// Epoch second until which the Places API has told us to back off (via a `429`
+/// `Retry-After`). Process-global because the whole API key is what's throttled,
+/// not any one place. ponytail: in-memory, so a server restart costs one probe
+/// request that simply re-arms it; persist to disk if that ever matters.
+#[cfg(not(target_arch = "wasm32"))]
+static PLACES_BLOCKED_UNTIL: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
 /// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
 /// `main`), and is called as an async fn from the wasm client.
@@ -198,11 +204,27 @@ async fn resolve_coords(id: PropertyId, place: &crate::domain::GooglePlace, cfg:
 		}
 	}
 
-	let coords = fetch_place(place.as_str(), cfg.maps_api_key.expose_secret())
-		.await
-		.inspect_err(|e| dioxus::logger::tracing::warn!(%e, place = place.as_str(), "place resolve failed"))
-		// Resolve failure (e.g. quota exhausted) drops just this pin; logged above.
-		.ok()?;
+	use std::sync::atomic::Ordering::Relaxed;
+	let now = jiff::Timestamp::now().as_second();
+	// Honour an outstanding 429 back-off: skip the request entirely (no pin, no log
+	// spam) until the window the API gave us has elapsed.
+	if now < PLACES_BLOCKED_UNTIL.load(Relaxed) {
+		return None;
+	}
+
+	let coords = match fetch_place(place.as_str(), cfg.maps_api_key.expose_secret()).await {
+		Ok(c) => c,
+		Err(PlaceError::RateLimited { retry_after_secs }) => {
+			PLACES_BLOCKED_UNTIL.store(now + retry_after_secs, Relaxed);
+			dioxus::logger::tracing::warn!(retry_after_secs, "places rate limited (429); backing off");
+			return None;
+		}
+		// A non-429 failure drops just this pin; the rest of the listing is unaffected.
+		Err(PlaceError::Other(e)) => {
+			dioxus::logger::tracing::warn!(%e, place = place.as_str(), "place resolve failed");
+			return None;
+		}
+	};
 
 	let cached = CachedPlace {
 		place_id: place.as_str().to_owned(),
@@ -222,9 +244,18 @@ async fn resolve_coords(id: PropertyId, place: &crate::domain::GooglePlace, cfg:
 	Some(coords)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+enum PlaceError {
+	/// `429` — carries the server's `Retry-After` (seconds), defaulted when absent.
+	RateLimited {
+		retry_after_secs: i64,
+	},
+	Other(String),
+}
+
 /// One GET against the Places API (New): `location` field only.
 #[cfg(not(target_arch = "wasm32"))]
-async fn fetch_place(place_id: &str, key: &str) -> Result<crate::domain::Coords, String> {
+async fn fetch_place(place_id: &str, key: &str) -> Result<crate::domain::Coords, PlaceError> {
 	#[derive(serde::Deserialize)]
 	struct Location {
 		latitude: f64,
@@ -241,10 +272,21 @@ async fn fetch_place(place_id: &str, key: &str) -> Result<crate::domain::Coords,
 		.header("X-Goog-FieldMask", "location")
 		.send()
 		.await
-		.map_err(|e| e.to_string())?
-		.error_for_status()
-		.map_err(|e| e.to_string())?;
-	let body: PlaceResp = resp.json().await.map_err(|e| e.to_string())?;
+		.map_err(|e| PlaceError::Other(e.to_string()))?;
+
+	if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+		// Google sends `Retry-After` in integer seconds; 60s is a safe floor if it's missing.
+		let retry_after_secs = resp
+			.headers()
+			.get(reqwest::header::RETRY_AFTER)
+			.and_then(|v| v.to_str().ok())
+			.and_then(|s| s.parse::<i64>().ok())
+			.unwrap_or(60);
+		return Err(PlaceError::RateLimited { retry_after_secs });
+	}
+
+	let resp = resp.error_for_status().map_err(|e| PlaceError::Other(e.to_string()))?;
+	let body: PlaceResp = resp.json().await.map_err(|e| PlaceError::Other(e.to_string()))?;
 	Ok(crate::domain::Coords {
 		lat: body.location.latitude,
 		lng: body.location.longitude,

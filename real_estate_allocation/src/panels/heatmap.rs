@@ -23,9 +23,6 @@ pub fn PortfolioHeatmap() -> Element {
 		// so the redundant card header is gone — only the loss/gain legend survives, overlaid.
 		Card { class: "flex h-full flex-col",
 			CardContent { class: "relative flex-1",
-				div { class: "absolute right-3 top-3 z-10 rounded-md bg-background/80 px-2 py-1 backdrop-blur",
-					Legend {}
-				}
 				match &*properties.read() {
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 					Some(list) if list.is_empty() => rsx! {
@@ -103,18 +100,6 @@ fn Treemap(properties: Vec<Property>) -> Element {
 					}
 				}
 			}
-		}
-	}
-}
-
-#[component]
-fn Legend() -> Element {
-	rsx! {
-		div { class: "flex items-center gap-2 text-xs text-muted-foreground",
-			span { class: "size-3 rounded-sm", style: "background-color:{heat_color(-4.0)}" }
-			span { "Loss" }
-			span { class: "size-3 rounded-sm", style: "background-color:{heat_color(6.0)}" }
-			span { "Gain" }
 		}
 	}
 }

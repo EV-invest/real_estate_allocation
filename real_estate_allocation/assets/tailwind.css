@@ -213,8 +213,14 @@
   .top-0 {
     top: 0;
   }
+  .top-3 {
+    top: calc(var(--spacing) * 3);
+  }
   .top-4 {
     top: calc(var(--spacing) * 4);
+  }
+  .right-3 {
+    right: calc(var(--spacing) * 3);
   }
   .right-4 {
     right: calc(var(--spacing) * 4);
@@ -279,6 +285,9 @@
   .mb-6 {
     margin-bottom: calc(var(--spacing) * 6);
   }
+  .mb-8 {
+    margin-bottom: calc(var(--spacing) * 8);
+  }
   .mb-12 {
     margin-bottom: calc(var(--spacing) * 12);
   }
@@ -341,12 +350,6 @@
   .h-48 {
     height: calc(var(--spacing) * 48);
   }
-  .h-\[300px\] {
-    height: 300px;
-  }
-  .h-\[400px\] {
-    height: 400px;
-  }
   .h-full {
     height: 100%;
   }
@@ -356,8 +359,8 @@
   .min-h-0 {
     min-height: 0;
   }
-  .min-h-\[60px\] {
-    min-height: 60px;
+  .min-h-\[3\.75rem\] {
+    min-height: 3.75rem;
   }
   .min-h-\[450px\] {
     min-height: 450px;
@@ -437,9 +440,6 @@
   .flex-col {
     flex-direction: column;
   }
-  .flex-row {
-    flex-direction: row;
-  }
   .flex-wrap {
     flex-wrap: wrap;
   }
@@ -448,9 +448,6 @@
   }
   .items-center {
     align-items: center;
-  }
-  .items-start {
-    align-items: flex-start;
   }
   .justify-between {
     justify-content: space-between;
@@ -573,6 +570,12 @@
   }
   .bg-background {
     background-color: var(--background);
+  }
+  .bg-background\/80 {
+    background-color: var(--background);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--background) 80%, transparent);
+    }
   }
   .bg-background\/90 {
     background-color: var(--background);
