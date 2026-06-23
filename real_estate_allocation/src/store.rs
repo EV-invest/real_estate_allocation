@@ -424,15 +424,10 @@ impl BuildingRepository for SqliteStore {
 	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
 	/// in-memory by design; SQL pushdown is explicitly descoped.
 	async fn list(&self, spec: Option<&(dyn Specification<Building> + Sync)>) -> Result<Vec<Building>, DomainError> {
-		let rows = sqlx::query_as::<_, PropertyRow>(
-			"SELECT id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties",
-		)
-		.fetch_all(&self.pool)
-		.await
-		.map_err(map_sqlx_error)?;
+		let rows = sqlx::query("SELECT doc FROM properties").fetch_all(&self.pool).await.map_err(map_sqlx_error)?;
 		let mut out = Vec::new();
 		for row in rows {
-			let b = Building::try_from(row)?;
+			let b = deserialize_building(row.get("doc"))?;
 			if spec.map(|s| Specification::holds(s, &b)).unwrap_or(true) {
 				out.push(b);
 			}
@@ -441,14 +436,28 @@ impl BuildingRepository for SqliteStore {
 	}
 
 	async fn get(&self, id: BuildingId) -> Result<Option<Building>, DomainError> {
-		let row = sqlx::query_as::<_, PropertyRow>(
-			"SELECT id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?",
-		)
-		.bind(id.raw().to_string())
-		.fetch_optional(&self.pool)
-		.await
-		.map_err(map_sqlx_error)?;
-		row.map(Building::try_from).transpose()
+		let row = sqlx::query("SELECT doc FROM properties WHERE id = ?")
+			.bind(id.raw().to_string())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		row.map(|r| deserialize_building(r.get("doc"))).transpose()
+	}
+
+	async fn put(&self, b: &Building) -> Result<(), DomainError> {
+		if let Some(dev) = &b.developer
+			&& self.get_developer(dev).await?.is_none()
+		{
+			return Err(DomainError::Validation(format!("unknown developer: {dev}")));
+		}
+		let doc = serde_json::to_string(b).map_err(|e| DomainError::Repository(format!("serialize building: {e}")))?;
+		sqlx::query("INSERT INTO properties (id, doc) VALUES (?, ?)")
+			.bind(b.id.raw().to_string())
+			.bind(doc)
+			.execute(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		Ok(())
 	}
 
 	async fn get_developer(&self, name: &str) -> Result<Option<Developer>, DomainError> {
@@ -488,6 +497,13 @@ impl BuildingRepository for SqliteStore {
 			.map_err(map_sqlx_error)?;
 		rows.into_iter().map(PropertyFile::try_from).collect()
 	}
+}
+
+/// Reconstruct a building from its stored document. The aggregate was serialised from a
+/// valid value on the way in, so a parse failure means the row is corrupt — a repository
+/// error, never a client-facing validation, and never silently defaulted away.
+fn deserialize_building(doc: &str) -> Result<Building, DomainError> {
+	serde_json::from_str(doc).map_err(|e| corrupt_row(DomainError::Repository(format!("deserialize building: {e}"))))
 }
 
 /// A persisted row failed domain re-validation: the database holds bad data.

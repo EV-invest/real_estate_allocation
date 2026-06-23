@@ -68,6 +68,44 @@ pub fn Overview() -> Element {
 /// Large featured tile (spans two columns). Links to the Q1 Tower property page.
 #[component]
 fn FeaturedCard() -> Element {
+	// Pull Q1's live figures so the headline stats track the DB rather than hard-coded
+	// copy. `get_building` populates `price_series`, the basis for `appreciation_yoy`.
+	let building = use_resource(|| async move {
+		let id = crate::domain::parse_building_id(Q1_PROPERTY).ok()?;
+		crate::api::get_building(id).await.ok().flatten()
+	});
+	// "-" is reserved for appreciation (genuinely unknown until a year of prices exists).
+	// A missing yield or status is a data fault, not an empty value — trace it loudly and
+	// render "ERR" so it can't pass for a real figure.
+	let guard = building.read();
+	let (target_yield, appreciation, status) = match &*guard {
+		None => (String::new(), "-".to_string(), String::new()), // still loading
+		Some(None) => {
+			dioxus::logger::tracing::error!(property = Q1_PROPERTY, "featured card: Q1 Tower failed to resolve");
+			("ERR".to_string(), "-".to_string(), "ERR".to_string())
+		}
+		Some(Some(b)) => {
+			let target_yield = if b.target_appreciation > 0.0 {
+				format!("{:.1}% p.a.", b.target_appreciation)
+			} else {
+				dioxus::logger::tracing::error!(property = Q1_PROPERTY, "featured card: Q1 Tower has no target yield set");
+				"ERR".to_string()
+			};
+			let appreciation = match b.appreciation_yoy() {
+				Some(p) => format!("{p:+.1}% YoY"),
+				None => "-".to_string(),
+			};
+			let status = match b.state_kinds().next() {
+				Some(k) => k.to_string(),
+				None => {
+					dioxus::logger::tracing::error!(property = Q1_PROPERTY, "featured card: Q1 Tower has no portfolio status");
+					"ERR".to_string()
+				}
+			};
+			(target_yield, appreciation, status)
+		}
+	};
+
 	rsx! {
 		a {
 			href: "/?building={Q1_PROPERTY}",
@@ -90,10 +128,9 @@ fn FeaturedCard() -> Element {
 					"Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views."
 				}
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
-					// TODO: yield / appreciation / status not yet modelled per-property.
-					Stat { label: "Target Yield", value_class: "text-main-accent-t2", "TODO" }
-					Stat { label: "Appreciation", value_class: "text-main-accent-t3", "TODO" }
-					Stat { label: "Status", value_class: "text-white", "TODO" }
+					Stat { label: "Target Yield", value_class: "text-main-accent-t2", "{target_yield}" }
+					Stat { label: "Appreciation", value_class: "text-main-accent-t3", "{appreciation}" }
+					Stat { label: "Status", value_class: "text-white", "{status}" }
 				}
 			}
 		}

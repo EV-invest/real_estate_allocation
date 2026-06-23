@@ -52,27 +52,8 @@ fn ApartmentDetails(apt: Apartment) -> Element {
 
 #[component]
 fn BuildingDetails(building: Building) -> Element {
-	let status = building.state_kinds().next();
 	rsx! {
 		div { class: "flex flex-col",
-			div { class: "grid grid-cols-3 gap-4 border-b border-border pb-4",
-				Stat { label: "Target Yield", value_class: "text-main-accent-t2",
-					if building.target_appreciation > 0.0 { "{building.target_appreciation:.1}% p.a." } else { "-" }
-				}
-				Stat { label: "Appreciation", value_class: "text-main-accent-t3",
-					match building.appreciation_yoy() {
-						Some(p) => rsx! { "{p:+.1}% YoY" },
-						None => rsx! { "-" },
-					}
-				}
-				Stat { label: "Status", value_class: "text-white",
-					match status {
-						Some(k) => rsx! { "{k}" },
-						None => rsx! { "-" },
-					}
-				}
-			}
-
 			match building.avg_price() {
 				Some(p) => rsx! { Kv { label: "Avg apt. price", value_class: "text-main-accent-t3", "{p}" } },
 				None => rsx! { Kv { label: "Avg apt. price", value_class: "text-warn", "?" } },
@@ -91,6 +72,10 @@ fn BuildingDetails(building: Building) -> Element {
 					ConstructionStatus::UnderConstruction => "text-warn",
 				},
 				"{building.construction}"
+			}
+
+			if building.target_appreciation > 0.0 {
+				Kv { label: "Target appreciation", value_class: "text-main-accent-t3", "{building.target_appreciation:.0}% / yr" }
 			}
 
 			if let Some(deal) = building.deal.as_ref() {

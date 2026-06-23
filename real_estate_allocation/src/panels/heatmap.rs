@@ -19,8 +19,9 @@ pub fn PortfolioHeatmap() -> Element {
 	});
 
 	rsx! {
-		// h-full so the treemap fills (and reflows with) its dock pane; the tab already labels it.
-		Card { class: "flex h-full flex-col",
+		// h-full so the treemap fills (and reflows with) its dock pane; overflow-hidden so the
+		// flex-1 body shrinks to the pane instead of spilling its last row past the bottom.
+		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "relative flex-1",
 				match &*buildings.read() {
 					None => rsx! { Skeleton { class: "h-full w-full" } },
@@ -65,20 +66,39 @@ fn layout(buildings: &[Building], states: &[PropertyStateKind]) -> Vec<BTile> {
 	let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
 
 	let values: Vec<f64> = buildings.iter().map(|b| selected_lots(b, states).map(|a| lot_value(a, fallback)).sum::<f64>().max(1.0)).collect();
-	let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
+
+	// Owned buildings outrank prospects, so they always take the left slab and the
+	// Purchasing-only ones the slab to their right — never intermixed by size. Each slab
+	// is squarified on its own and widthed by its share of total value.
+	let prospect: Vec<bool> = buildings.iter().map(|b| !selected_lots(b, states).any(|a| matches!(a.status, ApartmentStatus::Purchased(_)))).collect();
+	let owned_idx: Vec<usize> = (0..buildings.len()).filter(|&i| !prospect[i]).collect();
+	let prospect_idx: Vec<usize> = (0..buildings.len()).filter(|&i| prospect[i]).collect();
+	let total = values.iter().sum::<f64>().max(1.0);
+	let owned_w = 100.0 * owned_idx.iter().map(|&i| values[i]).sum::<f64>() / total;
+
+	let mut rects = vec![Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 }; buildings.len()];
+	for (idxs, slab) in [
+		(&owned_idx, Rect { x: 0.0, y: 0.0, w: owned_w, h: 100.0 }),
+		(&prospect_idx, Rect { x: owned_w, y: 0.0, w: 100.0 - owned_w, h: 100.0 }),
+	] {
+		let vals: Vec<f64> = idxs.iter().map(|&i| values[i]).collect();
+		for (k, r) in squarify(&vals, slab).into_iter().enumerate() {
+			rects[idxs[k]] = r;
+		}
+	}
+
 	buildings
 		.iter()
-		.zip(rects)
-		.map(|(b, rect)| {
+		.enumerate()
+		.map(|(i, b)| {
 			let sel: Vec<&Apartment> = selected_lots(b, states).collect();
 			let change = if sel.is_empty() { 0.0 } else { sel.iter().map(|a| apt_change(b.id, a.number)).sum::<f64>() / sel.len() as f64 };
-			let prospect = !sel.iter().any(|a| matches!(a.status, ApartmentStatus::Purchased(_)));
 			BTile {
 				id: b.id,
 				name: b.name.clone(),
-				rect,
+				rect: rects[i],
 				change,
-				prospect,
+				prospect: prospect[i],
 				apartments: b.apartments.clone(),
 			}
 		})
