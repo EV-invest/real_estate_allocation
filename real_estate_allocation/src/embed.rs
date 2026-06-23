@@ -4,7 +4,7 @@
 //! interactive tile is the self-contained correlation / risk-premia terminal.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::{Button, Container};
+use ev_lib::uikit::Container;
 
 use crate::factors::profile;
 
@@ -344,15 +344,7 @@ fn Calculator() -> Element {
 /// every factor exposure and the host YoY input. An optional `rho` renders our read-only
 /// correlation to that factor beside the box (the "profile vs factors" picture).
 #[component]
-fn StepperCell(
-	label: String,
-	value: Signal<f64>,
-	step: f64,
-	min: f64,
-	max: f64,
-	#[props(default)] suffix: String,
-	#[props(default)] rho: Option<f64>,
-) -> Element {
+fn StepperCell(label: String, value: Signal<f64>, step: f64, min: f64, max: f64, #[props(default)] suffix: String, #[props(default)] rho: Option<f64>) -> Element {
 	let mut value = value;
 	// (start_y, start_value) captured on pointerdown; vertical drag maps to ±step.
 	let mut drag = use_signal(|| Option::<(f64, f64)>::None);
