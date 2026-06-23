@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod domain;
 pub mod embed;
 pub mod error;
+pub mod factors;
 pub mod map;
 pub mod panels;
 mod uikit;

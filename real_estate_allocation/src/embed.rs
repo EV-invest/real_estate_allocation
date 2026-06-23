@@ -1,10 +1,12 @@
 //! Iframe-embeddable marketing surface (`/embed/overview`). A standalone port of
 //! the landing "Premium Asset Portfolio" bento section — no app shell, so a host
 //! page can `<iframe>` it. Static content mirroring the landing source; the only
-//! interactive tile is the self-contained ROI calculator.
+//! interactive tile is the self-contained correlation / risk-premia terminal.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::{Button, Container, Select, SelectContent, SelectItem, SelectTrigger, SelectValue};
+use ev_lib::uikit::{Button, Container};
+
+use crate::factors::profile;
 
 // Both tiles are real listings. Banners are bundled as app assets (the property
 // folders' images are served only through the `file_bytes` server fn); a click
@@ -15,9 +17,10 @@ const Q1_PROPERTY: &str = "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a";
 const TMS_BANNER: Asset = asset!("/assets/seed/tms/building.jpg");
 const TMS_PROPERTY: &str = "c19bded1-1a13-49ad-a0f0-549b2aec2d0e";
 
-const A_MIN: f64 = 50_000.0;
-const A_MAX: f64 = 1_000_000.0;
-const A_STEP: f64 = 10_000.0;
+// Swap-fraction slider bounds, in percent (0–100% of the host book moved into S).
+const A_MIN: f64 = 0.0;
+const A_MAX: f64 = 100.0;
+const A_STEP: f64 = 1.0;
 #[component]
 pub fn Overview() -> Element {
 	let mut tab = use_signal(|| "all".to_string());
@@ -197,51 +200,54 @@ fn WhyCard() -> Element {
 	}
 }
 
-// Principal slider bounds, in USD. The slider below is hand-inlined from the uikit
-// `Slider`'s compiled markup (colours applied directly, not via arbitrary-variant
-// overrides), so the track fill and round thumb don't depend on `cn!` merge survival.
+// The slider below is hand-inlined from the uikit `Slider`'s compiled markup (colours
+// applied directly, not via arbitrary-variant overrides), so the track fill and round
+// thumb don't depend on `cn!` merge survival.
 
 fn snap(v: f64) -> f64 {
 	let v = v.clamp(A_MIN, A_MAX);
 	(((v - A_MIN) / A_STEP).round() * A_STEP + A_MIN).clamp(A_MIN, A_MAX)
 }
 
-/// Client-side ROI projector (spans two columns). Mirrors the landing model:
-/// per-class annual yield + appreciation, compounded over the term.
+/// Correlation / risk-premia terminal (spans two columns). Shows our instrument's
+/// correlation profile vs the popular alpha factors and, under probabilistic-Kelly
+/// sizing (γ=1), what swapping `w%` of a host book into us does to its effective risk
+/// premia (risk cost = σ²/2) and compound performance. See `crate::factors`.
 #[component]
 fn Calculator() -> Element {
-	let mut amount = use_signal(|| 100_000.0_f64);
-	let mut term = use_signal(|| 5_u32);
-	let mut commercial = use_signal(|| false);
+	let p = profile();
+	// One exposure signal per factor + the host's current YoY return, all in percent.
+	// ponytail: factor count is fixed (`profile()` is constant), so these per-factor
+	// hooks keep a stable order across renders.
+	let exposures: Vec<Signal<f64>> = p.factors.iter().map(|f| use_signal(|| f.default_exposure * 100.0)).collect();
+	let yoy = use_signal(|| 10.0_f64);
+	let mut swap = use_signal(|| 0.0_f64);
 
 	// Slider drag state: the track's measured origin/width on the x-axis.
 	let mut track = use_signal(|| Option::<std::rc::Rc<MountedData>>::None);
 	let mut bounds = use_signal(|| (0.0_f64, 1.0_f64));
 	let mut dragging = use_signal(|| false);
-	let pct = ((amount() - A_MIN) / (A_MAX - A_MIN) * 100.0).clamp(0.0, 100.0);
+	let pct = ((swap() - A_MIN) / (A_MAX - A_MIN) * 100.0).clamp(0.0, 100.0);
 
-	let (rate, appr): (f64, f64) = if commercial() { (0.12, 0.18) } else { (0.085, 0.15) };
-	let total = amount() * (1.0 + rate + appr).powi(term() as i32);
-	let profit = total - amount();
-	let roi = profit / amount() * 100.0;
+	let exp: Vec<f64> = exposures.iter().map(|s| s() / 100.0).collect();
+	let out = p.evaluate(&exp, yoy() / 100.0, swap() / 100.0);
 
 	rsx! {
 		div { id: "calculator", class: "grid grid-cols-1 gap-8 border border-main-mist/10 bg-main-card p-8 md:col-span-2 md:grid-cols-2",
 			div { class: "flex flex-col justify-between",
 				div {
 					span { class: "mb-3 block font-mono text-xs uppercase tracking-widest text-main-accent-t1",
-						"Yield Terminal"
+						"Risk Terminal"
 					}
-					h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "Investment Calculator" }
+					h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "Correlation Profile" }
 					p { class: "mb-6 font-light text-sm text-main-mist/70",
-						"Project your returns across different asset classes in Quy Nhon based on our current fund advisory models."
+						"Enter your book's factor exposures. We are judged not on our own return but on the marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
 					}
 				}
 				div { class: "space-y-4 font-mono text-xs",
 					div {
-						label { class: "mb-3 block uppercase text-main-mist/40", "Principal Investment ($ USD)" }
+						label { class: "mb-3 block uppercase text-main-mist/40", "Allocation swapped into Vietnam (%)" }
 						span {
-		//TODO!!!: replace with kit's Slider
 							class: "relative flex w-full touch-none select-none items-center",
 							onpointerdown: move |e: PointerEvent| async move {
 								let Some(t) = track() else { return };
@@ -249,7 +255,7 @@ fn Calculator() -> Element {
 								bounds.set((rect.origin.x, rect.size.width));
 								dragging.set(true);
 								let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
-								amount.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
 							},
 							onpointermove: move |e: PointerEvent| {
 								if !dragging() {
@@ -257,7 +263,7 @@ fn Calculator() -> Element {
 								}
 								let (ox, w) = bounds();
 								let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
-								amount.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
 							},
 							onpointerup: move |_| dragging.set(false),
 							onpointerleave: move |_| dragging.set(false),
@@ -274,56 +280,34 @@ fn Calculator() -> Element {
 								style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
 								role: "slider",
 								tabindex: "0",
-								"aria-valuenow": amount(),
+								"aria-valuenow": swap(),
 								"aria-valuemin": A_MIN,
 								"aria-valuemax": A_MAX,
 								onkeydown: move |e: KeyboardEvent| {
 									let next = match e.key() {
-										Key::ArrowRight | Key::ArrowUp => amount() + A_STEP,
-										Key::ArrowLeft | Key::ArrowDown => amount() - A_STEP,
+										Key::ArrowRight | Key::ArrowUp => swap() + A_STEP,
+										Key::ArrowLeft | Key::ArrowDown => swap() - A_STEP,
 										Key::Home => A_MIN,
 										Key::End => A_MAX,
 										_ => return,
 									};
 									e.prevent_default();
-									amount.set(snap(next));
+									swap.set(snap(next));
 								},
 							}
 						}
 						div { class: "mt-2 flex justify-between font-bold text-main-accent-t1",
-							span { "$50k" }
-							span { class: "text-sm", "{usd(amount())}" }
-							span { "$1M" }
+							span { "0%" }
+							span { class: "text-sm", "{swap():.0}%" }
+							span { "100%" }
 						}
 					}
-					div { class: "grid grid-cols-2 gap-4",
-						div {
-							label { class: "mb-2 block uppercase text-main-mist/40", "Term (Years)" }
-							Select {
-								value: term().to_string(),
-								on_value_change: move |v: String| {
-									if let Ok(y) = v.parse() { term.set(y); }
-								},
-								SelectTrigger { class: "w-full border-main-mist/20 bg-main-black/60 font-mono", SelectValue {} }
-								SelectContent {
-									for y in [3u32, 5, 7, 10] {
-										SelectItem { value: "{y}", "{y} Years" }
-									}
-								}
-							}
+					div { class: "space-y-2",
+						label { class: "mb-1 block uppercase text-main-mist/40", "Host book exposures · our ρ profile" }
+						for (f, w) in p.factors.iter().zip(exposures.iter().copied()) {
+							StepperCell { label: f.label.to_string(), value: w, step: 1.0, min: 0.0, max: 100.0, suffix: "%".to_string(), rho: f.rho }
 						}
-						div {
-							label { class: "mb-2 block uppercase text-main-mist/40", "Asset Type" }
-							Select {
-								value: if commercial() { "commercial".to_string() } else { "residential".to_string() },
-								on_value_change: move |v: String| commercial.set(v == "commercial"),
-								SelectTrigger { class: "w-full border-main-mist/20 bg-main-black/60 font-mono", SelectValue {} }
-								SelectContent {
-									SelectItem { value: "residential", "Luxury Villa" }
-									SelectItem { value: "commercial", "Commercial Hub" }
-								}
-							}
-						}
+						StepperCell { label: "Host YoY return".to_string(), value: yoy, step: 0.5, min: -50.0, max: 100.0, suffix: "%".to_string() }
 					}
 				}
 			}
@@ -332,28 +316,111 @@ fn Calculator() -> Element {
 			div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-black/40 p-6",
 				div { class: "space-y-4",
 					div {
-						span { class: "mb-1 block font-mono text-[10px] uppercase text-main-mist/40", "Estimated ROI" }
-						span { class: "font-serif text-4xl font-bold text-main-accent-t3", "{roi:.1}%" }
+						span { class: "mb-1 block font-mono text-[10px] uppercase text-main-mist/40", "Δ Effective Risk Premia" }
+						span { class: "font-serif text-4xl font-bold text-main-accent-t3", "{out.delta_risk_premia * 10_000.0:+.1} bps" }
 					}
 					div { class: "grid grid-cols-2 gap-4 border-t border-main-mist/10 pt-4",
 						div {
-							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Total Payout" }
-							span { class: "font-mono text-sm font-bold text-white", "{usd(total)}" }
+							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Δ Expected Performance" }
+							span { class: "font-mono text-sm font-bold text-main-accent-t2", "{out.delta_performance * 100.0:+.2}%" }
 						}
 						div {
-							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Net Profit" }
-							span { class: "font-mono text-sm font-bold text-main-accent-t2", "{usd(profit)}" }
+							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "ρ (S, Portfolio)" }
+							span { class: "font-mono text-sm font-bold text-white", "{out.rho_sp:+.2}" }
 						}
 					}
 				}
 				div { class: "mt-6",
 					p { class: "mb-4 text-[10px] font-light leading-relaxed text-main-mist/40",
-						"*Projections are based on historical performance and regional growth targets. Actual results may vary."
+						"*Correlation figures are indicative placeholders pending the persisted estimated profile. Risk cost under probabilistic-Kelly sizing (γ≈1). Actual results may vary."
 					}
 					Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist hover:text-main-brand",
 						"Request advisory"
 					}
 				}
+			}
+		}
+	}
+}
+
+/// TradingView-style numeric cell: label left, bordered value box right with hover-only
+/// up/down chevrons, vertical pointer-drag to scrub, and ↑/↓ keyboard nudge. Reused for
+/// every factor exposure and the host YoY input. An optional `rho` renders our read-only
+/// correlation to that factor beside the box (the "profile vs factors" picture).
+#[component]
+fn StepperCell(
+	label: String,
+	value: Signal<f64>,
+	step: f64,
+	min: f64,
+	max: f64,
+	#[props(default)] suffix: String,
+	#[props(default)] rho: Option<f64>,
+) -> Element {
+	let mut value = value;
+	// (start_y, start_value) captured on pointerdown; vertical drag maps to ±step.
+	let mut drag = use_signal(|| Option::<(f64, f64)>::None);
+
+	rsx! {
+		div { class: "group flex items-center justify-between gap-2 rounded border border-main-mist/20 bg-main-black/60 px-3 py-2 font-mono",
+			span { class: "uppercase text-main-mist/60", "{label}" }
+			div { class: "flex items-center gap-3",
+				if let Some(r) = rho {
+					span {
+						class: if r >= 0.0 { "text-[10px] text-main-accent-t2" } else { "text-[10px] text-main-accent-t3" },
+						"ρ {r:+.2}"
+					}
+				}
+				div {
+					class: "flex touch-none select-none items-center gap-2 rounded border border-main-mist/20 bg-main-black/40 px-2 py-1",
+					onpointerdown: move |e: PointerEvent| drag.set(Some((e.client_coordinates().y, value()))),
+					onpointermove: move |e: PointerEvent| {
+						let Some((y0, v0)) = drag() else { return };
+						// ponytail: 8px of drag per step; up = increase.
+						let n = v0 + ((y0 - e.client_coordinates().y) / 8.0).round() * step;
+						value.set(n.clamp(min, max));
+					},
+					onpointerup: move |_| drag.set(None),
+					onpointerleave: move |_| drag.set(None),
+					tabindex: "0",
+					onkeydown: move |e: KeyboardEvent| {
+						let delta = match e.key() {
+							Key::ArrowUp => step,
+							Key::ArrowDown => -step,
+							_ => return,
+						};
+						value.set((value() + delta).clamp(min, max));
+						e.prevent_default();
+					},
+					span { class: "min-w-[3ch] text-right text-sm font-bold text-white", "{value():.1}{suffix}" }
+					div { class: "flex flex-col opacity-0 transition-opacity group-hover:opacity-100",
+						button {
+							r#type: "button",
+							class: "leading-none text-main-mist/50 hover:text-white",
+							onclick: move |_| value.set((value() + step).clamp(min, max)),
+							IconChevron { up: true }
+						}
+						button {
+							r#type: "button",
+							class: "leading-none text-main-mist/50 hover:text-white",
+							onclick: move |_| value.set((value() - step).clamp(min, max)),
+							IconChevron { up: false }
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+#[component]
+fn IconChevron(up: bool) -> Element {
+	rsx! {
+		svg { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round", class: "h-3 w-3",
+			if up {
+				path { d: "m18 15-6-6-6 6" }
+			} else {
+				path { d: "m6 9 6 6 6-6" }
 			}
 		}
 	}
@@ -377,21 +444,6 @@ fn Row(label: String, #[props(default)] value_class: String, children: Element) 
 			span { class: "font-bold {value_class}", {children} }
 		}
 	}
-}
-
-/// Whole-dollar USD with thousands separators: `$338,200`.
-fn usd(n: f64) -> String {
-	let v = n.round() as i64;
-	let digits = v.abs().to_string();
-	let bytes = digits.as_bytes();
-	let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
-	for (i, b) in bytes.iter().enumerate() {
-		if i > 0 && (bytes.len() - i) % 3 == 0 {
-			out.push(',');
-		}
-		out.push(*b as char);
-	}
-	format!("${out}")
 }
 
 // The icons mirror the landing's lucide-react output byte-for-byte (same

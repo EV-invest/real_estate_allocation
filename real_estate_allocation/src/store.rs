@@ -105,6 +105,9 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	}
 
 	struct Seed {
+		/// Fixed UUID so a property keeps the same id across reseeds — deep links and the
+		/// embed's `Q1_PROPERTY` / `TMS_PROPERTY` constants depend on it being stable.
+		id: &'static str,
 		name: &'static str,
 		place: &'static str,
 		/// `None` where we have no real number yet (the two under-construction towers).
@@ -133,6 +136,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	let seeds = [
 		Seed {
+			id: "9a5a7d3b-cd42-4d65-a426-5b705a3d0cc9",
 			name: "Quy Nhơn Melody",
 			place: "ChIJOYTnE0ZtbzERRZnbRLfEIU8", // Căn Hộ Quy Nhơn Melody
 			price: Some(96_000.0),
@@ -146,6 +150,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			pics: &[("building.jpg", JPG, include_bytes!("../assets/seed/melody/building.jpg"))],
 		},
 		Seed {
+			id: "dd5a8289-a5cd-4fb4-8e69-582b065179fc",
 			name: "Vina2 Panorama Quy Nhơn",
 			place: "ChIJTX0aij9rbzERvgC-Y2tqNxw", // VINA2 Panorama
 			price: Some(60_000.0),
@@ -163,6 +168,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			],
 		},
 		Seed {
+			id: "1eeab4aa-c377-4fcb-aebd-57f917a0b844",
 			name: "Ecolife Riverside Quy Nhơn",
 			place: "ChIJGb0UXFRrbzER9Ym2RZ7csFE", // Ecolife Riverside Quy Nhơn
 			price: Some(59_000.0),
@@ -180,6 +186,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			],
 		},
 		Seed {
+			id: "12958cdb-b5e1-4aa3-80dd-91a8b9048916",
 			name: "The Calla (Calla Apartment Quy Nhơn)",
 			place: "ChIJt5jJjCxtbzERKfYIEUv0i-A", // The Calla (matches the shared map pin)
 			price: Some(80_000.0),
@@ -198,6 +205,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			],
 		},
 		Seed {
+			id: "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a", // matches embed::Q1_PROPERTY
 			name: "Q1 Tower (Cadia Quy Nhơn)",
 			place: "ChIJDQMq0yFtbzERY32pkB70paY", // Q1 Tower Quy Nhơn, 1 Ngô Mây
 			price: Some(90_000.0), // provisional: pre-handover branded beachfront residence
@@ -215,6 +223,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			],
 		},
 		Seed {
+			id: "c19bded1-1a13-49ad-a0f0-549b2aec2d0e", // matches embed::TMS_PROPERTY
 			name: "TMS Luxury Hotel & Residence Quy Nhơn",
 			place: "ChIJBVOIrolsbzERr_9ibfn1t-I", // Grand Hyams Hotel — the 5-star hotel occupying the TMS tower
 			price: Some(76_000.0), // average apartment ≈ 1.9 tỷ VND @ ~25,000 VND/USD
@@ -228,6 +237,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			pics: &[("building.jpg", JPG, include_bytes!("../assets/seed/tms/building.jpg"))],
 		},
 		Seed {
+			id: "9c4acfee-9597-455e-b983-b60143fdaa90",
 			name: "Triton — Quy Nhơn Sky Residence",
 			place: "ChIJ7QjTJQBtbzERetFnxYHlsUM", // Triton Sky Residence, 72B Tây Sơn
 			price: Some(72_000.0), // provisional: pricing still firming up (launched 2025)
@@ -283,7 +293,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	}
 
 	for s in seeds {
-		let id = BuildingId::new();
+		let id = crate::domain::parse_building_id(s.id)?;
 		let price = s.price.map(|p| Money::parse(p).expect("seed price is non-negative finite"));
 		store
 			.put(&Building {
@@ -291,11 +301,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 				name: s.name.into(),
 				place: GooglePlace::parse(s.place.into())?,
 				construction: s.construction,
-				// The rule's single source of truth: an unfinished building has no target.
-				target_appreciation: match s.construction {
-					ConstructionStatus::Completed => s.target_appreciation,
-					ConstructionStatus::UnderConstruction => 0.0,
-				},
+				target_appreciation: s.target_appreciation,
 				developer: Some(s.developer.into()),
 				research_url: ResearchUrl::parse(s.research_url.into())?,
 				terms: Some(s.terms.into()),

@@ -431,7 +431,7 @@ mod tests {
 		for t in &tiles {
 			assert!(t.rect.w * t.rect.h > 100.0, "{} collapsed to a sliver", t.name);
 		}
-		insta::assert_snapshot!("heatmap_book", render(included, states.to_vec()), @"");
+		insta::assert_snapshot!("heatmap_book", &render(included, states.to_vec()), @"");
 	}
 
 	/// A building with no owned (`Purchased`) lot in the active filter is a prospect:
