@@ -10,11 +10,12 @@ use crate::{
 /// value change, with the selected property highlighted and each tile clickable.
 #[component]
 pub fn PortfolioHeatmap() -> Element {
-	// Shares the map's `?selection=` filter so both react to the same set. Owned tiles
-	// are solid; prospects (interesting / purchasing) are striped over the heat fill.
+	// Shares the map's `?selection=` filter, minus `Interesting`: the heatmap is the
+	// committed book, so prospects never enter the treemap. Owned tiles are solid;
+	// purchasing ones are striped over the heat fill.
 	let filter = use_context::<crate::app::Filter>();
 	let properties = use_resource(move || {
-		let states = filter();
+		let states = query_states(&filter());
 		async move { crate::api::list_properties(Some(states)).await.unwrap_or_default() }
 	});
 
@@ -37,6 +38,13 @@ pub fn PortfolioHeatmap() -> Element {
 	}
 }
 
+/// The heatmap's committed-book filter: the chip states minus `Interesting` (a
+/// prospect, never drawn). Empty in → empty out → empty treemap. The store query
+/// is the OR over exactly these states, so an empty set draws nothing.
+fn query_states(filter: &[PropertyStateKind]) -> Vec<PropertyStateKind> {
+	filter.iter().copied().filter(|s| *s != PropertyStateKind::Interesting).collect()
+}
+
 /// One fully-resolved tile: geometry + everything needed to paint it. Built once
 /// from the property list so the view is a single pass over `Vec<Tile>` — no
 /// parallel `rects[i]` indexing, no per-tile recomputation mid-render.
@@ -53,8 +61,13 @@ struct Tile {
 
 impl Tile {
 	fn layout(properties: &[Property]) -> Vec<Self> {
-		// Unknown price → minimal tile area rather than dropping the holding.
-		let values: Vec<f64> = properties.iter().map(|p| p.price.map_or(1.0, |m| m.amount()).max(1.0)).collect();
+		// Unknown-price holdings (e.g. still `Purchasing`) get the *mean* known price,
+		// not an absolute `1.0`: beside six-figure holdings a flat 1.0 collapses to a
+		// zero-area sliver and the tile vanishes. Mean keeps it visibly present without
+		// inventing a figure. No known prices at all → equal weights.
+		let known: Vec<f64> = properties.iter().filter_map(|p| p.price.map(|m| m.amount())).filter(|a| *a > 0.0).collect();
+		let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
+		let values: Vec<f64> = properties.iter().map(|p| p.price.map_or(fallback, |m| m.amount()).max(1.0)).collect();
 		let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
 		properties
 			.iter()
@@ -222,7 +235,82 @@ fn squarify(values: &[f64], bounds: Rect) -> Vec<Rect> {
 
 #[cfg(test)]
 mod tests {
+	use jiff::Timestamp;
+	use uuid::Uuid;
+
 	use super::*;
+	use crate::domain::{ConstructionStatus, GooglePlace, Money, PropertyState, ResearchUrl};
+
+	// `mock_change` keys off the id's high 64 bits → seed those for stable heat colours.
+	fn prop(seed: u64, name: &str, price: Option<f64>, state: PropertyState) -> Property {
+		Property {
+			id: PropertyId::from_raw(Uuid::from_u128((seed as u128) << 64)),
+			name: name.into(),
+			place: GooglePlace::parse("place".into()).unwrap(),
+			price: price.map(|p| Money::parse(p).unwrap()),
+			state,
+			construction: ConstructionStatus::Completed,
+			target_appreciation: 0.0,
+			developer: None,
+			research_url: ResearchUrl::parse("https://x.test".into()).unwrap(),
+			terms: None,
+			deal: None,
+			loan: None,
+			additional_reasoning: None,
+			price_series: vec![],
+			coords: None,
+		}
+	}
+
+	/// Mirrors the real book: priced `Purchased` holdings plus price-less `Purchasing`
+	/// ones — the exact mix that made the purchasing tiles vanish.
+	fn mixed_book() -> Vec<Property> {
+		let bought: Timestamp = "2024-01-01T00:00:00Z".parse().unwrap();
+		vec![
+			prop(250, "Quy Nhon Melody", Some(96000.0), PropertyState::Purchased(bought)),
+			prop(700, "Vina2 Panorama", Some(60000.0), PropertyState::Purchased(bought)),
+			prop(500, "Ecolife Riverside", Some(59000.0), PropertyState::Purchased(bought)),
+			prop(150, "The Calla", Some(80000.0), PropertyState::Purchased(bought)),
+			prop(900, "Q1 Tower", None, PropertyState::Purchasing),
+			prop(350, "Triton", None, PropertyState::Purchasing),
+		]
+	}
+
+	fn render(properties: Vec<Property>) -> String {
+		#[component]
+		fn Harness(properties: Vec<Property>) -> Element {
+			let sel: Selected = use_signal(|| None);
+			use_context_provider(|| sel);
+			rsx! { Treemap { properties } }
+		}
+		let mut dom = VirtualDom::new_with_props(Harness, HarnessProps { properties });
+		dom.rebuild_in_place();
+		dioxus_ssr::render(&dom)
+	}
+
+	/// The defect: price-less `Purchasing` holdings collapsed to a zero-area sliver
+	/// when shown beside priced ones, so they disappeared. Every drawn tile must hold
+	/// a meaningful share of the 100×100 board (>1%).
+	#[test]
+	fn priceless_holdings_stay_visible() {
+		let tiles = Tile::layout(&mixed_book());
+		for t in &tiles {
+			let area = t.rect.w * t.rect.h;
+			assert!(area > 100.0, "{} collapsed to {area:.4} (<1% of board) — invisible", t.name);
+		}
+		assert!(tiles.iter().filter(|t| t.prospect).count() == 2, "both purchasing tiles present");
+		insta::assert_snapshot!("heatmap_mixed_book", render(mixed_book()));
+	}
+
+	/// The heatmap is the committed book: `Interesting` never drawn, everything else
+	/// kept, empty selection draws nothing.
+	#[test]
+	fn query_states_drops_only_interesting() {
+		use PropertyStateKind::*;
+		assert_eq!(query_states(&[]), Vec::<PropertyStateKind>::new());
+		assert_eq!(query_states(&[Purchased]), vec![Purchased]);
+		assert_eq!(query_states(&[Purchased, Interesting, Purchasing]), vec![Purchased, Purchasing]);
+	}
 
 	#[test]
 	fn treemap_tiles_tile_the_bounds() {

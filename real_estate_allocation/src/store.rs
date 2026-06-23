@@ -210,8 +210,22 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			pics: &[
 				("building.jpg", JPG, include_bytes!("../assets/seed/q1_tower/building.jpg")),
 				("render.jpg", JPG, include_bytes!("../assets/seed/q1_tower/render.jpg")),
+				("hero.jpg", JPG, include_bytes!("../assets/seed/q1_tower/hero.jpg")),
 				("livingroom.jpg", JPG, include_bytes!("../assets/seed/q1_tower/livingroom.jpg")),
 			],
+		},
+		Seed {
+			name: "TMS Luxury Hotel & Residence Quy Nhơn",
+			place: "ChIJBVOIrolsbzERr_9ibfn1t-I", // Grand Hyams Hotel — the 5-star hotel occupying the TMS tower
+			price: Some(76_000.0), // average apartment ≈ 1.9 tỷ VND @ ~25,000 VND/USD
+			state: PropertyState::Interesting,
+			construction: ConstructionStatus::Completed,
+			target_appreciation: 12.0,
+			developer: "TMS Group",
+			research_url: "https://tms-quynhon.com",
+			terms: "Completed and operating since 2022 (groundbreaking 2017); sổ hồng issuance underway. Condotel lease-back: 10%/yr guaranteed for 10 years (after 95% payment) then 85% owner / 15% operator, or 80/20 non-guaranteed, plus ~15 free nights/yr — treat the guarantee as a marketed target given VN condotel payout risk.",
+			reasoning: "42-floor beachfront landmark (tallest in Quy Nhơn) at 28 Nguyễn Huệ, ~240m from the city beach. Single tower: ~746 condotel/tourist apartments (F4–F28) above 328 five-star rooms run as Grand Hyams Hotel (F29–F41) and an F41–42 sky bar. 1BR ~45–50m², 2BR ~65–71m² at ~29–36 tr/m²; representative apartment ≈ 1.9 tỷ VND (~$76k). Operating asset with branded-residence scarcity in the city centre.",
+			pics: &[("building.jpg", JPG, include_bytes!("../assets/seed/tms/building.jpg"))],
 		},
 		Seed {
 			name: "Triton — Quy Nhơn Sky Residence",
@@ -233,7 +247,12 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	];
 
 	// Developers first: the FK on properties.developer requires them to exist.
-	let developers: [(&str, &str, Option<&str>); 6] = [
+	let developers: [(&str, &str, Option<&str>); 7] = [
+		(
+			"TMS Group",
+			"Hà Nội–based diversified group (est. 2004; Công ty Cổ phần Tập đoàn TMS) spanning real estate, hospitality and trading. TMS Quy Nhơn is its flagship Bình Định tower.",
+			Some("https://tms-quynhon.com"),
+		),
 		(
 			"Hưng Thịnh",
 			"Large national developer; ecosystem includes Hưng Thịnh Land & Incons. 2022–23 liquidity stress — watch counterparty risk.",

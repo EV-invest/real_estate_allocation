@@ -81,7 +81,7 @@ fn StateFilter(filter: Signal<Vec<PropertyStateKind>>) -> Element {
 	let cur = filter();
 	rsx! {
 		div { class: "flex items-center gap-1.5",
-			for state in [PropertyStateKind::Purchased, PropertyStateKind::Interesting, PropertyStateKind::Purchasing] {
+			for state in [PropertyStateKind::Purchased, PropertyStateKind::Purchasing, PropertyStateKind::Interesting] {
 				{
 					let on = cur.contains(&state);
 					// On: filled with the state colour + dark text. Off: outlined + muted.

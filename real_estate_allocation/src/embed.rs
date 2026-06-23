@@ -4,12 +4,16 @@
 //! interactive tile is the self-contained ROI calculator.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::{Button, ButtonVariant, Container, Select, SelectContent, SelectItem, SelectTrigger, SelectValue};
+use ev_lib::uikit::{Button, Container, Select, SelectContent, SelectItem, SelectTrigger, SelectValue};
 
-// Hero renders from the landing CDN — the same `ASSETS.luxury_villa` /
-// `ASSETS.quynhon_future` the original section references.
-const HERO_VILLA: &str = "https://d2xsxph8kpxj0f.cloudfront.net/310519663075853325/SPbgMPRFEXcrCSr7Bo27uM/luxury_villa-64wseo7dGJUQNbg7HMSNPo.webp";
-const HERO_BAY: &str = "https://d2xsxph8kpxj0f.cloudfront.net/310519663075853325/SPbgMPRFEXcrCSr7Bo27uM/quynhon_future-ExoshVjhhPWYbYR4Zf3xJn.webp";
+// Both tiles are real listings. Banners are bundled as app assets (the property
+// folders' images are served only through the `file_bytes` server fn); a click
+// breaks out to the dashboard home with the property pre-selected, so it works
+// embedded (`target=_top`) and standalone alike.
+const Q1_BANNER: Asset = asset!("/assets/seed/q1_tower/hero.jpg");
+const Q1_PROPERTY: &str = "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a";
+const TMS_BANNER: Asset = asset!("/assets/seed/tms/building.jpg");
+const TMS_PROPERTY: &str = "c19bded1-1a13-49ad-a0f0-549b2aec2d0e";
 
 const A_MIN: f64 = 50_000.0;
 const A_MAX: f64 = 1_000_000.0;
@@ -61,16 +65,17 @@ pub fn Overview() -> Element {
 	}
 }
 
-/// Large featured tile (spans two columns). Static marketing content, mirroring
-/// the landing source byte-for-byte.
+/// Large featured tile (spans two columns). Links to the Q1 Tower property page.
 #[component]
 fn FeaturedCard() -> Element {
 	rsx! {
-		div {
+		a {
+			href: "/?property={Q1_PROPERTY}",
+			target: "_top",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
-				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({HERO_VILLA})",
+				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({Q1_BANNER})",
 			}
 			div { class: "absolute right-4 top-4 bg-main-accent-t1 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-main-black",
 				"Featured Deal"
@@ -78,50 +83,51 @@ fn FeaturedCard() -> Element {
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
 					IconPin {}
-					"Nhon Ly Beach, Quy Nhon"
+					"Quy Nhơn Beachfront" // TODO: exact street address not in `place.json`
 				}
-				h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "The Horizon Premium Villas" }
+				h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "Q1 Tower Quy Nhơn" }
 				p { class: "mb-6 max-w-xl font-light text-sm text-main-mist/70",
-					"Exclusive ultra-luxury oceanfront villas with private pools, nestled between pristine limestone cliffs and crystal-clear turquoise waters."
+					"Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views."
 				}
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
-					Stat { label: "Target Yield", value_class: "text-main-accent-t2", "12.5% p.a." }
-					Stat { label: "Appreciation", value_class: "text-main-accent-t3", "18% YoY" }
-					Stat { label: "Status", value_class: "text-white", "Pre-Launch" }
+					// TODO: yield / appreciation / status not yet modelled per-property.
+					Stat { label: "Target Yield", value_class: "text-main-accent-t2", "TODO" }
+					Stat { label: "Appreciation", value_class: "text-main-accent-t3", "TODO" }
+					Stat { label: "Status", value_class: "text-white", "TODO" }
 				}
 			}
 		}
 	}
 }
 
-/// Standard side tile. Static marketing content.
+/// Standard side tile. Links to the TMS Luxury Hotel & Residence property page.
 #[component]
 fn SideCard() -> Element {
 	rsx! {
-		div {
+		a {
+			href: "/?property={TMS_PROPERTY}",
+			target: "_top",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
-				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({HERO_BAY})",
+				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({TMS_BANNER})",
 			}
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
 					IconPin {}
-					"Quy Nhon Center"
+					"28 Nguyễn Huệ, Quy Nhơn"
 				}
-				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "Quy Nhon Bay Residences" }
+				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "TMS Luxury Hotel & Residence" }
 				p { class: "mb-6 font-light text-sm text-main-mist/70",
-					"Premium high-rise apartments with panoramic views of the bay, integrating luxury amenities and smart-home technology."
+					"Quy Nhơn's tallest landmark — a 42-floor beachfront tower pairing five-star Grand Hyams hotel service with branded condotel residences steps from the city beach."
 				}
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
 					div {
-						span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "LTV Ratio" }
-						span { class: "text-sm font-serif font-bold text-white", "55% Max" }
+						span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Avg. Apartment" }
+						span { class: "text-sm font-serif font-bold text-white", "$76,000" }
 					}
-					Button {
-						variant: ButtonVariant::Ghost,
-						class: "p-0 font-mono text-xs tracking-wider text-main-accent-t1 hover:bg-transparent hover:text-white",
-						"Deal Sheet"
+					span { class: "flex items-center font-mono text-xs tracking-wider text-main-accent-t1 transition-colors group-hover:text-white",
+						"View Property"
 						IconArrow {}
 					}
 				}

@@ -20,12 +20,40 @@ pub type SelectedProperty = Resource<Option<Property>>;
 
 #[component]
 pub fn App() -> Element {
+	// The router canonicalises the URL to the matched route the instant it mounts,
+	// dropping any query it doesn't model (`?property`, `?selection`). App renders
+	// before the router, so snapshot the deep link here and hand it down.
+	use_context_provider(DeepLink::capture);
 	rsx! {
 		document::Stylesheet { href: asset!("/assets/tailwind.css") }
 		// Self-hosted brand webfonts, bundled and `@font-face`d by the uikit — no
 		// CDN, renders identically offline / behind a CSP.
 		ev_lib::uikit::Fonts {}
 		Router::<Route> {}
+	}
+}
+
+/// Deep-link state read from the URL once at startup, before the router wipes it.
+#[derive(Clone)]
+struct DeepLink {
+	property: Option<PropertyId>,
+	filter: Vec<PropertyStateKind>,
+}
+
+impl DeepLink {
+	fn capture() -> Self {
+		#[cfg(target_arch = "wasm32")]
+		{
+			// URL is user-editable: silently drop tokens that don't name a state, and
+			// fall back to the default set if nothing valid remains.
+			let filter: Vec<_> = crate::map::url_selection().split(',').filter_map(|s| s.trim().parse().ok()).collect();
+			Self {
+				property: crate::domain::parse_property_id(&crate::map::url_property()).ok(),
+				filter: if filter.is_empty() { vec![PropertyStateKind::Purchased] } else { filter },
+			}
+		}
+		#[cfg(not(target_arch = "wasm32"))]
+		Self { property: None, filter: vec![PropertyStateKind::Purchased] }
 	}
 }
 /// Two surfaces off one binary: the full dashboard at `/`, and the iframe-only
@@ -41,10 +69,11 @@ enum Route {
 
 #[component]
 fn Home() -> Element {
-	let selected: Selected = use_signal(initial_selection);
+	let deep = use_context::<DeepLink>();
+	let selected: Selected = use_signal(|| deep.property);
 	use_context_provider(|| selected);
 
-	let filter: Filter = use_signal(initial_filter);
+	let filter: Filter = use_signal(|| deep.filter);
 	use_context_provider(|| filter);
 
 	// Mirror the state filter into `?selection=` so a shared link restores the set.
@@ -101,31 +130,5 @@ fn Home() -> Element {
 fn EmbedOverview() -> Element {
 	rsx! {
 		crate::embed::Overview {}
-	}
-}
-/// Deep-link support: read `?property=<uuid>` so a shared URL opens preselected.
-fn initial_selection() -> Option<PropertyId> {
-	#[cfg(target_arch = "wasm32")]
-	{
-		crate::domain::parse_property_id(&crate::map::url_property()).ok()
-	}
-	#[cfg(not(target_arch = "wasm32"))]
-	{
-		None
-	}
-}
-
-/// Deep-link support: read `?selection=purchased,purchasing`, default `Purchased`.
-fn initial_filter() -> Vec<PropertyStateKind> {
-	#[cfg(target_arch = "wasm32")]
-	{
-		// URL is user-editable: silently drop tokens that don't name a state, and
-		// fall back to the default set if nothing valid remains.
-		let states: Vec<_> = crate::map::url_selection().split(',').filter_map(|s| s.trim().parse().ok()).collect();
-		if states.is_empty() { vec![PropertyStateKind::Purchased] } else { states }
-	}
-	#[cfg(not(target_arch = "wasm32"))]
-	{
-		vec![PropertyStateKind::Purchased]
 	}
 }
