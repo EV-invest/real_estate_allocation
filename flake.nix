@@ -154,12 +154,14 @@
                 pathsToLink = [ "/bin" "/lib" "/etc" ];
               };
               config = {
+                # No args baked in: deploy appends `--config /data/config.toml`.
+                # That config's `socket_addr` is what actually binds — main.rs
+                # derives dioxus' IP/PORT env from it, so setting them here would
+                # just get overwritten. The config MUST bind 0.0.0.0 to be
+                # reachable from outside the container.
                 Entrypoint = [ "/bin/real_estate_allocation" ];
-                Env = [
-                  "IP=0.0.0.0"
-                  "PORT=59079"
-                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-                ];
+                Env = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
+                # /data is a mounted volume: config.toml + sqlite db + properties.
                 WorkingDir = "/data";
                 ExposedPorts = { "59079/tcp" = { }; };
               };
