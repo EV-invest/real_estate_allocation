@@ -14,41 +14,56 @@ Real Estate allocation service and its microfrontend
 <h2>Installation</h2>
 </summary>
 
-## Installation
+## Deployment
+
+Target: `inferno_vps_tokyo` (Ubuntu 22.04, 2 vCPU, 2 GiB RAM).
+Same box as the landing site which iframes `/embed/overview`.
+
+### Build
 
 ```sh
-nix develop      # toolchain + deps
-dx serve         # dev server (fullstack)
+nix build .#image
+nix run .#image.copyTo -- oci-archive:/tmp/rea.tar:rea:latest
+scp /tmp/rea.tar inferno_vps_tokyo:/tmp/
+ssh inferno_vps_tokyo podman load < /tmp/rea.tar
 ```
 
-### Configuration
+Derivation in `flake.nix` — no git deps, `buildRustPackage` with server
+feature auto-selected via `cfg(not(target_arch = "wasm32"))` deps.
 
-Config is loaded via `LiveSettings` (see `examples/config.nix` for the shape).
-Defaults put the SQLite DB at `./data/app.db` and uploaded/seed files under
-`./data/properties`.
+### Config
 
-| key             | notes                                                                   |
-|-----------------|-------------------------------------------------------------------------|
-| `maps_api_key`  | Google Maps key. `examples/config.nix` reads it from `$GOOGLE_MAPS_KEY`. |
-| `admin_token`   | gates file uploads (`upload_file`).                                      |
-| `db_path`       | SQLite file; created + seeded on first run.                             |
-| `data_dir`      | on-disk property files (pics/docs).                                      |
-| `socket_addr`   | prod bind address (ignored under `dx serve`).                           |
+Minimal `/opt/evinvest/rea/config.toml`:
 
-#### Google Maps key — required scope
+```toml
+socket_addr = "0.0.0.0:59079"
+db_path = "/opt/evinvest/rea-data/app.db"
+data_dir = "/opt/evinvest/rea-data/properties"
+layout_path = "/opt/evinvest/rea-data/dashboard_layout.json"
+admin_token = "change-me-in-prod"
+admins = []
+maps_api_key = "not-set"
+```
 
-Map pins are stored as **Google Place IDs** and resolved in-browser via the
-**Places API (New)** (`Place.fetchFields(['location'])`); the loader requests
-`libraries=places&v=weekly`. So the key must have **Places API (New) enabled**.
-The legacy Places/Geocoding REST APIs are *not* used (and need billing) — don't
-rely on them. If pins stop dropping, check that scope first.
+### Systemd
 
-### Seeding
+```sh
+systemctl status evinvest-rea
+journalctl -u evinvest-rea -f
+```
 
-The DB is seeded once, on first run against an **empty** `properties` table
-(`store::seed`) — there is no runtime "add property" path yet. A non-empty DB is
-left untouched, and there are **no migrations**: after a schema change, delete
-`./data/app.db` to re-seed.
+### Caddy
+
+Landing Caddy routes `/embed/*` → `localhost:59079`.
+See `landing/INSTALLATION.md`.
+
+### Known gaps
+
+- **No WASM client bundle**: built with `cargo build`, not `dx build --release`.
+  SSR works but client-side hydration absent (calculator, dock panels).
+  Wire `dx build --release` into the Nix derivation (needs wasm32 target +
+  dioxus-cli + tailwind) for full interactivity.
+- **maps_api_key** dummy — Maps won't load (dashboard-only, embed unaffected).
 
 </details>
 <!-- markdownlint-restore -->

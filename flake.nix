@@ -8,8 +8,9 @@
     # Brand assets. Not a flake — just a pinned source tree we copy the logo out
     # of. "Latest logo" = `nix flake update ev_assets` (bumps flake.lock).
     ev_assets = { url = "github:EV-invest/assets"; flake = false; };
+    nix2container = { url = "github:nlewo/nix2container"; inputs.nixpkgs.follows = "nixpkgs"; };
   };
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes, ev_assets }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes, ev_assets, nix2container }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -117,16 +118,15 @@
             rustPlatform = pkgs.makeRustPlatform {
               inherit rustc cargo stdenv;
             };
-          in
-          {
-            default = rustPlatform.buildRustPackage {
+            reaBin = rustPlatform.buildRustPackage {
               inherit pname;
               version = manifest.version;
 
               buildInputs = with pkgs; [
                 openssl.dev
+                sqlite
               ];
-              nativeBuildInputs = with pkgs; [ pkg-config ];
+              nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook ];
 
               cargoLock.lockFile = ./Cargo.lock;
               src = pkgs.lib.cleanSource ./.;
@@ -134,7 +134,41 @@
               # `asset!("/assets/logo.svg")` needs the file present at compile
               # time; the gitignored copy isn't in the pure source, so stage it.
               postPatch = "cp -f ${logoSrc} real_estate_allocation/assets/logo.svg";
+              # Dioxus fullstack looks for `public/` next to its own binary.
+              # buildEnv symlinks don't work (binary resolves realpath), so the
+              # dir must be in the same store path as the binary.
+              postInstall = "mkdir -p $out/bin/public";
+              doCheck = false;
             };
+            n2c = nix2container.packages.${system}.nix2container;
+            # Dioxus fullstack panics without a `public/` directory next to the
+            # binary. Production usually generates this via `dx build --release`
+            # (WASM client + index.html); until that is wired into the Nix build
+            # (needs wasm32 target + dioxus-cli), an empty dir lets SSR work.
+            reaImage = n2c.buildImage {
+              name = "rea";
+              tag = "latest";
+              copyToRoot = pkgs.buildEnv {
+                name = "image-root";
+                paths = with pkgs; [ reaBin cacert sqlite ];
+                pathsToLink = [ "/bin" "/lib" "/etc" ];
+              };
+              config = {
+                Entrypoint = [ "/bin/real_estate_allocation" ];
+                Env = [
+                  "IP=0.0.0.0"
+                  "PORT=59079"
+                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                ];
+                WorkingDir = "/data";
+                ExposedPorts = { "59079/tcp" = { }; };
+              };
+            };
+          in
+          {
+            default = reaBin;
+            bin = reaBin;
+            image = reaImage;
           };
 
         devShells.default =

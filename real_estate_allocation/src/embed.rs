@@ -118,7 +118,7 @@ fn FeaturedCard() -> Element {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
 				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({Q1_BANNER})",
 			}
-			div { class: "absolute right-4 top-4 bg-main-accent-t1 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-main-black",
+			div { class: "absolute right-4 top-4 bg-main-accent-t1 px-3 py-1.5 font-mono text-[0.625rem] font-bold uppercase tracking-widest text-main-black",
 				"Featured Deal"
 			}
 			div { class: "relative z-10 p-8",
@@ -163,7 +163,7 @@ fn SideCard() -> Element {
 				}
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
 					div {
-						span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Avg. Apartment" }
+						span { class: "mb-0.5 block font-mono text-[0.5625rem] uppercase text-main-mist/40", "Avg. Apartment" }
 						span { class: "text-sm font-serif font-bold text-white", "$76,000" }
 					}
 					span { class: "flex items-center font-mono text-xs tracking-wider text-main-accent-t1 transition-colors group-hover:text-white",
@@ -182,7 +182,7 @@ fn WhyCard() -> Element {
 	rsx! {
 		div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-card p-8",
 			div {
-				div { class: "mb-6 inline-flex items-center gap-1.5 border border-main-accent-t1/20 bg-main-accent-t1/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-main-accent-t1",
+				div { class: "mb-6 inline-flex items-center gap-1.5 border border-main-accent-t1/20 bg-main-accent-t1/10 px-2 py-1 font-mono text-[0.5625rem] uppercase tracking-wider text-main-accent-t1",
 					IconTrend {}
 					"Market Growth"
 				}
@@ -233,18 +233,18 @@ fn Calculator() -> Element {
 	let out = p.evaluate(&exp, yoy() / 100.0, swap() / 100.0);
 
 	rsx! {
-		div { id: "calculator", class: "grid grid-cols-1 gap-6 border border-main-mist/10 bg-main-card p-8 md:col-span-2 md:grid-cols-2",
+		div { id: "calculator", class: "grid grid-cols-1 gap-3 border border-main-mist/10 bg-main-card p-4 md:col-span-2 md:grid-cols-2",
 			// Heading + swap slider
 			div { class: "flex flex-col",
-				span { class: "mb-2 block font-mono text-xs uppercase tracking-widest text-main-accent-t1",
-					"Risk Terminal"
+				div { class: "flex items-center gap-2",
+					span { class: "font-mono text-xs uppercase tracking-widest text-main-accent-t1", "Risk Terminal" }
+					h3 { class: "font-serif text-lg text-white", "Correlation Profile" }
 				}
-				h3 { class: "mb-2 font-serif text-2xl text-white sm:text-3xl", "Correlation Profile" }
-				p { class: "mb-auto font-light text-sm text-main-mist/70",
+				p { class: "mb-2 font-light text-xs text-main-mist/70",
 					"We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
 				}
-				div { class: "mt-5 font-mono text-xs",
-					label { class: "mb-3 block uppercase text-main-mist/40", "Allocation swapped into Vietnam (%)" }
+				div { class: "mt-auto font-mono text-[0.6875rem]",
+					label { class: "mb-1.5 block uppercase text-main-mist/40", "Allocation swapped into Vietnam (%)" }
 					span {
 						class: "relative flex w-full touch-none select-none items-center",
 						onpointerdown: move |e: PointerEvent| async move {
@@ -256,9 +256,7 @@ fn Calculator() -> Element {
 							swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
 						},
 						onpointermove: move |e: PointerEvent| {
-							if !dragging() {
-								return;
-							}
+							if !dragging() { return; }
 							let (ox, w) = bounds();
 							let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
 							swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
@@ -274,7 +272,7 @@ fn Calculator() -> Element {
 							}
 						}
 						span {
-							class: "block size-4 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
+							class: "block size-3 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
 							style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
 							role: "slider",
 							tabindex: "0",
@@ -294,45 +292,42 @@ fn Calculator() -> Element {
 							},
 						}
 					}
-					div { class: "mt-2 flex justify-between font-bold text-main-accent-t1",
+					div { class: "mt-1 flex justify-between font-bold text-main-accent-t1",
 						span { "0%" }
-						span { class: "text-sm", "{swap():.0}%" }
+						span { "{swap():.0}%" }
 						span { "100%" }
 					}
 				}
 			}
 
 			// Output panel
-			div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-black/40 p-6",
-				div { class: "space-y-4",
-					div {
-						span { class: "mb-1 block font-mono text-[10px] uppercase text-main-mist/40", "Δ Effective Risk Premia" }
-						span { class: "font-serif text-4xl font-bold text-main-accent-t3", "{out.delta_risk_premia * 10_000.0:+.1} bps" }
-					}
-					div { class: "grid grid-cols-2 gap-4 border-t border-main-mist/10 pt-4",
+			div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-black/40 p-3",
+				div {
+					span { class: "mb-0.5 block font-mono text-[0.5rem] uppercase text-main-mist/40", "Δ Effective Risk Premia" }
+					span { class: "font-serif text-2xl font-bold text-main-accent-t3", "{out.delta_risk_premia * 10_000.0:+.1} bps" }
+					div { class: "mt-2 flex gap-4 border-t border-main-mist/10 pt-2",
 						div {
-							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "Δ Expected Performance" }
-							span { class: "font-mono text-sm font-bold text-main-accent-t2", "{out.delta_performance * 100.0:+.2}%" }
+							span { class: "block font-mono text-[0.4375rem] uppercase text-main-mist/40", "Δ Expected Perf" }
+							span { class: "font-mono text-[0.6875rem] font-bold text-main-accent-t2", "{out.delta_performance * 100.0:+.2}%" }
 						}
 						div {
-							span { class: "mb-0.5 block font-mono text-[9px] uppercase text-main-mist/40", "ρ (S, Portfolio)" }
-							span { class: "font-mono text-sm font-bold text-white", "{out.rho_sp:+.2}" }
+							span { class: "block font-mono text-[0.4375rem] uppercase text-main-mist/40", "ρ (S, P)" }
+							span { class: "font-mono text-[0.6875rem] font-bold text-white", "{out.rho_sp:+.2}" }
 						}
 					}
 				}
-				p { class: "mt-4 text-[10px] font-light leading-relaxed text-main-mist/40",
-					"*Correlation figures are indicative placeholders pending the persisted estimated profile. Risk cost under probabilistic-Kelly sizing (γ≈1)."
+				p { class: "mt-2 text-[0.4375rem] font-light leading-tight text-main-mist/30",
+					"*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary."
 				}
 			}
 
-			// Factor exposure grid — spans both columns, fills the panel's lower band.
-			div { class: "font-mono text-xs md:col-span-2",
-				label { class: "mb-2 block uppercase text-main-mist/40", "Host book exposures · our ρ profile" }
-				div { class: "grid grid-cols-1 gap-2 sm:grid-cols-2",
+			// Factor exposure grid — spans both columns.
+			div { class: "font-mono text-[0.6875rem] md:col-span-2",
+				div { class: "grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4",
 					for (f, w) in p.factors.iter().zip(exposures.iter().copied()) {
-						StepperCell { label: f.label.to_string(), value: w, step: 1.0, min: 0.0, max: 100.0, suffix: "%".to_string(), rho: f.rho }
+						StepperCell { label: f.label.to_string(), value: w, step: 1.0, min: 0.0, max: 100.0, suffix: "%", rho: f.rho }
 					}
-					StepperCell { label: "Host YoY return".to_string(), value: yoy, step: 0.5, min: -50.0, max: 100.0, suffix: "%".to_string() }
+					StepperCell { label: "Host YoY return".to_string(), value: yoy, step: 0.5, min: -50.0, max: 100.0, suffix: "%" }
 				}
 			}
 		}
@@ -344,54 +339,74 @@ fn Calculator() -> Element {
 /// every factor exposure and the host YoY input. An optional `rho` renders our read-only
 /// correlation to that factor beside the box (the "profile vs factors" picture).
 #[component]
-fn StepperCell(label: String, value: Signal<f64>, step: f64, min: f64, max: f64, #[props(default)] suffix: String, #[props(default)] rho: Option<f64>) -> Element {
+fn StepperCell(label: String, value: Signal<f64>, step: f64, min: f64, max: f64, #[props(default)] suffix: &'static str, #[props(default)] rho: Option<f64>) -> Element {
 	let mut value = value;
-	// (start_y, start_value) captured on pointerdown; vertical drag maps to ±step.
+	let mut text = use_signal(|| format!("{:.1}", value()));
 	let mut drag = use_signal(|| Option::<(f64, f64)>::None);
 
 	rsx! {
-		div { class: "group flex items-center justify-between gap-2 rounded border border-main-mist/20 bg-main-black/60 px-3 py-2 font-mono",
-			span { class: "uppercase text-main-mist/60", "{label}" }
-			div { class: "flex items-center gap-3",
+		div { class: "group flex items-center justify-between gap-1 rounded border border-main-mist/20 bg-main-black/60 px-1.5 py-0 font-mono text-[0.625rem]",
+			span { class: "truncate uppercase text-main-mist/50", "{label}" }
+			div { class: "flex items-center gap-1",
 				if let Some(r) = rho {
 					span {
-						class: if r >= 0.0 { "text-[10px] text-main-accent-t2" } else { "text-[10px] text-main-accent-t3" },
-						"ρ {r:+.2}"
+						class: if r >= 0.0 { "text-[0.5625rem] text-main-accent-t2" } else { "text-[0.5625rem] text-main-accent-t3" },
+						"{r:+.2}"
 					}
 				}
 				div {
-					class: "flex touch-none select-none items-center gap-2 rounded border border-main-mist/20 bg-main-black/40 px-2 py-1",
+					class: "group/inner flex touch-none select-none items-center rounded border border-main-mist/20 bg-main-black/40",
 					onpointerdown: move |e: PointerEvent| drag.set(Some((e.client_coordinates().y, value()))),
 					onpointermove: move |e: PointerEvent| {
 						let Some((y0, v0)) = drag() else { return };
-						// ponytail: 8px of drag per step; up = increase.
 						let n = v0 + ((y0 - e.client_coordinates().y) / 8.0).round() * step;
 						value.set(n.clamp(min, max));
+						text.set(format!("{value:.1}"));
 					},
 					onpointerup: move |_| drag.set(None),
 					onpointerleave: move |_| drag.set(None),
-					tabindex: "0",
-					onkeydown: move |e: KeyboardEvent| {
-						let delta = match e.key() {
-							Key::ArrowUp => step,
-							Key::ArrowDown => -step,
-							_ => return,
-						};
-						value.set((value() + delta).clamp(min, max));
-						e.prevent_default();
-					},
-					span { class: "min-w-[3ch] text-right text-sm font-bold text-white", "{value():.1}{suffix}" }
-					div { class: "flex flex-col opacity-0 transition-opacity group-hover:opacity-100",
+					input {
+						r#type: "text",
+						inputmode: "decimal",
+						class: "w-[4ch] bg-transparent px-0.5 py-0 text-right text-white outline-none",
+						value: "{text}{suffix}",
+						oninput: move |e: FormEvent| text.set(e.value()),
+						onblur: move |_| {
+							if let Ok(v) = text().parse::<f64>() {
+								value.set(v.clamp(min, max));
+								text.set(format!("{value:.1}"));
+							} else {
+								text.set(format!("{value:.1}"));
+							}
+						},
+						onkeydown: move |e: KeyboardEvent| {
+							match e.key() {
+								Key::Enter => {
+									if let Ok(v) = text().parse::<f64>() {
+										value.set(v.clamp(min, max));
+										text.set(format!("{value:.1}"));
+									} else {
+										text.set(format!("{value:.1}"));
+									}
+								},
+								Key::ArrowUp => { value.set((value() + step).clamp(min, max)); text.set(format!("{value:.1}")); e.prevent_default(); },
+								Key::ArrowDown => { value.set((value() - step).clamp(min, max)); text.set(format!("{value:.1}")); e.prevent_default(); },
+								Key::Escape => { text.set(format!("{value:.1}")); e.prevent_default(); },
+								_ => {},
+							}
+						},
+					}
+					div { class: "flex flex-col opacity-0 transition-opacity group-hover/inner:opacity-100",
 						button {
 							r#type: "button",
 							class: "leading-none text-main-mist/50 hover:text-white",
-							onclick: move |_| value.set((value() + step).clamp(min, max)),
+							onclick: move |_| { value.set((value() + step).clamp(min, max)); text.set(format!("{value:.1}")); },
 							IconChevron { up: true }
 						}
 						button {
 							r#type: "button",
 							class: "leading-none text-main-mist/50 hover:text-white",
-							onclick: move |_| value.set((value() - step).clamp(min, max)),
+							onclick: move |_| { value.set((value() - step).clamp(min, max)); text.set(format!("{value:.1}")); },
 							IconChevron { up: false }
 						}
 					}
@@ -418,7 +433,7 @@ fn IconChevron(up: bool) -> Element {
 fn Stat(label: String, #[props(default)] value_class: String, children: Element) -> Element {
 	rsx! {
 		div {
-			span { class: "mb-1 block font-mono text-[10px] uppercase text-main-mist/40", "{label}" }
+			span { class: "mb-1 block font-mono text-[0.625rem] uppercase text-main-mist/40", "{label}" }
 			span { class: "text-lg font-serif font-bold {value_class}", {children} }
 		}
 	}
