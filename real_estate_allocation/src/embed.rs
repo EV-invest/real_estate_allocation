@@ -233,81 +233,71 @@ fn Calculator() -> Element {
 	let out = p.evaluate(&exp, yoy() / 100.0, swap() / 100.0);
 
 	rsx! {
-		div { id: "calculator", class: "grid grid-cols-1 gap-8 border border-main-mist/10 bg-main-card p-8 md:col-span-2 md:grid-cols-2",
-			div { class: "flex flex-col justify-between",
-				div {
-					span { class: "mb-3 block font-mono text-xs uppercase tracking-widest text-main-accent-t1",
-						"Risk Terminal"
-					}
-					h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "Correlation Profile" }
-					p { class: "mb-6 font-light text-sm text-main-mist/70",
-						"Enter your book's factor exposures. We are judged not on our own return but on the marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
-					}
+		div { id: "calculator", class: "grid grid-cols-1 gap-6 border border-main-mist/10 bg-main-card p-8 md:col-span-2 md:grid-cols-2",
+			// Heading + swap slider
+			div { class: "flex flex-col",
+				span { class: "mb-2 block font-mono text-xs uppercase tracking-widest text-main-accent-t1",
+					"Risk Terminal"
 				}
-				div { class: "space-y-4 font-mono text-xs",
-					div {
-						label { class: "mb-3 block uppercase text-main-mist/40", "Allocation swapped into Vietnam (%)" }
-						span {
-							class: "relative flex w-full touch-none select-none items-center",
-							onpointerdown: move |e: PointerEvent| async move {
-								let Some(t) = track() else { return };
-								let Ok(rect) = t.get_client_rect().await else { return };
-								bounds.set((rect.origin.x, rect.size.width));
-								dragging.set(true);
-								let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
-								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
-							},
-							onpointermove: move |e: PointerEvent| {
-								if !dragging() {
-									return;
-								}
-								let (ox, w) = bounds();
-								let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
-								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
-							},
-							onpointerup: move |_| dragging.set(false),
-							onpointerleave: move |_| dragging.set(false),
-							span {
-								class: "relative h-1.5 w-full grow overflow-hidden rounded-full bg-main-black/50",
-								onmounted: move |e: MountedEvent| track.set(Some(e.data())),
-								span {
-									class: "absolute h-full bg-main-accent-t1",
-									style: "width: {pct}%;",
-								}
+				h3 { class: "mb-2 font-serif text-2xl text-white sm:text-3xl", "Correlation Profile" }
+				p { class: "mb-auto font-light text-sm text-main-mist/70",
+					"We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
+				}
+				div { class: "mt-5 font-mono text-xs",
+					label { class: "mb-3 block uppercase text-main-mist/40", "Allocation swapped into Vietnam (%)" }
+					span {
+						class: "relative flex w-full touch-none select-none items-center",
+						onpointerdown: move |e: PointerEvent| async move {
+							let Some(t) = track() else { return };
+							let Ok(rect) = t.get_client_rect().await else { return };
+							bounds.set((rect.origin.x, rect.size.width));
+							dragging.set(true);
+							let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
+							swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+						},
+						onpointermove: move |e: PointerEvent| {
+							if !dragging() {
+								return;
 							}
+							let (ox, w) = bounds();
+							let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
+							swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+						},
+						onpointerup: move |_| dragging.set(false),
+						onpointerleave: move |_| dragging.set(false),
+						span {
+							class: "relative h-1.5 w-full grow overflow-hidden rounded-full bg-main-black/50",
+							onmounted: move |e: MountedEvent| track.set(Some(e.data())),
 							span {
-								class: "block size-4 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
-								style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
-								role: "slider",
-								tabindex: "0",
-								"aria-valuenow": swap(),
-								"aria-valuemin": A_MIN,
-								"aria-valuemax": A_MAX,
-								onkeydown: move |e: KeyboardEvent| {
-									let next = match e.key() {
-										Key::ArrowRight | Key::ArrowUp => swap() + A_STEP,
-										Key::ArrowLeft | Key::ArrowDown => swap() - A_STEP,
-										Key::Home => A_MIN,
-										Key::End => A_MAX,
-										_ => return,
-									};
-									e.prevent_default();
-									swap.set(snap(next));
-								},
+								class: "absolute h-full bg-main-accent-t1",
+								style: "width: {pct}%;",
 							}
 						}
-						div { class: "mt-2 flex justify-between font-bold text-main-accent-t1",
-							span { "0%" }
-							span { class: "text-sm", "{swap():.0}%" }
-							span { "100%" }
+						span {
+							class: "block size-4 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
+							style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
+							role: "slider",
+							tabindex: "0",
+							"aria-valuenow": swap(),
+							"aria-valuemin": A_MIN,
+							"aria-valuemax": A_MAX,
+							onkeydown: move |e: KeyboardEvent| {
+								let next = match e.key() {
+									Key::ArrowRight | Key::ArrowUp => swap() + A_STEP,
+									Key::ArrowLeft | Key::ArrowDown => swap() - A_STEP,
+									Key::Home => A_MIN,
+									Key::End => A_MAX,
+									_ => return,
+								};
+								e.prevent_default();
+								swap.set(snap(next));
+							},
 						}
 					}
-					div { class: "space-y-2",
-						label { class: "mb-1 block uppercase text-main-mist/40", "Host book exposures · our ρ profile" }
-						for (f, w) in p.factors.iter().zip(exposures.iter().copied()) {
-							StepperCell { label: f.label.to_string(), value: w, step: 1.0, min: 0.0, max: 100.0, suffix: "%".to_string(), rho: f.rho }
-						}
-						StepperCell { label: "Host YoY return".to_string(), value: yoy, step: 0.5, min: -50.0, max: 100.0, suffix: "%".to_string() }
+					div { class: "mt-2 flex justify-between font-bold text-main-accent-t1",
+						span { "0%" }
+						span { class: "text-sm", "{swap():.0}%" }
+						span { "100%" }
 					}
 				}
 			}
@@ -330,13 +320,19 @@ fn Calculator() -> Element {
 						}
 					}
 				}
-				div { class: "mt-6",
-					p { class: "mb-4 text-[10px] font-light leading-relaxed text-main-mist/40",
-						"*Correlation figures are indicative placeholders pending the persisted estimated profile. Risk cost under probabilistic-Kelly sizing (γ≈1). Actual results may vary."
+				p { class: "mt-4 text-[10px] font-light leading-relaxed text-main-mist/40",
+					"*Correlation figures are indicative placeholders pending the persisted estimated profile. Risk cost under probabilistic-Kelly sizing (γ≈1)."
+				}
+			}
+
+			// Factor exposure grid — spans both columns, fills the panel's lower band.
+			div { class: "font-mono text-xs md:col-span-2",
+				label { class: "mb-2 block uppercase text-main-mist/40", "Host book exposures · our ρ profile" }
+				div { class: "grid grid-cols-1 gap-2 sm:grid-cols-2",
+					for (f, w) in p.factors.iter().zip(exposures.iter().copied()) {
+						StepperCell { label: f.label.to_string(), value: w, step: 1.0, min: 0.0, max: 100.0, suffix: "%".to_string(), rho: f.rho }
 					}
-					Button { class: "w-full rounded-none bg-main-accent-t1 py-5 font-mono text-xs uppercase tracking-wider text-main-black hover:bg-main-mist hover:text-main-brand",
-						"Request advisory"
-					}
+					StepperCell { label: "Host YoY return".to_string(), value: yoy, step: 0.5, min: -50.0, max: 100.0, suffix: "%".to_string() }
 				}
 			}
 		}
