@@ -2,112 +2,117 @@ use dioxus::prelude::*;
 use ev_lib::uikit::{Card, CardContent, Skeleton};
 
 use crate::{
-	app::Selected,
-	domain::{Property, PropertyId, PropertyStateKind},
+	app::{Filter, SelectedAppt, SelectedBuilding},
+	domain::{Apartment, ApartmentStatus, Building, BuildingId, PropertyStateKind},
 };
 
-/// Portfolio heatmap: a treemap of every holding, area ∝ price, colour ∝ recent
-/// value change, with the selected property highlighted and each tile clickable.
+/// Portfolio heatmap + drill-down: a treemap of buildings (area ∝ the summed price of
+/// the lots that match the active filter, colour ∝ their mean value change). The
+/// selected building is outlined and subdivided into its own apartments — clicking a
+/// sub-tile descends into that apartment.
 #[component]
 pub fn PortfolioHeatmap() -> Element {
-	// Shares the map's `?selection=` filter, minus `Interesting`: the heatmap is the
-	// committed book, so prospects never enter the treemap. Owned tiles are solid;
-	// purchasing ones are striped over the heat fill.
-	let filter = use_context::<crate::app::Filter>();
-	let properties = use_resource(move || {
-		let states = query_states(&filter());
-		async move { crate::api::list_properties(Some(states)).await.unwrap_or_default() }
+	let filter = use_context::<Filter>();
+	let buildings = use_resource(move || {
+		let states = filter();
+		async move { crate::api::list_buildings(Some(states)).await.unwrap_or_default() }
 	});
 
 	rsx! {
-		// h-full so the treemap fills (and reflows with) its dock pane; the tab already labels it,
-		// so the redundant card header is gone — only the loss/gain legend survives, overlaid.
+		// h-full so the treemap fills (and reflows with) its dock pane; the tab already labels it.
 		Card { class: "flex h-full flex-col",
 			CardContent { class: "relative flex-1",
-				match &*properties.read() {
+				match &*buildings.read() {
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 					Some(list) if list.is_empty() => rsx! {
 						div { class: "flex h-full items-center justify-center text-sm text-muted-foreground",
 							"No holdings to display."
 						}
 					},
-					Some(list) => rsx! { Treemap { properties: list.clone() } },
+					Some(list) => rsx! { Treemap { buildings: list.clone(), states: filter() } },
 				}
 			}
 		}
 	}
 }
 
-/// The heatmap's committed-book filter: the chip states minus `Interesting` (a
-/// prospect, never drawn). Empty in → empty out → empty treemap. The store query
-/// is the OR over exactly these states, so an empty set draws nothing.
-fn query_states(filter: &[PropertyStateKind]) -> Vec<PropertyStateKind> {
-	filter.iter().copied().filter(|s| *s != PropertyStateKind::Interesting).collect()
-}
-
-/// One fully-resolved tile: geometry + everything needed to paint it. Built once
-/// from the property list so the view is a single pass over `Vec<Tile>` — no
-/// parallel `rects[i]` indexing, no per-tile recomputation mid-render.
+/// One building tile: geometry + paint + the lots needed to subdivide it when selected.
 #[derive(Clone, PartialEq)]
-struct Tile {
-	id: PropertyId,
+struct BTile {
+	id: BuildingId,
 	name: String,
 	rect: Rect,
 	change: f64,
-	/// Not-yet-owned (under-construction / interesting): drawn provisional —
-	/// dimmed + hatched over the heat fill.
+	/// No selected lot is actually owned (`Purchased`) — a not-yet-ours holding, drawn
+	/// provisional (dimmed + hatched) just like a `Purchasing` apartment sub-tile.
 	prospect: bool,
+	apartments: Vec<Apartment>,
 }
 
-impl Tile {
-	fn layout(properties: &[Property]) -> Vec<Self> {
-		// Unknown-price holdings (e.g. still `Purchasing`) get the *mean* known price,
-		// not an absolute `1.0`: beside six-figure holdings a flat 1.0 collapses to a
-		// zero-area sliver and the tile vanishes. Mean keeps it visibly present without
-		// inventing a figure. No known prices at all → equal weights.
-		let known: Vec<f64> = properties.iter().filter_map(|p| p.price.map(|m| m.amount())).filter(|a| *a > 0.0).collect();
-		let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
-		let values: Vec<f64> = properties.iter().map(|p| p.price.map_or(fallback, |m| m.amount()).max(1.0)).collect();
-		let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
-		properties
-			.iter()
-			.zip(rects)
-			.map(|(p, rect)| Tile {
-				id: p.id,
-				name: p.name.clone(),
+/// A lot's contribution to area: its price, or the mean known price as a fallback so a
+/// price-less lot stays visible rather than collapsing to a sliver.
+fn lot_value(a: &Apartment, fallback: f64) -> f64 {
+	a.price.map_or(fallback, |m| m.amount()).max(1.0)
+}
+
+/// The lots that "made the selection": ours in one of the active filter kinds.
+fn selected_lots<'a>(b: &'a Building, states: &'a [PropertyStateKind]) -> impl Iterator<Item = &'a Apartment> {
+	b.apartments.iter().filter(move |a| a.status.portfolio_kind().is_some_and(|k| states.contains(&k)))
+}
+
+fn layout(buildings: &[Building], states: &[PropertyStateKind]) -> Vec<BTile> {
+	let known: Vec<f64> = buildings.iter().flat_map(|b| &b.apartments).filter_map(|a| a.price.map(|m| m.amount())).filter(|a| *a > 0.0).collect();
+	let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
+
+	let values: Vec<f64> = buildings.iter().map(|b| selected_lots(b, states).map(|a| lot_value(a, fallback)).sum::<f64>().max(1.0)).collect();
+	let rects = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
+	buildings
+		.iter()
+		.zip(rects)
+		.map(|(b, rect)| {
+			let sel: Vec<&Apartment> = selected_lots(b, states).collect();
+			let change = if sel.is_empty() { 0.0 } else { sel.iter().map(|a| apt_change(b.id, a.number)).sum::<f64>() / sel.len() as f64 };
+			let prospect = !sel.iter().any(|a| matches!(a.status, ApartmentStatus::Purchased(_)));
+			BTile {
+				id: b.id,
+				name: b.name.clone(),
 				rect,
-				change: mock_change(p.id),
-				prospect: p.state.kind() != PropertyStateKind::Purchased,
-			})
-			.collect()
-	}
+				change,
+				prospect,
+				apartments: b.apartments.clone(),
+			}
+		})
+		.collect()
 }
 
 #[component]
-fn Treemap(properties: Vec<Property>) -> Element {
-	let mut selected = use_context::<Selected>();
-	let tiles = Tile::layout(&properties);
+fn Treemap(buildings: Vec<Building>, states: Vec<PropertyStateKind>) -> Element {
+	let mut selected = use_context::<SelectedBuilding>();
+	let mut appt = use_context::<SelectedAppt>();
+	let tiles = layout(&buildings, &states);
 
 	rsx! {
 		div { class: "relative h-full w-full overflow-hidden rounded-lg bg-main-surface",
 			for t in tiles {
-				{
-					let Tile { id, name, rect: r, change, prospect } = t;
-					let is_sel = selected() == Some(id);
-					let ring = if is_sel { "ring-2 ring-main-accent-t1 z-10" } else { "" };
-					let (dim, stripes) = crate::uikit::provisional(prospect);
-					rsx! {
-						button {
-							key: "{id}",
-							class: "absolute flex flex-col justify-between overflow-hidden rounded-md p-2.5 text-left transition-[filter] hover:brightness-110 {ring} {dim}",
-							style: "left:calc({r.x:.4}% + 2px);top:calc({r.y:.4}% + 2px);width:calc({r.w:.4}% - 4px);height:calc({r.h:.4}% - 4px);background-color:{heat_color(change)}{stripes}",
-							onclick: move |_| selected.set(Some(id)),
-							div { class: "flex min-w-0 flex-col gap-0.5",
-								span { class: "truncate text-sm font-semibold text-white", "{name}" }
-								span { class: "text-xs text-white/80", "{change:+.1}%" }
-							}
-							if is_sel {
-								span { class: "text-[10px] font-semibold text-white/90", "● This property" }
+				if selected() == Some(t.id) {
+					BuildingCell { tile: t }
+				} else {
+					{
+						let BTile { id, name, rect: r, change, prospect, .. } = t;
+						let (dim, stripes) = crate::uikit::provisional(prospect);
+						rsx! {
+							button {
+								key: "{id}",
+								class: "absolute flex flex-col justify-between overflow-hidden rounded-md p-2.5 text-left transition-[filter] hover:brightness-110 {dim}",
+								style: "left:calc({r.x:.4}% + 2px);top:calc({r.y:.4}% + 2px);width:calc({r.w:.4}% - 4px);height:calc({r.h:.4}% - 4px);background-color:{heat_color(change)}{stripes}",
+								onclick: move |_| {
+									selected.set(Some(id));
+									appt.set(None);
+								},
+								div { class: "flex min-w-0 flex-col gap-0.5",
+									span { class: "truncate text-sm font-semibold text-white", "{name}" }
+									span { class: "text-xs text-white/80", "{change:+.1}%" }
+								}
 							}
 						}
 					}
@@ -117,11 +122,56 @@ fn Treemap(properties: Vec<Property>) -> Element {
 	}
 }
 
-/// No real performance data lives in the domain — `price_series` is itself a mock
-/// filled only by `get_property` — so derive a STABLE pseudo-change from the id.
-/// Same property always paints the same colour; range ≈ [-4%, +6%].
-fn mock_change(id: PropertyId) -> f64 {
-	let seed = id.raw().as_u64_pair().0;
+/// The selected building: an accent-t3 outline subdivided into its apartments. Each
+/// sub-tile descends into that apartment; the active one keeps the selection ring.
+#[component]
+fn BuildingCell(tile: BTile) -> Element {
+	let mut selected = use_context::<SelectedBuilding>();
+	let mut appt = use_context::<SelectedAppt>();
+	// `prospect` is a building-level flag; the expanded cell marks each lot individually.
+	let BTile { id, name, rect: r, change, apartments, .. } = tile;
+
+	let known: Vec<f64> = apartments.iter().filter_map(|a| a.price.map(|m| m.amount())).filter(|a| *a > 0.0).collect();
+	let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
+	let values: Vec<f64> = apartments.iter().map(|a| lot_value(a, fallback)).collect();
+	let inner = squarify(&values, Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
+
+	rsx! {
+		div {
+			key: "{id}",
+			class: "absolute z-20 overflow-hidden rounded-md ring-2 ring-main-accent-t3",
+			style: "left:calc({r.x:.4}% + 2px);top:calc({r.y:.4}% + 2px);width:calc({r.w:.4}% - 4px);height:calc({r.h:.4}% - 4px);background-color:{heat_color(change)}",
+			span { class: "pointer-events-none absolute left-1 top-1 z-30 rounded bg-main-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-main-accent-t3", "{name}" }
+			for (a, ar) in apartments.into_iter().zip(inner) {
+				{
+					let n = a.number;
+					let ch = apt_change(id, n);
+					let is_sel = appt() == Some(n);
+					let ring = if is_sel { "ring-2 ring-main-accent-t1 z-10" } else { "" };
+					let (dim, stripes) = crate::uikit::provisional(a.status == ApartmentStatus::Purchasing);
+					rsx! {
+						button {
+							key: "{n}",
+							title: "Apt {n}",
+							class: "absolute overflow-hidden rounded-sm transition-[filter] hover:brightness-110 {ring} {dim}",
+							style: "left:calc({ar.x:.4}% + 1px);top:calc({ar.y:.4}% + 1px);width:calc({ar.w:.4}% - 2px);height:calc({ar.h:.4}% - 2px);background-color:{heat_color(ch)}{stripes}",
+							onclick: move |_| {
+								selected.set(Some(id));
+								appt.set(Some(n));
+							},
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/// No real performance data lives in the domain — `price_series` is itself a mock —
+/// so derive a STABLE pseudo-change per lot from the building id + lot number. Same lot
+/// always paints the same colour; range ≈ [-4%, +6%].
+fn apt_change(building: BuildingId, number: u32) -> f64 {
+	let seed = building.raw().as_u64_pair().0 ^ (number as u64).wrapping_mul(0x9E3779B97F4A7C15);
 	((seed % 1000) as f64 / 1000.0) * 10.0 - 4.0
 }
 
@@ -239,16 +289,23 @@ mod tests {
 	use uuid::Uuid;
 
 	use super::*;
-	use crate::domain::{ConstructionStatus, GooglePlace, Money, PropertyState, ResearchUrl};
+	use crate::domain::{ConstructionStatus, GooglePlace, Money, ResearchUrl};
 
-	// `mock_change` keys off the id's high 64 bits → seed those for stable heat colours.
-	fn prop(seed: u64, name: &str, price: Option<f64>, state: PropertyState) -> Property {
-		Property {
-			id: PropertyId::from_raw(Uuid::from_u128((seed as u128) << 64)),
+	fn apt(number: u32, status: ApartmentStatus, price: Option<f64>) -> Apartment {
+		Apartment {
+			number,
+			status,
+			price: price.map(|p| Money::parse(p).unwrap()),
+			price_series: vec![],
+		}
+	}
+
+	// `apt_change` keys off the id's high 64 bits → seed those for stable heat colours.
+	fn building(seed: u64, name: &str, apartments: Vec<Apartment>) -> Building {
+		Building {
+			id: BuildingId::from_raw(Uuid::from_u128((seed as u128) << 64)),
 			name: name.into(),
 			place: GooglePlace::parse("place".into()).unwrap(),
-			price: price.map(|p| Money::parse(p).unwrap()),
-			state,
 			construction: ConstructionStatus::Completed,
 			target_appreciation: 0.0,
 			developer: None,
@@ -257,59 +314,79 @@ mod tests {
 			deal: None,
 			loan: None,
 			additional_reasoning: None,
-			price_series: vec![],
+			apartments,
 			coords: None,
 		}
 	}
 
-	/// Mirrors the real book: priced `Purchased` holdings plus price-less `Purchasing`
-	/// ones — the exact mix that made the purchasing tiles vanish.
-	fn mixed_book() -> Vec<Property> {
+	fn book() -> Vec<Building> {
 		let bought: Timestamp = "2024-01-01T00:00:00Z".parse().unwrap();
 		vec![
-			prop(250, "Quy Nhon Melody", Some(96000.0), PropertyState::Purchased(bought)),
-			prop(700, "Vina2 Panorama", Some(60000.0), PropertyState::Purchased(bought)),
-			prop(500, "Ecolife Riverside", Some(59000.0), PropertyState::Purchased(bought)),
-			prop(150, "The Calla", Some(80000.0), PropertyState::Purchased(bought)),
-			prop(900, "Q1 Tower", None, PropertyState::Purchasing),
-			prop(350, "Triton", None, PropertyState::Purchasing),
+			building(
+				250,
+				"Melody",
+				vec![
+					apt(1, ApartmentStatus::Purchased(bought), Some(96000.0)),
+					apt(2, ApartmentStatus::Purchased(bought), Some(90000.0)),
+					apt(3, ApartmentStatus::Sold, Some(80000.0)),
+					apt(4, ApartmentStatus::Available, Some(85000.0)),
+				],
+			),
+			building(700, "Vina2", vec![apt(1, ApartmentStatus::Purchased(bought), Some(60000.0)), apt(2, ApartmentStatus::Sold, Some(55000.0))]),
+			building(900, "Q1", vec![apt(1, ApartmentStatus::Purchasing, Some(40000.0)), apt(2, ApartmentStatus::Available, Some(42000.0))]),
 		]
 	}
 
-	fn render(properties: Vec<Property>) -> String {
+	fn render(buildings: Vec<Building>, states: Vec<PropertyStateKind>) -> String {
 		#[component]
-		fn Harness(properties: Vec<Property>) -> Element {
-			let sel: Selected = use_signal(|| None);
-			use_context_provider(|| sel);
-			rsx! { Treemap { properties } }
+		fn Harness(buildings: Vec<Building>, states: Vec<PropertyStateKind>) -> Element {
+			let sb: SelectedBuilding = use_signal(|| None);
+			use_context_provider(|| sb);
+			let sa: SelectedAppt = use_signal(|| None);
+			use_context_provider(|| sa);
+			rsx! { Treemap { buildings, states } }
 		}
-		let mut dom = VirtualDom::new_with_props(Harness, HarnessProps { properties });
+		let mut dom = VirtualDom::new_with_props(Harness, HarnessProps { buildings, states });
 		dom.rebuild_in_place();
 		dioxus_ssr::render(&dom)
 	}
 
-	/// The defect: price-less `Purchasing` holdings collapsed to a zero-area sliver
-	/// when shown beside priced ones, so they disappeared. Every drawn tile must hold
-	/// a meaningful share of the 100×100 board (>1%).
+	/// A building's area is the summed price of the lots that match the filter (its owned
+	/// `Purchased` lots here), so Melody (186k owned) outweighs Vina2 (60k) ~3:1, and a
+	/// building with no matching lot (Q1) is filtered out exactly as the server does it.
 	#[test]
-	fn priceless_holdings_stay_visible() {
-		let tiles = Tile::layout(&mixed_book());
+	fn building_area_proportional_to_owned_value() {
+		use PropertyStateKind::*;
+		let states = [Purchased];
+		let included: Vec<Building> = book().into_iter().filter(|b| b.state_kinds().any(|k| states.contains(&k))).collect();
+		assert_eq!(included.len(), 2, "Q1 (no purchased lot) excluded");
+
+		let tiles = layout(&included, &states);
+		let area = |name: &str| tiles.iter().find(|t| t.name == name).map(|t| t.rect.w * t.rect.h).unwrap();
+		let ratio = area("Melody") / area("Vina2");
+		assert!((ratio - 186000.0 / 60000.0).abs() < 0.1, "area ratio {ratio} ≈ 3.1");
 		for t in &tiles {
-			let area = t.rect.w * t.rect.h;
-			assert!(area > 100.0, "{} collapsed to {area:.4} (<1% of board) — invisible", t.name);
+			assert!(t.rect.w * t.rect.h > 100.0, "{} collapsed to a sliver", t.name);
 		}
-		assert!(tiles.iter().filter(|t| t.prospect).count() == 2, "both purchasing tiles present");
-		insta::assert_snapshot!("heatmap_mixed_book", render(mixed_book()));
+		insta::assert_snapshot!("heatmap_book", render(included, states.to_vec()));
 	}
 
-	/// The heatmap is the committed book: `Interesting` never drawn, everything else
-	/// kept, empty selection draws nothing.
+	/// A building with no owned (`Purchased`) lot in the active filter is a prospect:
+	/// its tile is drawn provisional (dimmed + hatched), an owned one is solid.
 	#[test]
-	fn query_states_drops_only_interesting() {
+	fn prospect_buildings_drawn_provisional() {
 		use PropertyStateKind::*;
-		assert_eq!(query_states(&[]), Vec::<PropertyStateKind>::new());
-		assert_eq!(query_states(&[Purchased]), vec![Purchased]);
-		assert_eq!(query_states(&[Purchased, Interesting, Purchasing]), vec![Purchased, Purchasing]);
+		let states = [Purchased, Purchasing];
+		let included: Vec<Building> = book().into_iter().filter(|b| b.state_kinds().any(|k| states.contains(&k))).collect();
+		let tiles = layout(&included, &states);
+
+		let prospect = |name: &str| tiles.iter().find(|t| t.name == name).unwrap().prospect;
+		assert!(prospect("Q1"), "Q1 (purchasing only) is a prospect");
+		assert!(!prospect("Melody"), "Melody (owned lots) is not a prospect");
+
+		let html = render(included, states.to_vec());
+		assert!(html.contains("repeating-linear-gradient"), "prospect tile must be hatched");
+		assert!(html.contains("opacity-50"), "prospect tile must be dimmed");
 	}
 
 	#[test]

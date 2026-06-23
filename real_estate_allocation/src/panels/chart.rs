@@ -1,18 +1,25 @@
 use dioxus::prelude::*;
 use ev_lib::uikit::{Card, CardContent, Skeleton};
 
-use crate::{app::SelectedProperty, domain::Money};
+use crate::{
+	app::{BuildingResource, SelectedAppt},
+	domain::{Apartment, Building},
+};
 
 #[component]
 pub fn ChartPanel() -> Element {
-	let property = use_context::<SelectedProperty>();
+	let building = use_context::<BuildingResource>();
+	let appt = use_context::<SelectedAppt>();
 
 	rsx! {
 		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex flex-1 flex-col gap-4",
-				match &*property.read() {
-					Some(Some(p)) => rsx! { ChartBody { price: p.price } },
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a property on the map." } },
+				match &*building.read() {
+					Some(Some(b)) => {
+						let apt = appt().and_then(|n| b.apartments.iter().find(|a| a.number == n).cloned());
+						rsx! { ChartBody { building: b.clone(), apt } }
+					}
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a building on the map." } },
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
 			}
@@ -21,44 +28,72 @@ pub fn ChartPanel() -> Element {
 }
 
 #[component]
-fn ChartBody(price: Option<Money>) -> Element {
+fn ChartBody(building: Building, apt: Option<Apartment>) -> Element {
+	// Apartment view shows the lot's own price; building view the mean across lots.
+	let (label, price) = match &apt {
+		Some(a) => ("Price", a.price),
+		None => ("Avg apt. price", building.avg_price()),
+	};
 	rsx! {
-		div { class: "flex items-baseline gap-3",
+		div { class: "flex flex-col gap-0.5",
+			span { class: "text-xs uppercase tracking-wide text-muted-foreground", "{label}" }
 			match price {
 				Some(p) => rsx! { span { class: "font-serif text-3xl font-semibold", "{p}" } },
 				None => rsx! { span { class: "font-serif text-3xl font-semibold text-warn", "?" } },
 			}
 		}
-		PriceChart {}
+		PriceChart { building, apt }
 	}
 }
 
-/// Plotly price line. The axis always spans purchase→now: the owned stretch is full
-/// colour, any pre-purchase estimates are dimmed (lower oklch luminosity/chroma), and
-/// if the series goes stale before today a dotted line carries the last value to now.
+/// Plotly price line. At apartment level the axis spans purchase→now: the owned
+/// stretch is full colour, any pre-purchase estimates are dimmed, and a stale tail is
+/// carried to today as a dotted projection. At building level it plots the per-week
+/// mean across every lot's series (no single purchase instant, so full colour).
 #[component]
-fn PriceChart() -> Element {
+fn PriceChart(building: Building, apt: Option<Apartment>) -> Element {
 	#[cfg(target_arch = "wasm32")]
 	{
-		let property = use_context::<SelectedProperty>();
 		use_effect(move || {
-			let guard = property.read();
-			let Some(Some(p)) = guard.as_ref() else { return };
-			let points: Vec<(i64, f64)> = p.price_series.iter().map(|(t, v)| (t.as_millisecond(), *v)).collect();
+			let (points, purchase_ms): (Vec<(i64, f64)>, f64) = match &apt {
+				Some(a) => (
+					a.price_series.iter().map(|(t, v)| (t.as_millisecond(), *v)).collect(),
+					match a.status {
+						crate::domain::ApartmentStatus::Purchased(ts) => ts.as_millisecond() as f64,
+						_ => f64::NAN,
+					},
+				),
+				None => (building_mean_series(&building), f64::NAN),
+			};
 			let (Some(first), Some(last)) = (points.first().map(|p| p.1), points.last().map(|p| p.1)) else {
 				return;
 			};
 			let color_key = if last >= first { "up" } else { "down" };
-			let purchase_ms = match p.state {
-				crate::domain::PropertyState::Purchased(ts) => ts.as_millisecond() as f64,
-				_ => f64::NAN,
-			};
 			plot_prices("rea-chart", &serde_json::to_string(&points).expect("Vec<(i64,f64)> serializes"), purchase_ms, color_key);
 		});
 	}
+	#[cfg(not(target_arch = "wasm32"))]
+	let _ = (building, apt);
 	rsx! {
 		div { id: "rea-chart", class: "min-h-0 w-full flex-1" }
 	}
+}
+
+/// Per-week mean of every lot's value series (timestamps bucketed to the week), so the
+/// building chart is a single line over the same axis as the per-lot one.
+#[cfg(target_arch = "wasm32")]
+fn building_mean_series(building: &Building) -> Vec<(i64, f64)> {
+	use std::collections::BTreeMap;
+	const WEEK_MS: i64 = 7 * 24 * 3600 * 1000;
+	let mut buckets: BTreeMap<i64, (f64, u32)> = BTreeMap::new();
+	for a in &building.apartments {
+		for (t, v) in &a.price_series {
+			let e = buckets.entry(t.as_millisecond() / WEEK_MS).or_default();
+			e.0 += *v;
+			e.1 += 1;
+		}
+	}
+	buckets.into_iter().map(|(k, (sum, n))| (k * WEEK_MS, sum / n as f64)).collect()
 }
 
 #[cfg(target_arch = "wasm32")]

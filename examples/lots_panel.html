@@ -1,0 +1,94 @@
+<!doctype html>
+<!-- ponytail: standalone visual prototype for the Lots panel donut; source of truth for lots.rs -->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --main-black: #070d18;
+    --main-surface: #081020;
+    --main-card: #0c1626;
+    --mist: #e6e1d3;
+    --muted: rgba(230, 225, 211, 0.4);
+    --border: rgba(230, 225, 211, 0.1);
+    --gold: #f2c94c;            /* Sold (others) */
+    --gold-soft: #f6dd86;       /* Your Selection */
+    --slate: #2c3342;           /* Available */
+    --green: #2e9e5b;
+    --serif: "Playfair Display", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: var(--main-black);
+    color: var(--mist);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    display: flex; justify-content: center;
+  }
+  .panel {
+    width: 440px;
+    background: var(--main-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 28px;
+  }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .tile {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border: 1px solid var(--border);
+    background: var(--main-surface);
+    border-radius: 10px;
+    padding: 18px 8px;
+  }
+  .tile .num { font-family: var(--serif); font-size: 30px; font-weight: 600; line-height: 1; }
+  .tile .lbl { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+  .num.white { color: #fff; }
+  .num.gold { color: var(--gold); }
+  .num.green { color: var(--green); }
+
+  .donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .donut {
+    position: relative; width: 200px; height: 200px; border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      var(--gold)      0          var(--sold),
+      var(--slate)     var(--sold) var(--avail),
+      var(--gold-soft) var(--avail) 100%);
+  }
+  .donut .hole {
+    position: absolute; inset: 26%;
+    border-radius: 50%;
+    background: var(--main-card);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  }
+  .hole .pct { font-family: var(--serif); font-size: 32px; font-weight: 600; color: var(--gold); line-height: 1; }
+  .hole .cap { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+
+  .legend { display: flex; align-items: center; gap: 22px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <div class="tiles">
+      <div class="tile"><span class="num white">35</span><span class="lbl">Total Lots</span></div>
+      <div class="tile"><span class="num gold">22</span><span class="lbl">Sold</span></div>
+      <div class="tile"><span class="num green">13</span><span class="lbl">Available</span></div>
+    </div>
+    <div class="donut-wrap">
+      <div class="donut" style="--sold:48.6%; --avail:85.7%;">
+        <div class="hole">
+          <span class="pct">14.3%</span>
+          <span class="cap">Your Share</span>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--gold)"></span>Sold</span>
+        <span><span class="dot" style="background:var(--gold-soft)"></span>Your Selection</span>
+        <span><span class="dot" style="background:var(--slate)"></span>Available</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -2,12 +2,17 @@ use dioxus::prelude::*;
 
 use crate::{
 	dashboard::Dashboard,
-	domain::{Property, PropertyId, PropertyStateKind},
+	domain::{Building, BuildingId, PropertyStateKind},
 };
 
-/// The selected property, shared from the root so all panels read/write the same
-/// selection. `None` until the user clicks a marker.
-pub type Selected = Signal<Option<PropertyId>>;
+/// The selected building, shared from the root so all panels read/write the same
+/// selection. `None` until the user clicks a marker / heatmap tile.
+pub type SelectedBuilding = Signal<Option<BuildingId>>;
+
+/// The selected apartment *within* the selected building, by its 1-based `number`.
+/// `Some` ⇒ apartment view, `None` ⇒ building view. Only meaningful when a building
+/// is selected.
+pub type SelectedAppt = Signal<Option<u32>>;
 
 /// Portfolio state filter, shared so the map and heatmap show the same set.
 /// Defaults to `Purchased`.
@@ -16,13 +21,13 @@ pub type Filter = Signal<Vec<PropertyStateKind>>;
 /// The fetched record for the current selection, resolved once at the root and
 /// shared so the top bar, chart, and details panel don't each re-fetch it.
 /// Outer `None` = still loading; `Some(None)` = nothing selected.
-pub type SelectedProperty = Resource<Option<Property>>;
+pub type BuildingResource = Resource<Option<Building>>;
 
 #[component]
 pub fn App() -> Element {
 	// The router canonicalises the URL to the matched route the instant it mounts,
-	// dropping any query it doesn't model (`?property`, `?selection`). App renders
-	// before the router, so snapshot the deep link here and hand it down.
+	// dropping any query it doesn't model (`?building`, `?appt`, `?selection`). App
+	// renders before the router, so snapshot the deep link here and hand it down.
 	use_context_provider(DeepLink::capture);
 	rsx! {
 		document::Stylesheet { href: asset!("/assets/tailwind.css") }
@@ -36,7 +41,8 @@ pub fn App() -> Element {
 /// Deep-link state read from the URL once at startup, before the router wipes it.
 #[derive(Clone)]
 struct DeepLink {
-	property: Option<PropertyId>,
+	building: Option<BuildingId>,
+	appt: Option<u32>,
 	filter: Vec<PropertyStateKind>,
 }
 
@@ -48,12 +54,13 @@ impl DeepLink {
 			// fall back to the default set if nothing valid remains.
 			let filter: Vec<_> = crate::map::url_selection().split(',').filter_map(|s| s.trim().parse().ok()).collect();
 			Self {
-				property: crate::domain::parse_property_id(&crate::map::url_property()).ok(),
+				building: crate::domain::parse_building_id(&crate::map::url_building()).ok(),
+				appt: crate::map::url_appt().parse().ok(),
 				filter: if filter.is_empty() { vec![PropertyStateKind::Purchased] } else { filter },
 			}
 		}
 		#[cfg(not(target_arch = "wasm32"))]
-		Self { property: None, filter: vec![PropertyStateKind::Purchased] }
+		Self { building: None, appt: None, filter: vec![PropertyStateKind::Purchased] }
 	}
 }
 /// Two surfaces off one binary: the full dashboard at `/`, and the iframe-only
@@ -70,10 +77,13 @@ enum Route {
 #[component]
 fn Home() -> Element {
 	let deep = use_context::<DeepLink>();
-	let selected: Selected = use_signal(|| deep.property);
+	let selected: SelectedBuilding = use_signal(|| deep.building);
 	use_context_provider(|| selected);
 
-	let filter: Filter = use_signal(|| deep.filter);
+	let mut appt: SelectedAppt = use_signal(|| deep.appt);
+	use_context_provider(|| appt);
+
+	let filter: Filter = use_signal(|| deep.filter.clone());
 	use_context_provider(|| filter);
 
 	// Mirror the state filter into `?selection=` so a shared link restores the set.
@@ -83,13 +93,40 @@ fn Home() -> Element {
 		crate::map::sync_selection(&csv);
 	});
 
-	let property: SelectedProperty = use_resource(move || async move {
+	let building: BuildingResource = use_resource(move || async move {
 		match selected() {
-			Some(id) => crate::api::get_property(id).await.ok().flatten(),
+			Some(id) => crate::api::get_building(id).await.ok().flatten(),
 			None => None,
 		}
 	});
-	use_context_provider(|| property);
+	use_context_provider(|| building);
+
+	// Validate `appt` against the resolved building: a deep-linked or stale index that
+	// names no lot drops to the building view rather than keeping a tainted selection.
+	use_effect(move || {
+		let Some(n) = appt() else { return };
+		let guard = building.read();
+		let Some(Some(b)) = guard.as_ref() else { return }; // still loading
+		let known = b.apartments.iter().any(|a| a.number == n);
+		drop(guard);
+		if !known {
+			dioxus::logger::tracing::warn!(appt = n, "appt out of range for building — dropping to building view");
+			appt.set(None);
+		}
+	});
+
+	// One global ArrowLeft/ArrowRight handler, installed once for the page lifetime;
+	// it no-ops unless an apartment is selected. Mirrors the map's marker-click bridge.
+	#[cfg(target_arch = "wasm32")]
+	use_hook(move || {
+		let cb = wasm_bindgen::closure::Closure::<dyn FnMut(i32)>::new(move |dir: i32| {
+			if appt().is_some() {
+				cycle_appt(building, appt, dir);
+			}
+		});
+		crate::map::on_keynav(&cb);
+		cb.forget();
+	});
 
 	// Maps JS key is server-side config; fetch it so the loader `<script>` can be
 	// emitted with the right key (Maps JS keys are public, restricted by referrer).
@@ -122,8 +159,39 @@ fn Home() -> Element {
 			}
 			document::Script { src: "https://cdn.plot.ly/plotly-basic-2.35.2.min.js", defer: true }
 			Dashboard {}
+			// Discord-style prev/next, only while viewing an apartment; wraps around.
+			if appt().is_some() {
+				button {
+					class: "fixed left-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
+					"aria-label": "Previous apartment",
+					onclick: move |_| cycle_appt(building, appt, -1),
+					"‹"
+				}
+				button {
+					class: "fixed right-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
+					"aria-label": "Next apartment",
+					onclick: move |_| cycle_appt(building, appt, 1),
+					"›"
+				}
+			}
 		}
 	}
+}
+
+/// Step `SelectedAppt` to the next/previous lot of the current building (wrap-around).
+/// A no-op until the building has resolved.
+fn cycle_appt(building: BuildingResource, mut appt: SelectedAppt, dir: i32) {
+	let guard = building.read();
+	let Some(Some(b)) = guard.as_ref() else { return };
+	let nums: Vec<u32> = b.apartments.iter().map(|a| a.number).collect();
+	if nums.is_empty() {
+		return;
+	}
+	let len = nums.len() as i32;
+	let idx = appt().and_then(|n| nums.iter().position(|x| *x == n)).unwrap_or(0) as i32;
+	let next = nums[(((idx + dir) % len + len) % len) as usize];
+	drop(guard);
+	appt.set(Some(next));
 }
 
 #[component]

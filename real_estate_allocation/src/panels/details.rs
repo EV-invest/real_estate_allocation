@@ -2,20 +2,26 @@ use dioxus::prelude::*;
 use ev_lib::uikit::{Card, CardContent, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
 
 use crate::{
-	app::SelectedProperty,
-	domain::{ConstructionStatus, Property},
+	app::{BuildingResource, SelectedAppt},
+	domain::{Apartment, ApartmentStatus, Building, ConstructionStatus},
 };
 
 #[component]
 pub fn DetailsPanel() -> Element {
-	let property = use_context::<SelectedProperty>();
+	let building = use_context::<BuildingResource>();
+	let appt = use_context::<SelectedAppt>();
 
 	rsx! {
 		Card { class: "flex h-full flex-col",
 			CardContent { class: "flex-1 overflow-y-auto",
-				match &*property.read() {
-					Some(Some(p)) => rsx! { Details { property: p.clone() } },
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a property to see its terms." } },
+				match &*building.read() {
+					Some(Some(b)) => {
+						match appt().and_then(|n| b.apartments.iter().find(|a| a.number == n).cloned()) {
+							Some(a) => rsx! { ApartmentDetails { apt: a } },
+							None => rsx! { BuildingDetails { building: b.clone() } },
+						}
+					}
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a building to see its terms." } },
 					None => rsx! { Skeleton { class: "h-48 w-full" } },
 				}
 			}
@@ -24,50 +30,88 @@ pub fn DetailsPanel() -> Element {
 }
 
 #[component]
-fn Details(property: Property) -> Element {
+fn ApartmentDetails(apt: Apartment) -> Element {
+	let status = match apt.status {
+		ApartmentStatus::Available => "Available",
+		ApartmentStatus::Sold => "Sold",
+		ApartmentStatus::Purchasing => "Purchasing",
+		ApartmentStatus::Purchased(_) => "Purchased",
+		ApartmentStatus::Interesting => "Interesting",
+	};
 	rsx! {
 		div { class: "flex flex-col",
-			match property.price {
+			Kv { label: "Apartment", "#{apt.number}" }
+			Kv { label: "Status", value_class: "text-main-accent-t3", "{status}" }
+			match apt.price {
 				Some(p) => rsx! { Kv { label: "Price", value_class: "text-main-accent-t3", "{p}" } },
 				None => rsx! { Kv { label: "Price", value_class: "text-warn", "?" } },
 			}
+		}
+	}
+}
 
-			if let Some(dev) = property.developer.as_ref() {
+#[component]
+fn BuildingDetails(building: Building) -> Element {
+	let status = building.state_kinds().next();
+	rsx! {
+		div { class: "flex flex-col",
+			div { class: "grid grid-cols-3 gap-4 border-b border-border pb-4",
+				Stat { label: "Target Yield", value_class: "text-main-accent-t2",
+					if building.target_appreciation > 0.0 { "{building.target_appreciation:.1}% p.a." } else { "-" }
+				}
+				Stat { label: "Appreciation", value_class: "text-main-accent-t3",
+					match building.appreciation_yoy() {
+						Some(p) => rsx! { "{p:+.1}% YoY" },
+						None => rsx! { "-" },
+					}
+				}
+				Stat { label: "Status", value_class: "text-white",
+					match status {
+						Some(k) => rsx! { "{k}" },
+						None => rsx! { "-" },
+					}
+				}
+			}
+
+			match building.avg_price() {
+				Some(p) => rsx! { Kv { label: "Avg apt. price", value_class: "text-main-accent-t3", "{p}" } },
+				None => rsx! { Kv { label: "Avg apt. price", value_class: "text-warn", "?" } },
+			}
+
+			Kv { label: "Lots", "{building.lots_total()}" }
+
+			if let Some(dev) = building.developer.as_ref() {
 				DeveloperKv { name: dev.clone() }
 			}
 
 			Kv {
 				label: "Construction",
-				value_class: match property.construction {
+				value_class: match building.construction {
 					ConstructionStatus::Completed => "text-main-accent-t2",
 					ConstructionStatus::UnderConstruction => "text-warn",
 				},
-				"{property.construction}"
+				"{building.construction}"
 			}
 
-			if property.target_appreciation > 0.0 {
-				Kv { label: "Target appreciation", value_class: "text-main-accent-t3", "{property.target_appreciation:.0}% / yr" }
-			}
-
-			if let Some(deal) = property.deal.as_ref() {
+			if let Some(deal) = building.deal.as_ref() {
 				Kv { label: "Equity / Debt", "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
 			}
 
-			if let Some(loan) = property.loan.as_ref() {
+			if let Some(loan) = building.loan.as_ref() {
 				Kv { label: "Loan rate", value_class: "text-main-accent-t1", "{loan.rate_pct:.2}%" }
 				Kv { label: "Term", "{loan.term_years} yr" }
 				Kv { label: "Lender", "{loan.lender}" }
 			}
 
-			if let Some(terms) = property.terms.as_ref() {
+			if let Some(terms) = building.terms.as_ref() {
 				Note { label: "Terms", "{terms}" }
 			}
 
-			if let Some(notes) = property.deal.as_ref().and_then(|d| d.notes.as_ref()) {
+			if let Some(notes) = building.deal.as_ref().and_then(|d| d.notes.as_ref()) {
 				Note { label: "Deal notes", "{notes}" }
 			}
 
-			if let Some(reasoning) = property.additional_reasoning.as_ref() {
+			if let Some(reasoning) = building.additional_reasoning.as_ref() {
 				Note { label: "Reasoning", "{reasoning}" }
 			}
 		}
@@ -82,6 +126,18 @@ fn Kv(label: String, #[props(default)] value_class: String, children: Element) -
 		div { class: "flex items-center justify-between gap-4 border-t border-border py-2.5 first:border-t-0",
 			span { class: "text-sm text-muted-foreground", "{label}" }
 			span { class: "text-right text-sm font-semibold {value_class}", {children} }
+		}
+	}
+}
+
+/// One of the three headline stats (yield / appreciation / status): an eyebrow label
+/// over a serif value, laid out as a column in the top grid.
+#[component]
+fn Stat(label: String, #[props(default)] value_class: String, children: Element) -> Element {
+	rsx! {
+		div { class: "flex flex-col gap-1",
+			span { class: "text-[10px] font-medium uppercase tracking-wide text-muted-foreground", "{label}" }
+			span { class: "font-serif text-lg font-semibold {value_class}", {children} }
 		}
 	}
 }

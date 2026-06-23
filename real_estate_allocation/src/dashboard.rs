@@ -4,7 +4,7 @@ use dockview_dioxus::{Config, DockPanel, Group, GroupId, Keybind, MinSize, Packe
 use crate::{
 	api::load_default_layout,
 	map::MapPanel,
-	panels::{ChartPanel, DetailsPanel, MediaPanel, PortfolioHeatmap, TopBar},
+	panels::{ChartPanel, DetailsPanel, LotsPanel, MediaPanel, PortfolioHeatmap, TopBar},
 };
 
 #[component]
@@ -30,6 +30,11 @@ pub fn Dashboard() -> Element {
 				id: PanelId("heatmap".into()),
 				title: "Portfolio".into(),
 				content: rsx! { PortfolioHeatmap {} },
+			},
+			DockPanel {
+				id: PanelId("lots".into()),
+				title: "Lots".into(),
+				content: rsx! { LotsPanel {} },
 			},
 			DockPanel {
 				id: PanelId("details".into()),
@@ -68,7 +73,7 @@ pub fn Dashboard() -> Element {
 				}
 			};
 			api.place(map_group, 4, 3, min);
-			for panel in ["chart", "heatmap", "details"] {
+			for panel in ["chart", "heatmap", "lots", "details"] {
 				let group = Group::new(api.grid.write().mint_group_id(), PanelId(panel.into()));
 				api.place(group, 4, 3, min);
 			}

@@ -2,13 +2,14 @@ use dioxus::{html::HasFileData, prelude::*};
 use ev_lib::uikit::{AspectRatio, Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
 
 use crate::{
-	app::Selected,
-	domain::{FileKind, PropertyFile, PropertyId},
+	app::{SelectedAppt, SelectedBuilding},
+	domain::{BuildingId, FileKind, PropertyFile},
 };
 
 #[component]
 pub fn MediaPanel() -> Element {
-	let selected = use_context::<Selected>();
+	let selected = use_context::<SelectedBuilding>();
+	let appt = use_context::<SelectedAppt>();
 	let admin = use_resource(move || async move {
 		let token = admin_token();
 		crate::api::am_i_admin(token).await.unwrap_or(false)
@@ -19,7 +20,7 @@ pub fn MediaPanel() -> Element {
 	let files = use_resource(move || async move {
 		reload();
 		match selected() {
-			Some(id) => crate::api::list_files(id).await.unwrap_or_default(),
+			Some(id) => crate::api::list_files(id, appt()).await.unwrap_or_default(),
 			None => Vec::new(),
 		}
 	});
@@ -30,8 +31,9 @@ pub fn MediaPanel() -> Element {
 		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex-1 overflow-y-auto",
 				match selected() {
-					None => rsx! { p { class: "text-muted-foreground text-sm", "Select a property to view its media." } },
-					Some(pid) => {
+					None => rsx! { p { class: "text-muted-foreground text-sm", "Select a building to view its media." } },
+					Some(bid) => {
+						let appt = appt();
 						let files = files.read().clone().unwrap_or_default();
 						rsx! {
 							Tabs { default_value: "pics".to_string(),
@@ -40,12 +42,12 @@ pub fn MediaPanel() -> Element {
 									TabsTrigger { value: "deck", "Deck" }
 									TabsTrigger { value: "docs", "Docs" }
 								}
-								TabsContent { value: "pics", PicGrid { property_id: pid, files: files.clone() } }
-								TabsContent { value: "deck", FileList { property_id: pid, files: files.clone(), kind: FileKind::PitchDeck } }
-								TabsContent { value: "docs", FileList { property_id: pid, files: files.clone(), kind: FileKind::Document } }
+								TabsContent { value: "pics", PicGrid { building_id: bid, appt, files: files.clone() } }
+								TabsContent { value: "deck", FileList { building_id: bid, appt, files: files.clone(), kind: FileKind::PitchDeck } }
+								TabsContent { value: "docs", FileList { building_id: bid, appt, files: files.clone(), kind: FileKind::Document } }
 							}
 							if is_admin {
-								DropZone { property_id: pid, on_uploaded: move |_| reload += 1 }
+								DropZone { building_id: bid, appt, on_uploaded: move |_| reload += 1 }
 							}
 						}
 					}
@@ -56,7 +58,7 @@ pub fn MediaPanel() -> Element {
 }
 
 #[component]
-fn PicGrid(property_id: PropertyId, files: Vec<PropertyFile>) -> Element {
+fn PicGrid(building_id: BuildingId, appt: Option<u32>, files: Vec<PropertyFile>) -> Element {
 	let pics: Vec<_> = files.into_iter().filter(|f| f.kind == FileKind::Pic).collect();
 	if pics.is_empty() {
 		return rsx! { p { class: "text-muted-foreground text-sm", "No pictures yet." } };
@@ -64,20 +66,20 @@ fn PicGrid(property_id: PropertyId, files: Vec<PropertyFile>) -> Element {
 	rsx! {
 		div { class: "grid grid-cols-2 gap-2 pt-2",
 			for f in pics {
-				Pic { property_id, file: f }
+				Pic { building_id, appt, file: f }
 			}
 		}
 	}
 }
 
 #[component]
-fn Pic(property_id: PropertyId, file: PropertyFile) -> Element {
+fn Pic(building_id: BuildingId, appt: Option<u32>, file: PropertyFile) -> Element {
 	let fid = file.id;
 	let fname = file.filename.clone();
 	let content_type = file.content_type.clone();
 	let bytes = use_resource(move || {
 		let fname = fname.clone();
-		async move { crate::api::file_bytes(property_id, fid, fname).await.ok() }
+		async move { crate::api::file_bytes(building_id, appt, fid, fname).await.ok() }
 	});
 	let src = bytes.read().as_ref().and_then(|o| o.as_ref()).map(|b| data_url(&content_type, b));
 
@@ -92,7 +94,7 @@ fn Pic(property_id: PropertyId, file: PropertyFile) -> Element {
 }
 
 #[component]
-fn FileList(property_id: PropertyId, files: Vec<PropertyFile>, kind: FileKind) -> Element {
+fn FileList(building_id: BuildingId, appt: Option<u32>, files: Vec<PropertyFile>, kind: FileKind) -> Element {
 	let items: Vec<_> = files.into_iter().filter(|f| f.kind == kind).collect();
 	if items.is_empty() {
 		return rsx! { p { class: "text-muted-foreground text-sm", "Nothing here yet." } };
@@ -100,20 +102,20 @@ fn FileList(property_id: PropertyId, files: Vec<PropertyFile>, kind: FileKind) -
 	rsx! {
 		div { class: "flex flex-col gap-2 pt-2",
 			for f in items {
-				Download { property_id, file: f }
+				Download { building_id, appt, file: f }
 			}
 		}
 	}
 }
 
 #[component]
-fn Download(property_id: PropertyId, file: PropertyFile) -> Element {
+fn Download(building_id: BuildingId, appt: Option<u32>, file: PropertyFile) -> Element {
 	let fid = file.id;
 	let fname = file.filename.clone();
 	let content_type = file.content_type.clone();
 	let bytes = use_resource(move || {
 		let fname = fname.clone();
-		async move { crate::api::file_bytes(property_id, fid, fname).await.ok() }
+		async move { crate::api::file_bytes(building_id, appt, fid, fname).await.ok() }
 	});
 	let href = bytes.read().as_ref().and_then(|o| o.as_ref()).map(|b| data_url(&content_type, b));
 
@@ -133,7 +135,7 @@ fn Download(property_id: PropertyId, file: PropertyFile) -> Element {
 /// bytes off the dioxus `FileData` and call the `upload_file` server fn (which
 /// re-checks the admin token server-side).
 #[component]
-fn DropZone(property_id: PropertyId, on_uploaded: EventHandler<()>) -> Element {
+fn DropZone(building_id: BuildingId, appt: Option<u32>, on_uploaded: EventHandler<()>) -> Element {
 	let do_upload = move |file: dioxus::html::FileData| {
 		let on_uploaded = on_uploaded;
 		async move {
@@ -142,7 +144,7 @@ fn DropZone(property_id: PropertyId, on_uploaded: EventHandler<()>) -> Element {
 			let kind = kind_for(&content_type, &filename);
 			if let Ok(bytes) = file.read_bytes().await {
 				let token = admin_token();
-				if crate::api::upload_file(property_id, kind, filename, content_type, bytes.to_vec(), token).await.is_ok() {
+				if crate::api::upload_file(building_id, appt, kind, filename, content_type, bytes.to_vec(), token).await.is_ok() {
 					on_uploaded.call(());
 				}
 			}

@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::domain::{FileKind, Property, PropertyFile, PropertyId, PropertyStateKind};
+use crate::domain::{Building, BuildingId, FileKind, PropertyFile, PropertyStateKind};
 
 #[cfg(not(target_arch = "wasm32"))]
 const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
@@ -17,54 +17,64 @@ pub struct AppState {
 	pub config: crate::config::AppConfig,
 }
 #[server]
-pub async fn list_properties(filter: Option<Vec<PropertyStateKind>>) -> Result<Vec<Property>, ServerFnError> {
+pub async fn list_buildings(filter: Option<Vec<PropertyStateKind>>) -> Result<Vec<Building>, ServerFnError> {
 	use ev_lib::architecture::Specification;
 
-	use crate::{domain::InState, store::PropertyRepository};
+	use crate::{domain::InState, store::BuildingRepository};
 
 	let state = app_state().await?;
 
-	// Or-combine the requested states; default = Purchased. The `Fn(&T)->bool`
-	// blanket impl makes the disjunction itself a `Specification`.
+	// A building is in if any of its lots is ours in one of the requested kinds; the
+	// `Fn(&T)->bool` blanket impl makes the disjunction itself a `Specification`.
 	let states = filter.unwrap_or_else(|| vec![PropertyStateKind::Purchased]);
-	let spec = move |p: &Property| states.iter().any(|s| InState(*s).holds(p));
-	let mut props = state.store.list(Some(&spec)).await.map_err(to_server_err)?;
-	for p in props.iter_mut() {
-		p.coords = resolve_coords(p.id, &p.place, &state.config).await;
+	let spec = move |b: &Building| states.iter().any(|s| InState(*s).holds(b));
+	let mut buildings = state.store.list(Some(&spec)).await.map_err(to_server_err)?;
+	for b in buildings.iter_mut() {
+		b.coords = resolve_coords(b.id, &b.place, &state.config).await;
 	}
-	Ok(props)
+	Ok(buildings)
 }
 #[server]
-pub async fn get_property(id: PropertyId) -> Result<Option<Property>, ServerFnError> {
-	use crate::store::PropertyRepository;
+pub async fn get_building(id: BuildingId) -> Result<Option<Building>, ServerFnError> {
+	use crate::{domain::ApartmentStatus, store::BuildingRepository};
 
 	let state = app_state().await?;
-	let mut prop = state.store.get(id).await.map_err(to_server_err)?;
-	if let Some(p) = prop.as_mut() {
-		p.price_series = mock_series(id, p.state);
-		p.coords = resolve_coords(id, &p.place, &state.config).await;
+	let mut building = state.store.get(id).await.map_err(to_server_err)?;
+	if let Some(b) = building.as_mut() {
+		let root = id.raw().as_u64_pair().0;
+		for a in b.apartments.iter_mut() {
+			let seed = root ^ (a.number as u64).wrapping_mul(0x9E3779B97F4A7C15);
+			let purchased = match a.status {
+				ApartmentStatus::Purchased(ts) => Some(ts),
+				_ => None,
+			};
+			a.price_series = mock_series(seed, purchased);
+		}
+		b.coords = resolve_coords(id, &b.place, &state.config).await;
 	}
-	Ok(prop)
+	Ok(building)
 }
 #[server]
 pub async fn get_developer(name: String) -> Result<Option<crate::domain::Developer>, ServerFnError> {
-	use crate::store::PropertyRepository;
+	use crate::store::BuildingRepository;
 
 	let store = app_state().await?.store;
 	store.get_developer(&name).await.map_err(to_server_err)
 }
 #[server]
-pub async fn list_files(id: PropertyId) -> Result<Vec<PropertyFile>, ServerFnError> {
-	use crate::store::PropertyRepository;
+pub async fn list_files(id: BuildingId, appt: Option<u32>) -> Result<Vec<PropertyFile>, ServerFnError> {
+	use crate::store::BuildingRepository;
 
 	let store = app_state().await?.store;
-	store.list_files(id).await.map_err(to_server_err)
+	let files = store.list_files(id).await.map_err(to_server_err)?;
+	// Building level shows building files only; a lot shows just its own.
+	Ok(files.into_iter().filter(|f| f.apt == appt).collect())
 }
 #[server]
-pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: String, content_type: String, bytes: Vec<u8>, token: String) -> Result<PropertyFile, ServerFnError> {
+pub async fn upload_file(building_id: BuildingId, appt: Option<u32>, kind: FileKind, filename: String, content_type: String, bytes: Vec<u8>, token: String) -> Result<PropertyFile, ServerFnError> {
 	use secrecy::ExposeSecret as _;
 
-	use crate::store::PropertyRepository;
+	use crate::store::BuildingRepository;
 
 	let AppState { store, config: cfg } = app_state().await?;
 	if token != cfg.admin_token.expose_secret() {
@@ -72,7 +82,7 @@ pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: Stri
 	}
 
 	let file_id = crate::domain::FileId::new();
-	let path = store.file_path(property_id, file_id, &filename);
+	let path = store.file_path(building_id, appt, file_id, &filename);
 	if let Some(parent) = path.parent() {
 		std::fs::create_dir_all(parent).map_err(|e| ServerFnError::new(format!("create dir: {e}")))?;
 	}
@@ -80,7 +90,8 @@ pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: Stri
 
 	let file = PropertyFile {
 		id: file_id,
-		property_id,
+		building_id,
+		apt: appt,
 		kind,
 		filename,
 		content_type,
@@ -89,9 +100,9 @@ pub async fn upload_file(property_id: PropertyId, kind: FileKind, filename: Stri
 	Ok(file)
 }
 #[server]
-pub async fn file_bytes(id: PropertyId, file_id: crate::domain::FileId, filename: String) -> Result<Vec<u8>, ServerFnError> {
+pub async fn file_bytes(id: BuildingId, appt: Option<u32>, file_id: crate::domain::FileId, filename: String) -> Result<Vec<u8>, ServerFnError> {
 	let store = app_state().await?.store;
-	let path = store.file_path(id, file_id, &filename);
+	let path = store.file_path(id, appt, file_id, &filename);
 	std::fs::read(&path).map_err(|e| ServerFnError::new(format!("read file: {e}")))
 }
 #[server]
@@ -143,27 +154,24 @@ static PLACES_BLOCKED_UNTIL: std::sync::atomic::AtomicI64 = std::sync::atomic::A
 // `FullstackContext` is the one handle available in both the SSR render path and
 // the server-fn POST path.
 
-/// Deterministic mock value series, seeded from the id so it is stable per property.
-/// Anchored to the purchase instant (a few weeks of pre-purchase tracking, then a
-/// fixed run of weekly estimates clipped to now). A long-ago purchase therefore
-/// produces a series that ends well before today — the chart fills that tail with a
-/// dotted projection. Non-purchased properties anchor to a trailing window.
+/// Deterministic mock value series, seeded so it is stable per lot. Anchored to the
+/// purchase instant (a few weeks of pre-purchase tracking, then a fixed run of weekly
+/// estimates clipped to now). A long-ago purchase therefore produces a series that ends
+/// well before today — the chart fills that tail with a dotted projection. Lots we don't
+/// own anchor to a trailing window.
 #[cfg(not(target_arch = "wasm32"))]
-fn mock_series(id: PropertyId, state: crate::domain::PropertyState) -> Vec<(jiff::Timestamp, f64)> {
-	use crate::domain::PropertyState;
-
+fn mock_series(seed: u64, purchased_at: Option<jiff::Timestamp>) -> Vec<(jiff::Timestamp, f64)> {
 	const WEEK: i64 = 7 * 24 * 3600;
 	const LEAD: i64 = 8; // weeks of pre-purchase estimate tracking (drawn dimmed)
 	const SPAN: usize = 30; // weeks of estimates generated
 
 	let now = jiff::Timestamp::now();
-	let anchor = match state {
-		PropertyState::Purchased(ts) => ts,
-		_ => jiff::Timestamp::from_second(now.as_second() - (SPAN as i64) * WEEK).expect("trailing window in range"),
+	let anchor = match purchased_at {
+		Some(ts) => ts,
+		None => jiff::Timestamp::from_second(now.as_second() - (SPAN as i64) * WEEK).expect("trailing window in range"),
 	};
 	let start = anchor.as_second() - LEAD * WEEK;
 
-	let seed = id.raw().as_u64_pair().0;
 	let walk = v_utils::distributions::laplace_random_walk(100.0, SPAN, 0.1, 0.0, Some(seed));
 	walk.into_iter()
 		.enumerate()
@@ -189,7 +197,7 @@ struct CachedPlace {
 /// different place. A failed resolve yields `None` (no pin) rather than failing
 /// the whole listing — one unresolvable place must not blank the map.
 #[cfg(not(target_arch = "wasm32"))]
-async fn resolve_coords(id: PropertyId, place: &crate::domain::GooglePlace, cfg: &crate::config::AppConfig) -> Option<crate::domain::Coords> {
+async fn resolve_coords(id: BuildingId, place: &crate::domain::GooglePlace, cfg: &crate::config::AppConfig) -> Option<crate::domain::Coords> {
 	use secrecy::ExposeSecret as _;
 
 	let path = cfg.data_dir.as_ref().join(id.raw().to_string()).join("place.json");

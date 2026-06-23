@@ -10,7 +10,7 @@ use ev_lib::uikit::{Button, Container, Select, SelectContent, SelectItem, Select
 // folders' images are served only through the `file_bytes` server fn); a click
 // breaks out to the dashboard home with the property pre-selected, so it works
 // embedded (`target=_top`) and standalone alike.
-const Q1_BANNER: Asset = asset!("/assets/seed/q1_tower/hero.jpg");
+const Q1_BANNER: Asset = asset!("/assets/seed/q1_tower/render.jpg");
 const Q1_PROPERTY: &str = "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a";
 const TMS_BANNER: Asset = asset!("/assets/seed/tms/building.jpg");
 const TMS_PROPERTY: &str = "c19bded1-1a13-49ad-a0f0-549b2aec2d0e";
@@ -70,7 +70,7 @@ pub fn Overview() -> Element {
 fn FeaturedCard() -> Element {
 	rsx! {
 		a {
-			href: "/?property={Q1_PROPERTY}",
+			href: "/?building={Q1_PROPERTY}",
 			target: "_top",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
 			div {
@@ -105,7 +105,7 @@ fn FeaturedCard() -> Element {
 fn SideCard() -> Element {
 	rsx! {
 		a {
-			href: "/?property={TMS_PROPERTY}",
+			href: "/?building={TMS_PROPERTY}",
 			target: "_top",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
 			div {

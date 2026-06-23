@@ -3,16 +3,16 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub type PropertyId = Id<PropertyTag>;
+pub type BuildingId = Id<BuildingTag>;
 pub type FileId = Id<FileTag>;
 
 use crate::error::DomainError;
 
 pub struct FileTag;
 
-pub struct PropertyTag;
+pub struct BuildingTag;
 
-/// Our acquisition lifecycle for a property. `Purchased` carries the UTC instant we
+/// Our acquisition lifecycle for a single lot. `Purchased` carries the UTC instant we
 /// bought it — jiff models a UTC instant as `Timestamp` (there is no `DateTime<Utc>`).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum PropertyState {
@@ -147,18 +147,16 @@ pub struct LoanRates {
 	pub lender: String,
 }
 
+/// A building / development. Per-unit economics live on its `apartments`; the
+/// building only carries what is shared across every lot.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Property {
-	pub id: PropertyId,
+pub struct Building {
+	pub id: BuildingId,
 	pub name: String,
 	pub place: GooglePlace,
-	/// `None` until we have a real number — rendered as a `?` in the warn colour
-	/// rather than a fabricated figure.
-	pub price: Option<Money>,
-	pub state: PropertyState,
 	pub construction: ConstructionStatus,
-	/// Target appreciation (% per year). Only meaningful for a finished building —
-	/// forced to 0 while `construction` is `UnderConstruction` (enforced on load).
+	/// The building's headline target rate (% per year), surfaced as "Target Yield".
+	/// `0` means unset — the panel renders it as "-".
 	pub target_appreciation: f64,
 	/// Developer name; must resolve to a row in the developers table when set.
 	pub developer: Option<String>,
@@ -167,15 +165,133 @@ pub struct Property {
 	pub deal: Option<DealStructure>,
 	pub loan: Option<LoanRates>,
 	pub additional_reasoning: Option<String>,
-	/// Mocked weekly value estimates with their real (UTC) dates, filled by
-	/// `api::get_property`. A missing week is simply an absent entry. Never persisted.
-	#[serde(default)]
-	pub price_series: Vec<(Timestamp, f64)>,
+	/// The lots inside the building. Synthesised per building until a real per-lot
+	/// source exists (`store::mock_apartments`); `number` is 1-based and stable.
+	pub apartments: Vec<Apartment>,
 	/// Lat/lng for `place`, resolved server-side from a monthly-refreshed on-disk
 	/// cache (`<data_dir>/<id>/place.json`). `None` while unresolved — the map
 	/// simply draws no pin. Never persisted to the DB.
 	#[serde(default)]
 	pub coords: Option<Coords>,
+}
+
+/// One lot inside a building. `status` is its market state fused with our portfolio
+/// relationship; `price` / `price_series` are per-unit.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Apartment {
+	/// 1-based, stable within a building; the `appt=` URL index.
+	pub number: u32,
+	pub status: ApartmentStatus,
+	/// `None` until we have a real number — rendered as a `?` rather than fabricated.
+	pub price: Option<Money>,
+	/// Mocked weekly value estimates, filled by `api::get_building`. Never persisted.
+	#[serde(default)]
+	pub price_series: Vec<(Timestamp, f64)>,
+}
+
+/// A lot's baseline market status fused with our relationship to it. `Available` /
+/// `Sold` are not ours; the rest project onto a `PropertyStateKind`.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub enum ApartmentStatus {
+	Available,
+	/// Sold to someone else.
+	Sold,
+	/// Ours, acquisition in progress.
+	Purchasing,
+	/// Ours, closed — carries the purchase instant.
+	Purchased(Timestamp),
+	/// Ours, watching an otherwise-available lot.
+	Interesting,
+}
+
+impl ApartmentStatus {
+	/// Our portfolio relationship to this lot, or `None` when it is not ours.
+	pub fn portfolio_kind(self) -> Option<PropertyStateKind> {
+		match self {
+			Self::Purchased(_) => Some(PropertyStateKind::Purchased),
+			Self::Purchasing => Some(PropertyStateKind::Purchasing),
+			Self::Interesting => Some(PropertyStateKind::Interesting),
+			Self::Available | Self::Sold => None,
+		}
+	}
+}
+
+impl Building {
+	/// The distinct portfolio-relationship kinds present across our lots — what map
+	/// pins and the state filter switch on. Empty when we own nothing here.
+	pub fn state_kinds(&self) -> impl Iterator<Item = PropertyStateKind> {
+		let mut kinds: Vec<PropertyStateKind> = Vec::new();
+		for a in &self.apartments {
+			if let Some(k) = a.status.portfolio_kind()
+				&& !kinds.contains(&k)
+			{
+				kinds.push(k);
+			}
+		}
+		kinds.into_iter()
+	}
+
+	/// Mean asking price across lots with a known price; `None` if none are priced.
+	pub fn avg_price(&self) -> Option<Money> {
+		let priced: Vec<f64> = self.apartments.iter().filter_map(|a| a.price.map(|m| m.amount())).collect();
+		if priced.is_empty() {
+			return None;
+		}
+		Money::parse(priced.iter().sum::<f64>() / priced.len() as f64).ok()
+	}
+
+	pub fn lots_total(&self) -> usize {
+		self.apartments.len()
+	}
+
+	/// Off the market: everything not `Available` and not `Interesting` (we treat a
+	/// watched lot as still available to the market).
+	pub fn lots_sold(&self) -> usize {
+		self.lots_total() - self.lots_available()
+	}
+
+	pub fn lots_available(&self) -> usize {
+		self.apartments.iter().filter(|a| matches!(a.status, ApartmentStatus::Available | ApartmentStatus::Interesting)).count()
+	}
+
+	/// Realized appreciation over the trailing year, in % — the building's mean weekly
+	/// value now vs. ~12 months earlier. `None` unless the combined `price_series`
+	/// (populated only by `api::get_building`) spans at least a year; the panel then
+	/// shows "-".
+	pub fn appreciation_yoy(&self) -> Option<f64> {
+		use std::collections::BTreeMap;
+		const WEEK: i64 = 7 * 24 * 3600;
+		const YEAR: i64 = 365 * 24 * 3600;
+
+		let mut weekly: BTreeMap<i64, (f64, u32)> = BTreeMap::new();
+		for a in &self.apartments {
+			for (t, v) in &a.price_series {
+				let e = weekly.entry(t.as_second() / WEEK).or_default();
+				e.0 += *v;
+				e.1 += 1;
+			}
+		}
+		let series: Vec<(i64, f64)> = weekly.into_iter().map(|(w, (sum, n))| (w * WEEK, sum / n as f64)).collect();
+		let first = *series.first()?;
+		let last = *series.last()?;
+		if last.0 - first.0 < YEAR {
+			return None;
+		}
+		let target = last.0 - YEAR;
+		let v_year_ago = series.iter().min_by_key(|(t, _)| (t - target).abs()).map(|(_, v)| *v)?;
+		Some((last.1 / v_year_ago - 1.0) * 100.0)
+	}
+
+	/// Fraction of all lots that are ours (`Purchasing` or `Purchased`) — the donut's
+	/// centred "your share".
+	pub fn your_share(&self) -> f64 {
+		let total = self.lots_total();
+		if total == 0 {
+			return 0.0;
+		}
+		let ours = self.apartments.iter().filter(|a| matches!(a.status, ApartmentStatus::Purchasing | ApartmentStatus::Purchased(_))).count();
+		ours as f64 / total as f64
+	}
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -184,15 +300,15 @@ pub struct Coords {
 	pub lng: f64,
 }
 
-impl Entity for Property {
-	type Id = PropertyId;
+impl Entity for Building {
+	type Id = BuildingId;
 
-	fn id(&self) -> PropertyId {
+	fn id(&self) -> BuildingId {
 		self.id
 	}
 }
 
-impl AggregateRoot for Property {
+impl AggregateRoot for Building {
 	const NAME: &'static str = "property";
 }
 
@@ -207,28 +323,30 @@ pub enum FileKind {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PropertyFile {
 	pub id: FileId,
-	pub property_id: PropertyId,
+	pub building_id: BuildingId,
+	/// The owning lot, or `None` for a building-level file.
+	pub apt: Option<u32>,
 	pub kind: FileKind,
 	pub filename: String,
 	pub content_type: String,
 }
 
-/// Map / portfolio filter. The portfolio default is `InState(Purchased)`; richer
-/// views compose via `.or`, e.g. `InState(Interesting).or(InState(Purchasing))`.
+/// Map / portfolio filter over a building's portfolio relationship. A building holds
+/// for `InState(k)` when any of its lots is ours in that kind.
 pub struct InState(pub PropertyStateKind);
 
-impl Specification<Property> for InState {
-	fn holds(&self, candidate: &Property) -> bool {
-		candidate.state.kind() == self.0
+impl Specification<Building> for InState {
+	fn holds(&self, candidate: &Building) -> bool {
+		candidate.state_kinds().any(|k| k == self.0)
 	}
 }
 
 // Free functions, not inherent impls: `Id` is a foreign type, so coherence
-// forbids `impl PropertyId { .. }` here.
-pub fn parse_property_id(raw: &str) -> Result<PropertyId, DomainError> {
+// forbids `impl BuildingId { .. }` here.
+pub fn parse_building_id(raw: &str) -> Result<BuildingId, DomainError> {
 	Uuid::parse_str(raw)
-		.map(PropertyId::from_raw)
-		.map_err(|e| DomainError::Validation(format!("invalid property id: {e}")))
+		.map(BuildingId::from_raw)
+		.map_err(|e| DomainError::Validation(format!("invalid building id: {e}")))
 }
 
 pub fn parse_file_id(raw: &str) -> Result<FileId, DomainError> {

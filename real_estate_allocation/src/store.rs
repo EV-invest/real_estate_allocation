@@ -11,12 +11,15 @@ use sqlx::{
 };
 
 use crate::{
-	domain::{
-		ConstructionStatus, DealStructure, Developer, FileId, FileKind, GooglePlace, LoanRates, Money, Property, PropertyFile, PropertyId, PropertyState, PropertyStateKind, ResearchUrl,
-	},
+	domain::{Apartment, ApartmentStatus, Building, BuildingId, ConstructionStatus, Developer, FileId, FileKind, GooglePlace, Money, PropertyFile, PropertyState, ResearchUrl},
 	error::DomainError,
 };
 
+/// A `Building` (with its apartments) is persisted whole as a serialised document, so
+/// the Rust aggregate is the single source of truth — no column can drift out of sync
+/// with the struct, and a lot cannot exist apart from its building. `developers` stays
+/// a lookup table the `developer` reference is validated against on write (in
+/// `SqliteStore::put`, since the reference now lives inside the JSON document).
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS developers (
 	name TEXT PRIMARY KEY,
@@ -25,23 +28,12 @@ CREATE TABLE IF NOT EXISTS developers (
 );
 CREATE TABLE IF NOT EXISTS properties (
 	id TEXT PRIMARY KEY,
-	name TEXT NOT NULL,
-	place_id TEXT NOT NULL,
-	price REAL,
-	state TEXT NOT NULL,
-	purchased_at TEXT,
-	construction TEXT NOT NULL,
-	target_appreciation REAL NOT NULL DEFAULT 0,
-	developer TEXT REFERENCES developers(name),
-	research_url TEXT NOT NULL,
-	terms TEXT,
-	deal_json TEXT,
-	loan_json TEXT,
-	additional_reasoning TEXT
+	doc TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS property_files (
 	id TEXT PRIMARY KEY,
 	property_id TEXT NOT NULL REFERENCES properties(id),
+	apt INTEGER,
 	kind TEXT NOT NULL,
 	filename TEXT NOT NULL,
 	content_type TEXT NOT NULL
@@ -51,11 +43,15 @@ CREATE TABLE IF NOT EXISTS property_files (
 /// Leaf port over the `ev_lib` repository markers. No `UnitOfWork`: every write here
 /// is a single row, so a transaction boundary would buy nothing.
 #[async_trait]
-pub trait PropertyRepository: Repository<Aggregate = Property> + Reader<Aggregate = Property> {
-	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError>;
-	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError>;
+pub trait BuildingRepository: Repository<Aggregate = Building> + Reader<Aggregate = Building> {
+	async fn list(&self, spec: Option<&(dyn Specification<Building> + Sync)>) -> Result<Vec<Building>, DomainError>;
+	async fn get(&self, id: BuildingId) -> Result<Option<Building>, DomainError>;
+	/// Persist a building aggregate whole. The `developer` reference (if any) is
+	/// validated against the developers table here — a dangling one is a `Validation`
+	/// error, never silently written.
+	async fn put(&self, b: &Building) -> Result<(), DomainError>;
 	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError>;
-	async fn list_files(&self, id: PropertyId) -> Result<Vec<PropertyFile>, DomainError>;
+	async fn list_files(&self, id: BuildingId) -> Result<Vec<PropertyFile>, DomainError>;
 	async fn get_developer(&self, name: &str) -> Result<Option<Developer>, DomainError>;
 }
 
@@ -72,8 +68,8 @@ impl SqliteStore {
 		}
 		std::fs::create_dir_all(&data_dir).map_err(|e| DomainError::Repository(format!("create data dir: {e}")))?;
 
-		// `foreign_keys(true)` per connection so the `developer` → developers(name)
-		// reference is enforced by the DB, not just by seed discipline.
+		// `foreign_keys(true)` per connection so `property_files.property_id` →
+		// properties(id) is enforced by the DB, not just by discipline.
 		let opts = SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))
 			.map_err(map_sqlx_error)?
 			.create_if_missing(true)
@@ -83,9 +79,14 @@ impl SqliteStore {
 		Ok(Self { pool, data_dir })
 	}
 
-	/// `./data/properties/<property_id>/<file_id>__<filename>`.
-	pub fn file_path(&self, property_id: PropertyId, file_id: FileId, filename: &str) -> PathBuf {
-		self.data_dir.join(property_id.raw().to_string()).join(format!("{}__{filename}", file_id.raw()))
+	/// Building files at `./data/properties/<building_id>/<file_id>__<filename>`;
+	/// per-lot files nested under `…/<building_id>/apt/<number>/…`.
+	pub fn file_path(&self, building_id: BuildingId, apt: Option<u32>, file_id: FileId, filename: &str) -> PathBuf {
+		let mut dir = self.data_dir.join(building_id.raw().to_string());
+		if let Some(n) = apt {
+			dir = dir.join("apt").join(n.to_string());
+		}
+		dir.join(format!("{}__{filename}", file_id.raw()))
 	}
 }
 
@@ -110,7 +111,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		price: Option<f64>,
 		state: PropertyState,
 		construction: ConstructionStatus,
-		/// Target appreciation (% / yr). Ignored (stored 0) for under-construction towers.
+		/// Headline target rate (% / yr), surfaced as "Target Yield". 0 = unset.
 		target_appreciation: f64,
 		developer: &'static str,
 		research_url: &'static str,
@@ -199,10 +200,10 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "Q1 Tower (Cadia Quy Nhơn)",
 			place: "ChIJDQMq0yFtbzERY32pkB70paY", // Q1 Tower Quy Nhơn, 1 Ngô Mây
-			price: None,
+			price: Some(90_000.0), // provisional: pre-handover branded beachfront residence
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
-			target_appreciation: 0.0,
+			target_appreciation: 12.0,
 			developer: "Phát Đạt",
 			research_url: "https://q1-tower.vn/",
 			terms: "Under construction (broke ground Jun 2022). Beachfront 5-star branded-residence; not yet handed over.",
@@ -210,7 +211,6 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			pics: &[
 				("building.jpg", JPG, include_bytes!("../assets/seed/q1_tower/building.jpg")),
 				("render.jpg", JPG, include_bytes!("../assets/seed/q1_tower/render.jpg")),
-				("hero.jpg", JPG, include_bytes!("../assets/seed/q1_tower/hero.jpg")),
 				("livingroom.jpg", JPG, include_bytes!("../assets/seed/q1_tower/livingroom.jpg")),
 			],
 		},
@@ -230,7 +230,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 		Seed {
 			name: "Triton — Quy Nhơn Sky Residence",
 			place: "ChIJ7QjTJQBtbzERetFnxYHlsUM", // Triton Sky Residence, 72B Tây Sơn
-			price: None,
+			price: Some(72_000.0), // provisional: pricing still firming up (launched 2025)
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
 			target_appreciation: 0.0,
@@ -283,35 +283,33 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 	}
 
 	for s in seeds {
-		let id = PropertyId::new();
-		sqlx::query("INSERT INTO properties (id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-			.bind(id.raw().to_string())
-			.bind(s.name)
-			.bind(s.place)
-			.bind(s.price)
-			.bind(s.state.kind().as_ref())
-			.bind(match s.state {
-				PropertyState::Purchased(ts) => Some(ts.to_string()),
-				_ => None,
+		let id = BuildingId::new();
+		let price = s.price.map(|p| Money::parse(p).expect("seed price is non-negative finite"));
+		store
+			.put(&Building {
+				id,
+				name: s.name.into(),
+				place: GooglePlace::parse(s.place.into())?,
+				construction: s.construction,
+				// The rule's single source of truth: an unfinished building has no target.
+				target_appreciation: match s.construction {
+					ConstructionStatus::Completed => s.target_appreciation,
+					ConstructionStatus::UnderConstruction => 0.0,
+				},
+				developer: Some(s.developer.into()),
+				research_url: ResearchUrl::parse(s.research_url.into())?,
+				terms: Some(s.terms.into()),
+				deal: None,
+				loan: None,
+				additional_reasoning: Some(s.reasoning.into()),
+				apartments: mock_apartments(id, s.state, price),
+				coords: None,
 			})
-			.bind(s.construction.as_ref())
-			.bind(match s.construction {
-				ConstructionStatus::Completed => s.target_appreciation,
-				ConstructionStatus::UnderConstruction => 0.0,
-			})
-			.bind(s.developer)
-			.bind(s.research_url)
-			.bind(s.terms)
-			.bind(None::<String>)
-			.bind(None::<String>)
-			.bind(s.reasoning)
-			.execute(&store.pool)
-			.await
-			.map_err(map_sqlx_error)?;
+			.await?;
 
 		for (filename, content_type, bytes) in s.pics {
 			let fid = FileId::new();
-			let path = store.file_path(id, fid, filename);
+			let path = store.file_path(id, None, fid, filename);
 			if let Some(parent) = path.parent() {
 				std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create file dir: {e}")))?;
 			}
@@ -319,7 +317,8 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			store
 				.add_file(PropertyFile {
 					id: fid,
-					property_id: id,
+					building_id: id,
+					apt: None,
 					kind: FileKind::Pic,
 					filename: (*filename).into(),
 					content_type: (*content_type).into(),
@@ -330,82 +329,54 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 
 	Ok(())
 }
-/// Row mirroring the `properties` table. Private so the domain model stays free
-/// of persistence derives.
-#[derive(FromRow)]
-struct PropertyRow {
-	id: String,
-	name: String,
-	place_id: String,
-	price: Option<f64>,
-	state: String,
-	purchased_at: Option<String>,
-	construction: String,
-	target_appreciation: f64,
-	developer: Option<String>,
-	research_url: String,
-	terms: Option<String>,
-	deal_json: Option<String>,
-	loan_json: Option<String>,
-	additional_reasoning: Option<String>,
-}
 
-impl TryFrom<PropertyRow> for Property {
-	type Error = DomainError;
+/// Synthesise a stable lot roster for a building from its id, so the two-level model
+/// is exercised end to end while a real per-lot source does not exist. `our_state` and
+/// `base` are the building's representative single-unit figures: a handful of lots take
+/// our relationship, the rest split Sold/Available, and prices jitter around `base`.
+/// Called once at seed time — the result is persisted as real lots, not re-synthesised
+/// per read. Logged once so the data is never silently taken as real.
+fn mock_apartments(id: BuildingId, our_state: PropertyState, base: Option<Money>) -> Vec<Apartment> {
+	static NOTICE: std::sync::Once = std::sync::Once::new();
+	NOTICE.call_once(|| {
+		dioxus::logger::tracing::warn!("apartment rosters are procedurally seeded from the building id — no real per-lot source yet");
+	});
 
-	/// Stored values were validated on the way in, so a parse failure here means
-	/// the row is corrupt — a repository error, never a client-facing validation.
-	fn try_from(row: PropertyRow) -> Result<Self, Self::Error> {
-		let id = crate::domain::parse_property_id(&row.id).map_err(corrupt_row)?;
-		let construction: ConstructionStatus = row
-			.construction
-			.parse()
-			.map_err(|e| corrupt_row(DomainError::Repository(format!("unknown construction status: {e}"))))?;
-		let deal = row
-			.deal_json
-			.map(|j| serde_json::from_str::<DealStructure>(&j))
-			.transpose()
-			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
-		let loan = row
-			.loan_json
-			.map(|j| serde_json::from_str::<LoanRates>(&j))
-			.transpose()
-			.map_err(|e| corrupt_row(DomainError::Repository(e.to_string())))?;
-		Ok(Self {
-			id,
-			name: row.name,
-			place: GooglePlace::parse(row.place_id).map_err(corrupt_row)?,
-			price: row.price.map(Money::parse).transpose().map_err(corrupt_row)?,
-			state: match row
-				.state
-				.parse::<PropertyStateKind>()
-				.map_err(|e| corrupt_row(DomainError::Repository(format!("unknown property state: {e}"))))?
-			{
-				PropertyStateKind::Purchased => {
-					let raw = row
-						.purchased_at
-						.ok_or_else(|| corrupt_row(DomainError::Repository("purchased property row missing purchased_at".into())))?;
-					PropertyState::Purchased(raw.parse().map_err(|e| corrupt_row(DomainError::Repository(format!("bad purchased_at: {e}"))))?)
-				}
-				PropertyStateKind::Interesting => PropertyState::Interesting,
-				PropertyStateKind::Purchasing => PropertyState::Purchasing,
-			},
-			construction,
-			// The rule's single source of truth: an unfinished building has no target.
-			target_appreciation: match construction {
-				ConstructionStatus::Completed => row.target_appreciation,
-				ConstructionStatus::UnderConstruction => 0.0,
-			},
-			developer: row.developer,
-			research_url: ResearchUrl::parse(row.research_url).map_err(corrupt_row)?,
-			terms: row.terms,
-			deal,
-			loan,
-			additional_reasoning: row.additional_reasoning,
-			price_series: Vec::new(),
-			coords: None,
+	let root = id.raw().as_u64_pair().0;
+	let mix = |i: u64| -> u64 {
+		let mut z = root.wrapping_add(i.wrapping_mul(0x9E3779B97F4A7C15));
+		z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+		z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+		z ^ (z >> 31)
+	};
+	let total = 20 + (mix(0) % 21) as u32; // 20..=40 lots
+	let ours = 1 + (mix(1) % 5) as u32; // 1..=5 of them ours
+	let ours_status = match our_state {
+		PropertyState::Purchased(ts) => ApartmentStatus::Purchased(ts),
+		PropertyState::Purchasing => ApartmentStatus::Purchasing,
+		PropertyState::Interesting => ApartmentStatus::Interesting,
+	};
+	(1..=total)
+		.map(|n| {
+			let status = if n <= ours {
+				ours_status
+			} else if mix(n as u64 * 3) % 100 < 55 {
+				ApartmentStatus::Sold
+			} else {
+				ApartmentStatus::Available
+			};
+			let price = base.map(|m| {
+				let f = 0.82 + (mix(n as u64 * 7) % 37) as f64 / 100.0; // 0.82..=1.18
+				Money::parse((m.amount() * f).round()).expect("jittered price stays non-negative finite")
+			});
+			Apartment {
+				number: n,
+				status,
+				price,
+				price_series: Vec::new(),
+			}
 		})
-	}
+		.collect()
 }
 
 #[derive(FromRow)]
@@ -419,6 +390,7 @@ struct DeveloperRow {
 struct FileRow {
 	id: String,
 	property_id: String,
+	apt: Option<i64>,
 	kind: String,
 	filename: String,
 	content_type: String,
@@ -430,7 +402,8 @@ impl TryFrom<FileRow> for PropertyFile {
 	fn try_from(row: FileRow) -> Result<Self, Self::Error> {
 		Ok(Self {
 			id: crate::domain::parse_file_id(&row.id).map_err(corrupt_row)?,
-			property_id: crate::domain::parse_property_id(&row.property_id).map_err(corrupt_row)?,
+			building_id: crate::domain::parse_building_id(&row.property_id).map_err(corrupt_row)?,
+			apt: row.apt.map(|n| n as u32),
 			kind: row.kind.parse().map_err(|e| corrupt_row(DomainError::Repository(format!("unknown file kind: {e}"))))?,
 			filename: row.filename,
 			content_type: row.content_type,
@@ -439,18 +412,18 @@ impl TryFrom<FileRow> for PropertyFile {
 }
 
 impl Repository for SqliteStore {
-	type Aggregate = Property;
+	type Aggregate = Building;
 }
 
 impl Reader for SqliteStore {
-	type Aggregate = Property;
+	type Aggregate = Building;
 }
 
 #[async_trait]
-impl PropertyRepository for SqliteStore {
+impl BuildingRepository for SqliteStore {
 	/// Rows are loaded then filtered in Rust via `spec.holds`. The spec engine is
 	/// in-memory by design; SQL pushdown is explicitly descoped.
-	async fn list(&self, spec: Option<&(dyn Specification<Property> + Sync)>) -> Result<Vec<Property>, DomainError> {
+	async fn list(&self, spec: Option<&(dyn Specification<Building> + Sync)>) -> Result<Vec<Building>, DomainError> {
 		let rows = sqlx::query_as::<_, PropertyRow>(
 			"SELECT id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties",
 		)
@@ -459,15 +432,15 @@ impl PropertyRepository for SqliteStore {
 		.map_err(map_sqlx_error)?;
 		let mut out = Vec::new();
 		for row in rows {
-			let p = Property::try_from(row)?;
-			if spec.map(|s| Specification::holds(s, &p)).unwrap_or(true) {
-				out.push(p);
+			let b = Building::try_from(row)?;
+			if spec.map(|s| Specification::holds(s, &b)).unwrap_or(true) {
+				out.push(b);
 			}
 		}
 		Ok(out)
 	}
 
-	async fn get(&self, id: PropertyId) -> Result<Option<Property>, DomainError> {
+	async fn get(&self, id: BuildingId) -> Result<Option<Building>, DomainError> {
 		let row = sqlx::query_as::<_, PropertyRow>(
 			"SELECT id, name, place_id, price, state, purchased_at, construction, target_appreciation, developer, research_url, terms, deal_json, loan_json, additional_reasoning FROM properties WHERE id = ?",
 		)
@@ -475,7 +448,7 @@ impl PropertyRepository for SqliteStore {
 		.fetch_optional(&self.pool)
 		.await
 		.map_err(map_sqlx_error)?;
-		row.map(Property::try_from).transpose()
+		row.map(Building::try_from).transpose()
 	}
 
 	async fn get_developer(&self, name: &str) -> Result<Option<Developer>, DomainError> {
@@ -492,9 +465,10 @@ impl PropertyRepository for SqliteStore {
 	}
 
 	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError> {
-		sqlx::query("INSERT INTO property_files (id, property_id, kind, filename, content_type) VALUES (?, ?, ?, ?, ?)")
+		sqlx::query("INSERT INTO property_files (id, property_id, apt, kind, filename, content_type) VALUES (?, ?, ?, ?, ?, ?)")
 			.bind(f.id.raw().to_string())
-			.bind(f.property_id.raw().to_string())
+			.bind(f.building_id.raw().to_string())
+			.bind(f.apt.map(|n| n as i64))
 			.bind(f.kind.as_ref())
 			.bind(&f.filename)
 			.bind(&f.content_type)
@@ -504,8 +478,10 @@ impl PropertyRepository for SqliteStore {
 		Ok(())
 	}
 
-	async fn list_files(&self, id: PropertyId) -> Result<Vec<PropertyFile>, DomainError> {
-		let rows = sqlx::query_as::<_, FileRow>("SELECT id, property_id, kind, filename, content_type FROM property_files WHERE property_id = ?")
+	/// All files for a building, lot-level and building-level alike; the caller
+	/// (`api::list_files`) narrows to the active level via each file's `apt`.
+	async fn list_files(&self, id: BuildingId) -> Result<Vec<PropertyFile>, DomainError> {
+		let rows = sqlx::query_as::<_, FileRow>("SELECT id, property_id, apt, kind, filename, content_type FROM property_files WHERE property_id = ?")
 			.bind(id.raw().to_string())
 			.fetch_all(&self.pool)
 			.await

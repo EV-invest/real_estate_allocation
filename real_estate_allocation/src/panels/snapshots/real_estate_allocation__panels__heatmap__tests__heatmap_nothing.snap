@@ -1,5 +1,0 @@
----
-source: real_estate_allocation/src/panels/heatmap.rs
-expression: render(tiles)
----
-<div class="relative h-full w-full overflow-hidden rounded-lg bg-main-surface"></div>

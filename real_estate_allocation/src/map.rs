@@ -5,46 +5,53 @@
 use dioxus::prelude::*;
 use ev_lib::uikit::{Card, CardContent, Skeleton};
 
-use crate::{app::Selected, domain::PropertyStateKind};
+use crate::{
+	app::{SelectedAppt, SelectedBuilding},
+	domain::PropertyStateKind,
+};
 
 #[component]
 pub fn MapPanel() -> Element {
-	let selected = use_context::<Selected>();
+	let selected = use_context::<SelectedBuilding>();
+	let appt = use_context::<SelectedAppt>();
 
 	// Shared with the heatmap so both show the same set.
 	let filter = use_context::<crate::app::Filter>();
 
-	let properties = use_resource(move || {
+	let buildings = use_resource(move || {
 		let states = filter();
 		async move {
-			crate::api::list_properties(Some(states))
+			crate::api::list_buildings(Some(states))
 				.await
-				.inspect_err(|e| dioxus::logger::tracing::error!(%e, "map: list_properties failed"))
+				.inspect_err(|e| dioxus::logger::tracing::error!(%e, "map: list_buildings failed"))
 				.unwrap_or_default()
 		}
 	});
 
-	// Push the property list + current selection into the JS layer whenever either
+	// Push the building list + current selection into the JS layer whenever any
 	// changes. No-op on the server build.
 	#[cfg(target_arch = "wasm32")]
 	{
 		use_effect(move || {
-			// Read both reactive sources *inside* the effect so it re-runs whenever
-			// the property list or the selection changes.
+			// Read every reactive source *inside* the effect so it re-runs on any change.
 			let sel = selected().map(|id| id.raw().to_string()).unwrap_or_default();
-			sync_url(&sel);
-			if let Some(props) = properties.read().as_ref() {
-				let json = serde_json::to_string(props).unwrap_or_else(|_| "[]".into());
+			let appt = appt().map(|n| n.to_string()).unwrap_or_default();
+			sync_url(&sel, &appt);
+			if let Some(list) = buildings.read().as_ref() {
+				let json = serde_json::to_string(list).unwrap_or_else(|_| "[]".into());
 				render_markers("rea-map", &json, &sel);
 			}
 		});
 
-		// JS→Rust marker-click bridge, installed once.
+		// JS→Rust marker-click bridge, installed once. Selecting a building clears any
+		// apartment drilled into the previous one.
 		let mut selected = selected;
+		let mut appt = appt;
 		use_hook(move || {
 			let cb = wasm_bindgen::closure::Closure::<dyn FnMut(String)>::new(move |id: String| {
-				if let Ok(pid) = crate::domain::parse_property_id(&id) {
-					selected.set(Some(pid));
+				if let Ok(bid) = crate::domain::parse_building_id(&id) {
+					selected.set(Some(bid));
+					appt.set(None);
 				}
 			});
 			rea_on_select(&cb);
@@ -53,7 +60,7 @@ pub fn MapPanel() -> Element {
 		});
 	}
 	#[cfg(not(target_arch = "wasm32"))]
-	let _ = (selected, &properties);
+	let _ = (selected, appt, &buildings);
 
 	rsx! {
 		// h-full so the map fills (and resizes with) its dock pane; the tab already labels it,
@@ -64,7 +71,7 @@ pub fn MapPanel() -> Element {
 				div { class: "absolute right-3 top-3 z-10",
 					StateFilter { filter }
 				}
-				if properties.read().is_none() {
+				if buildings.read().is_none() {
 					Skeleton { class: "absolute inset-0" }
 				}
 			}
@@ -127,15 +134,20 @@ let __reaFitted = false;
 
 window.__reaMapsReady = function () { window.__reaMapsLoaded = true; };
 
-function __reaColor(state) {
-  // `Purchased` serialises as `{Purchased: <ts>}`; the unit variants as plain strings.
-  const kind = (typeof state === 'string') ? state : Object.keys(state)[0];
-  switch (kind) {
-    case 'Purchased': return '#2e9e5b';
-    case 'Interesting': return '#f2c94c';
-    case 'Purchasing': return '#e58aae';
-    default: return '#e6e1d3';
+function __reaColor(apartments) {
+  // A building's pin colour is its strongest portfolio relationship across lots:
+  // Purchased > Purchasing > Interesting. A lot's `Purchased` serialises as
+  // `{Purchased: <ts>}`; the other statuses as plain strings.
+  let purchasing = false, interesting = false;
+  for (const a of (apartments || [])) {
+    const kind = (typeof a.status === 'string') ? a.status : Object.keys(a.status)[0];
+    if (kind === 'Purchased') return '#2e9e5b';
+    if (kind === 'Purchasing') purchasing = true;
+    else if (kind === 'Interesting') interesting = true;
   }
+  if (purchasing) return '#e58aae';
+  if (interesting) return '#f2c94c';
+  return '#e6e1d3';
 }
 
 export function rea_render_markers(elId, propsJson, selectedId) {
@@ -154,7 +166,7 @@ export function rea_render_markers(elId, propsJson, selectedId) {
     const id = p.id;
     seen[id] = true;
     const pos = { lat: p.coords.lat, lng: p.coords.lng };
-    const color = __reaColor(p.state);
+    const color = __reaColor(p.apartments);
     const scale = id === selectedId ? 11 : 7;
     const icon = { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#070d18', strokeWeight: 2, scale: scale };
     bounds.extend(pos);
@@ -174,15 +186,28 @@ export function rea_render_markers(elId, propsJson, selectedId) {
 
 export function rea_on_select(cb) { window.__reaSelect = cb; }
 
-export function rea_sync_url(selectedId) {
+export function rea_on_keynav(cb) {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') cb(-1);
+    else if (e.key === 'ArrowRight') cb(1);
+  });
+}
+
+export function rea_sync_url(buildingId, appt) {
   const url = new URL(window.location.href);
-  if (selectedId) { url.searchParams.set('property', selectedId); }
-  else { url.searchParams.delete('property'); }
+  if (buildingId) { url.searchParams.set('building', buildingId); }
+  else { url.searchParams.delete('building'); }
+  if (appt) { url.searchParams.set('appt', appt); }
+  else { url.searchParams.delete('appt'); }
   window.history.replaceState({}, '', url);
 }
 
-export function rea_url_property() {
-  return new URL(window.location.href).searchParams.get('property') || '';
+export function rea_url_building() {
+  return new URL(window.location.href).searchParams.get('building') || '';
+}
+
+export function rea_url_appt() {
+  return new URL(window.location.href).searchParams.get('appt') || '';
 }
 
 export function rea_sync_selection(csv) {
@@ -200,10 +225,14 @@ extern "C" {
 	#[wasm_bindgen(js_name = rea_render_markers)]
 	fn render_markers(el_id: &str, props_json: &str, selected_id: &str);
 	fn rea_on_select(cb: &wasm_bindgen::closure::Closure<dyn FnMut(String)>);
+	#[wasm_bindgen(js_name = rea_on_keynav)]
+	pub fn on_keynav(cb: &wasm_bindgen::closure::Closure<dyn FnMut(i32)>);
 	#[wasm_bindgen(js_name = rea_sync_url)]
-	fn sync_url(selected_id: &str);
-	#[wasm_bindgen(js_name = rea_url_property)]
-	pub fn url_property() -> String;
+	fn sync_url(building_id: &str, appt: &str);
+	#[wasm_bindgen(js_name = rea_url_building)]
+	pub fn url_building() -> String;
+	#[wasm_bindgen(js_name = rea_url_appt)]
+	pub fn url_appt() -> String;
 	#[wasm_bindgen(js_name = rea_sync_selection)]
 	pub fn sync_selection(csv: &str);
 	#[wasm_bindgen(js_name = rea_url_selection)]
