@@ -1,5 +1,0 @@
----
-source: real_estate_allocation/src/panels/heatmap.rs
-expression: "render(included, states.to_vec())"
----
-<div class="relative h-full w-full overflow-hidden rounded-lg bg-main-surface"><button class="absolute flex flex-col justify-between overflow-hidden rounded-md p-2.5 text-left transition-[filter] hover:brightness-110" style="left:calc(0.0000% + 2px);top:calc(0.0000% + 2px);width:calc(75.6098% - 4px);height:calc(100.0000% - 4px);background-color:rgb(31,99,60)"><div class="flex min-w-0 flex-col gap-0.5"><span class="truncate text-sm font-semibold text-white">Melody</span><span class="text-xs text-white/80">+2.1%</span></div></button><button class="absolute flex flex-col justify-between overflow-hidden rounded-md p-2.5 text-left transition-[filter] hover:brightness-110" style="left:calc(75.6098% + 2px);top:calc(0.0000% + 2px);width:calc(24.3902% - 4px);height:calc(100.0000% - 4px);background-color:rgb(128,46,44)"><div class="flex min-w-0 flex-col gap-0.5"><span class="truncate text-sm font-semibold text-white">Vina2</span><span class="text-xs text-white/80">-2.5%</span></div></button></div>

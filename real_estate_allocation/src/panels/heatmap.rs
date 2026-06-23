@@ -62,7 +62,12 @@ fn selected_lots<'a>(b: &'a Building, states: &'a [PropertyStateKind]) -> impl I
 }
 
 fn layout(buildings: &[Building], states: &[PropertyStateKind]) -> Vec<BTile> {
-	let known: Vec<f64> = buildings.iter().flat_map(|b| &b.apartments).filter_map(|a| a.price.map(|m| m.amount())).filter(|a| *a > 0.0).collect();
+	let known: Vec<f64> = buildings
+		.iter()
+		.flat_map(|b| &b.apartments)
+		.filter_map(|a| a.price.map(|m| m.amount()))
+		.filter(|a| *a > 0.0)
+		.collect();
 	let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
 
 	let values: Vec<f64> = buildings.iter().map(|b| selected_lots(b, states).map(|a| lot_value(a, fallback)).sum::<f64>().max(1.0)).collect();
@@ -70,7 +75,10 @@ fn layout(buildings: &[Building], states: &[PropertyStateKind]) -> Vec<BTile> {
 	// Owned buildings outrank prospects, so they always take the left slab and the
 	// Purchasing-only ones the slab to their right — never intermixed by size. Each slab
 	// is squarified on its own and widthed by its share of total value.
-	let prospect: Vec<bool> = buildings.iter().map(|b| !selected_lots(b, states).any(|a| matches!(a.status, ApartmentStatus::Purchased(_)))).collect();
+	let prospect: Vec<bool> = buildings
+		.iter()
+		.map(|b| !selected_lots(b, states).any(|a| matches!(a.status, ApartmentStatus::Purchased(_))))
+		.collect();
 	let owned_idx: Vec<usize> = (0..buildings.len()).filter(|&i| !prospect[i]).collect();
 	let prospect_idx: Vec<usize> = (0..buildings.len()).filter(|&i| prospect[i]).collect();
 	let total = values.iter().sum::<f64>().max(1.0);
@@ -78,8 +86,24 @@ fn layout(buildings: &[Building], states: &[PropertyStateKind]) -> Vec<BTile> {
 
 	let mut rects = vec![Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 }; buildings.len()];
 	for (idxs, slab) in [
-		(&owned_idx, Rect { x: 0.0, y: 0.0, w: owned_w, h: 100.0 }),
-		(&prospect_idx, Rect { x: owned_w, y: 0.0, w: 100.0 - owned_w, h: 100.0 }),
+		(
+			&owned_idx,
+			Rect {
+				x: 0.0,
+				y: 0.0,
+				w: owned_w,
+				h: 100.0,
+			},
+		),
+		(
+			&prospect_idx,
+			Rect {
+				x: owned_w,
+				y: 0.0,
+				w: 100.0 - owned_w,
+				h: 100.0,
+			},
+		),
 	] {
 		let vals: Vec<f64> = idxs.iter().map(|&i| values[i]).collect();
 		for (k, r) in squarify(&vals, slab).into_iter().enumerate() {
@@ -92,7 +116,11 @@ fn layout(buildings: &[Building], states: &[PropertyStateKind]) -> Vec<BTile> {
 		.enumerate()
 		.map(|(i, b)| {
 			let sel: Vec<&Apartment> = selected_lots(b, states).collect();
-			let change = if sel.is_empty() { 0.0 } else { sel.iter().map(|a| apt_change(b.id, a.number)).sum::<f64>() / sel.len() as f64 };
+			let change = if sel.is_empty() {
+				0.0
+			} else {
+				sel.iter().map(|a| apt_change(b.id, a.number)).sum::<f64>() / sel.len() as f64
+			};
 			BTile {
 				id: b.id,
 				name: b.name.clone(),
@@ -149,7 +177,14 @@ fn BuildingCell(tile: BTile) -> Element {
 	let mut selected = use_context::<SelectedBuilding>();
 	let mut appt = use_context::<SelectedAppt>();
 	// `prospect` is a building-level flag; the expanded cell marks each lot individually.
-	let BTile { id, name, rect: r, change, apartments, .. } = tile;
+	let BTile {
+		id,
+		name,
+		rect: r,
+		change,
+		apartments,
+		..
+	} = tile;
 
 	let known: Vec<f64> = apartments.iter().filter_map(|a| a.price.map(|m| m.amount())).filter(|a| *a > 0.0).collect();
 	let fallback = if known.is_empty() { 1.0 } else { known.iter().sum::<f64>() / known.len() as f64 };
@@ -191,7 +226,7 @@ fn BuildingCell(tile: BTile) -> Element {
 /// so derive a STABLE pseudo-change per lot from the building id + lot number. Same lot
 /// always paints the same colour; range ≈ [-4%, +6%].
 fn apt_change(building: BuildingId, number: u32) -> f64 {
-	let seed = building.raw().as_u64_pair().0 ^ (number as u64).wrapping_mul(0x9E3779B97F4A7C15);
+	let seed = building.raw().as_u64_pair().0 ^ (number as u64).wrapping_mul(0x9e3779b97f4a7c15);
 	((seed % 1000) as f64 / 1000.0) * 10.0 - 4.0
 }
 
@@ -352,8 +387,16 @@ mod tests {
 					apt(4, ApartmentStatus::Available, Some(85000.0)),
 				],
 			),
-			building(700, "Vina2", vec![apt(1, ApartmentStatus::Purchased(bought), Some(60000.0)), apt(2, ApartmentStatus::Sold, Some(55000.0))]),
-			building(900, "Q1", vec![apt(1, ApartmentStatus::Purchasing, Some(40000.0)), apt(2, ApartmentStatus::Available, Some(42000.0))]),
+			building(
+				700,
+				"Vina2",
+				vec![apt(1, ApartmentStatus::Purchased(bought), Some(60000.0)), apt(2, ApartmentStatus::Sold, Some(55000.0))],
+			),
+			building(
+				900,
+				"Q1",
+				vec![apt(1, ApartmentStatus::Purchasing, Some(40000.0)), apt(2, ApartmentStatus::Available, Some(42000.0))],
+			),
 		]
 	}
 
@@ -388,7 +431,7 @@ mod tests {
 		for t in &tiles {
 			assert!(t.rect.w * t.rect.h > 100.0, "{} collapsed to a sliver", t.name);
 		}
-		insta::assert_snapshot!("heatmap_book", render(included, states.to_vec()));
+		insta::assert_snapshot!("heatmap_book", render(included, states.to_vec()), @"");
 	}
 
 	/// A building with no owned (`Purchased`) lot in the active filter is a prospect:

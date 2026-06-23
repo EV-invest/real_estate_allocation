@@ -174,6 +174,90 @@ pub struct Building {
 	#[serde(default)]
 	pub coords: Option<Coords>,
 }
+impl Building {
+	/// The distinct portfolio-relationship kinds present across our lots — what map
+	/// pins and the state filter switch on. Empty when we own nothing here.
+	pub fn state_kinds(&self) -> impl Iterator<Item = PropertyStateKind> {
+		let mut kinds: Vec<PropertyStateKind> = Vec::new();
+		for a in &self.apartments {
+			if let Some(k) = a.status.portfolio_kind()
+				&& !kinds.contains(&k)
+			{
+				kinds.push(k);
+			}
+		}
+		kinds.into_iter()
+	}
+
+	/// Mean asking price across lots with a known price; `None` if none are priced.
+	pub fn avg_price(&self) -> Option<Money> {
+		let priced: Vec<f64> = self.apartments.iter().filter_map(|a| a.price.map(|m| m.amount())).collect();
+		if priced.is_empty() {
+			return None;
+		}
+		Money::parse(priced.iter().sum::<f64>() / priced.len() as f64).ok()
+	}
+
+	pub fn lots_total(&self) -> usize {
+		self.apartments.len()
+	}
+
+	/// Off the market: everything not `Available` and not `Interesting` (we treat a
+	/// watched lot as still available to the market).
+	pub fn lots_sold(&self) -> usize {
+		self.lots_total() - self.lots_available()
+	}
+
+	pub fn lots_available(&self) -> usize {
+		self.apartments
+			.iter()
+			.filter(|a| matches!(a.status, ApartmentStatus::Available | ApartmentStatus::Interesting))
+			.count()
+	}
+
+	/// Realized appreciation over the trailing year, in % — the building's mean weekly
+	/// value now vs. ~12 months earlier. `None` unless the combined `price_series`
+	/// (populated only by `api::get_building`) spans at least a year; the panel then
+	/// shows "-".
+	pub fn appreciation_yoy(&self) -> Option<f64> {
+		use std::collections::BTreeMap;
+		const WEEK: i64 = 7 * 24 * 3600;
+		const YEAR: i64 = 365 * 24 * 3600;
+
+		let mut weekly: BTreeMap<i64, (f64, u32)> = BTreeMap::new();
+		for a in &self.apartments {
+			for (t, v) in &a.price_series {
+				let e = weekly.entry(t.as_second() / WEEK).or_default();
+				e.0 += *v;
+				e.1 += 1;
+			}
+		}
+		let series: Vec<(i64, f64)> = weekly.into_iter().map(|(w, (sum, n))| (w * WEEK, sum / n as f64)).collect();
+		let first = *series.first()?;
+		let last = *series.last()?;
+		if last.0 - first.0 < YEAR {
+			return None;
+		}
+		let target = last.0 - YEAR;
+		let v_year_ago = series.iter().min_by_key(|(t, _)| (t - target).abs()).map(|(_, v)| *v)?;
+		Some((last.1 / v_year_ago - 1.0) * 100.0)
+	}
+
+	/// Fraction of all lots that are ours (`Purchasing` or `Purchased`) — the donut's
+	/// centred "your share".
+	pub fn your_share(&self) -> f64 {
+		let total = self.lots_total();
+		if total == 0 {
+			return 0.0;
+		}
+		let ours = self
+			.apartments
+			.iter()
+			.filter(|a| matches!(a.status, ApartmentStatus::Purchasing | ApartmentStatus::Purchased(_)))
+			.count();
+		ours as f64 / total as f64
+	}
+}
 
 /// One lot inside a building. `status` is its market state fused with our portfolio
 /// relationship; `price` / `price_series` are per-unit.
@@ -213,84 +297,6 @@ impl ApartmentStatus {
 			Self::Interesting => Some(PropertyStateKind::Interesting),
 			Self::Available | Self::Sold => None,
 		}
-	}
-}
-
-impl Building {
-	/// The distinct portfolio-relationship kinds present across our lots — what map
-	/// pins and the state filter switch on. Empty when we own nothing here.
-	pub fn state_kinds(&self) -> impl Iterator<Item = PropertyStateKind> {
-		let mut kinds: Vec<PropertyStateKind> = Vec::new();
-		for a in &self.apartments {
-			if let Some(k) = a.status.portfolio_kind()
-				&& !kinds.contains(&k)
-			{
-				kinds.push(k);
-			}
-		}
-		kinds.into_iter()
-	}
-
-	/// Mean asking price across lots with a known price; `None` if none are priced.
-	pub fn avg_price(&self) -> Option<Money> {
-		let priced: Vec<f64> = self.apartments.iter().filter_map(|a| a.price.map(|m| m.amount())).collect();
-		if priced.is_empty() {
-			return None;
-		}
-		Money::parse(priced.iter().sum::<f64>() / priced.len() as f64).ok()
-	}
-
-	pub fn lots_total(&self) -> usize {
-		self.apartments.len()
-	}
-
-	/// Off the market: everything not `Available` and not `Interesting` (we treat a
-	/// watched lot as still available to the market).
-	pub fn lots_sold(&self) -> usize {
-		self.lots_total() - self.lots_available()
-	}
-
-	pub fn lots_available(&self) -> usize {
-		self.apartments.iter().filter(|a| matches!(a.status, ApartmentStatus::Available | ApartmentStatus::Interesting)).count()
-	}
-
-	/// Realized appreciation over the trailing year, in % — the building's mean weekly
-	/// value now vs. ~12 months earlier. `None` unless the combined `price_series`
-	/// (populated only by `api::get_building`) spans at least a year; the panel then
-	/// shows "-".
-	pub fn appreciation_yoy(&self) -> Option<f64> {
-		use std::collections::BTreeMap;
-		const WEEK: i64 = 7 * 24 * 3600;
-		const YEAR: i64 = 365 * 24 * 3600;
-
-		let mut weekly: BTreeMap<i64, (f64, u32)> = BTreeMap::new();
-		for a in &self.apartments {
-			for (t, v) in &a.price_series {
-				let e = weekly.entry(t.as_second() / WEEK).or_default();
-				e.0 += *v;
-				e.1 += 1;
-			}
-		}
-		let series: Vec<(i64, f64)> = weekly.into_iter().map(|(w, (sum, n))| (w * WEEK, sum / n as f64)).collect();
-		let first = *series.first()?;
-		let last = *series.last()?;
-		if last.0 - first.0 < YEAR {
-			return None;
-		}
-		let target = last.0 - YEAR;
-		let v_year_ago = series.iter().min_by_key(|(t, _)| (t - target).abs()).map(|(_, v)| *v)?;
-		Some((last.1 / v_year_ago - 1.0) * 100.0)
-	}
-
-	/// Fraction of all lots that are ours (`Purchasing` or `Purchased`) — the donut's
-	/// centred "your share".
-	pub fn your_share(&self) -> f64 {
-		let total = self.lots_total();
-		if total == 0 {
-			return 0.0;
-		}
-		let ours = self.apartments.iter().filter(|a| matches!(a.status, ApartmentStatus::Purchasing | ApartmentStatus::Purchased(_))).count();
-		ours as f64 / total as f64
 	}
 }
 
