@@ -1,0 +1,16 @@
+/* Tailwind entrypoint for the cross-origin microfrontend bundle (served at
+ * `/mfe/mfe.css`). Utilities-only by design: the landing host already ships
+ * Tailwind preflight + the brand fonts and `:root` tokens in light DOM, and the
+ * bundle mounts into that light DOM — so re-shipping preflight would double the
+ * reset and re-shipping fonts is wasteful. We import only the theme (so the brand
+ * color utilities generate) and the utilities layer, skipping preflight. Mirror
+ * of `input.css` minus its `@layer base` reset.
+ *
+ * The host does NOT scan REA source, so it can't generate REA's token/arbitrary
+ * utility classes — this bundle must, by scanning `src` below. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./assets/tokens.css";
+
+/* Scan the embed RSX for class names. */
+@source "./src/**/*.rs";

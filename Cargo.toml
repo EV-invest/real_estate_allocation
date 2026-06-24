@@ -47,9 +47,9 @@ tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
 
-# Local checkout overrides the git source — we edit the lib alongside the app.
-#[patch."https://github.com/EV-invest/lib.git"]
-#ev_lib = { path = "../lib/rust" }
-
-#[patch.crates-io]
+# Local checkout overrides the crates.io source — we edit the lib alongside the app.
+# Required until ev_lib's `mfe` feature (the producer SDK) is published; the path
+# build is identical to 0.3.1 for the dashboard (mfe is additive + off there).
+[patch.crates-io]
+ev_lib = { path = "../lib/rust" }
 #dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"

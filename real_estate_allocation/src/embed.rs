@@ -1,20 +1,21 @@
-//! Iframe-embeddable marketing surface (`/embed/overview`). A standalone port of
-//! the landing "Premium Asset Portfolio" bento section — no app shell, so a host
-//! page can `<iframe>` it. Static content mirroring the landing source; the only
+//! Marketing surface mounted by the cross-origin microfrontend bundle
+//! (`real_estate_allocation_mfe`). A standalone port of the landing "Premium Asset
+//! Portfolio" bento section — no app shell, so the landing host composes `<tag>`
+//! directly into its page. Static content mirroring the landing source; the only
 //! interactive tile is the self-contained correlation / risk-premia terminal.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::Container;
+use ev_lib::{mfe::bundle_origin, uikit::Container};
 
 use crate::factors::profile;
 
-// Both tiles are real listings. Banners are bundled as app assets (the property
-// folders' images are served only through the `file_bytes` server fn); a click
-// breaks out to the dashboard home with the property pre-selected, so it works
-// embedded (`target=_top`) and standalone alike.
-const Q1_BANNER: Asset = asset!("/assets/seed/q1_tower/render.jpg");
+// Both tiles are real listings. Banners are served from the bundle's own origin
+// under `/mfe/seed/…` (copied there by the build) — paths relative to that origin,
+// resolved against `bundle_origin()` at render. A click breaks out to the REA
+// dashboard home with the property pre-selected (absolute, cross-origin link).
+const Q1_BANNER: &str = "seed/q1_tower/render.jpg";
 const Q1_PROPERTY: &str = "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a";
-const TMS_BANNER: Asset = asset!("/assets/seed/tms/building.jpg");
+const TMS_BANNER: &str = "seed/tms/building.jpg";
 const TMS_PROPERTY: &str = "c19bded1-1a13-49ad-a0f0-549b2aec2d0e";
 
 // Swap-fraction slider bounds, in percent (0–100% of the host book moved into S).
@@ -108,15 +109,15 @@ fn FeaturedCard() -> Element {
 			(target_yield, appreciation, status)
 		}
 	};
+	let origin = bundle_origin();
 
 	rsx! {
 		a {
-			href: "/?building={Q1_PROPERTY}",
-			target: "_top",
+			href: "{origin}/?building={Q1_PROPERTY}",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
-				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({Q1_BANNER})",
+				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({origin}/mfe/{Q1_BANNER})",
 			}
 			div { class: "absolute right-4 top-4 bg-main-accent-t1 px-3 py-1.5 font-mono text-[0.625rem] font-bold uppercase tracking-widest text-main-black",
 				"Featured Deal"
@@ -143,14 +144,14 @@ fn FeaturedCard() -> Element {
 /// Standard side tile. Links to the TMS Luxury Hotel & Residence property page.
 #[component]
 fn SideCard() -> Element {
+	let origin = bundle_origin();
 	rsx! {
 		a {
-			href: "/?building={TMS_PROPERTY}",
-			target: "_top",
+			href: "{origin}/?building={TMS_PROPERTY}",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
-				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({TMS_BANNER})",
+				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({origin}/mfe/{TMS_BANNER})",
 			}
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",

@@ -1,0 +1,10 @@
+# Prod config template. Deploy pipes this through `reasonable_envsubst`, which
+# inlines the env references below from the local env, then ships the result to
+# the VPS as /data/config.toml. No secrets live in the repo.
+socket_addr = "0.0.0.0:59079"
+db_path = "/data/app.db"
+data_dir = "/data/properties"
+layout_path = "/data/dashboard_layout.json"
+admin_token = "${REA_ADMIN_TOKEN}"
+admins = []
+maps_api_key = "${GOOGLE_MAPS_KEY}"

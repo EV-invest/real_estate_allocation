@@ -1,0 +1,20 @@
+[package]
+name = "real_estate_allocation_mfe"
+version = "0.1.0"
+edition = "2024"
+
+# The cross-origin microfrontend bundle: a self-registering custom element built
+# with `wasm-bindgen --target web` (manganis-free — see `ev_lib::mfe`). Reuses the
+# REA `embed::Overview` surface; all the producer boilerplate is the `mfe!` macro.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+real_estate_allocation = { path = "../real_estate_allocation", features = ["mfe"] }
+ev_lib = { workspace = true, features = ["uikit", "wasm", "mfe"] }
+dioxus = { workspace = true, features = ["fullstack", "web"] }
+wasm-bindgen.workspace = true
+web-sys = { version = "0.3", features = ["Element"] }
+
+[lints]
+workspace = true

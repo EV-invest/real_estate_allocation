@@ -1932,16 +1932,16 @@ dependencies = [
 [[package]]
 name = "ev_lib"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2211a7e3d2a1623adf1a53e21aaa70a7131d05564d5e9e96872bfa232e3c4d80"
 dependencies = [
  "async-trait",
  "dioxus",
  "jiff",
+ "js-sys",
  "serde",
  "strum 0.27.2",
  "tailwind_fuse",
  "uuid",
+ "wasm-bindgen",
  "web-sys",
 ]
 
@@ -3958,6 +3958,7 @@ dependencies = [
  "strum 0.28.0",
  "thiserror 2.0.18",
  "tokio",
+ "tower-http",
  "uuid",
  "v_utils",
  "wasm-bindgen",
@@ -3966,6 +3967,17 @@ dependencies = [
 [[package]]
 name = "real_estate_allocation_macros"
 version = "0.1.0"
+
+[[package]]
+name = "real_estate_allocation_mfe"
+version = "0.1.0"
+dependencies = [
+ "dioxus",
+ "ev_lib",
+ "real_estate_allocation",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "redox_syscall"

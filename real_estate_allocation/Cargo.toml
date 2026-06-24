@@ -9,6 +9,10 @@ edition = "2024"
 default = []
 web = ["dioxus/web"]
 server = ["dioxus/server"]
+# Compiles the `embed::Overview` surface for the cross-origin microfrontend bundle
+# (`real_estate_allocation_mfe`). Client-only (implies `web`); never enabled for
+# the native dashboard build, so `embed` and the `ev_lib::mfe` SDK stay out of it.
+mfe = ["web", "ev_lib/mfe"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
@@ -18,6 +22,8 @@ reqwest.workspace = true
 smart-default.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
+# Serves the built MFE bundle at `/mfe` (`fs`) under a cross-origin allowlist (`cors`).
+tower-http = { version = "0.6", features = ["fs", "cors"] }
 v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli", "tracing", "xdg"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

@@ -42,32 +42,39 @@ Everything persistent lives in one host dir mounted at `/data` (the image's
 `--config /data/config.toml`. `socket_addr` MUST bind `0.0.0.0` or the port is
 unreachable from outside the container.
 
-`/opt/evinvest/rea-data/config.toml`:
+The config template `deploy/config.toml` holds prod paths and `${VAR}` env
+references for secrets (no secrets in the repo). Deploy renders it through
+`reasonable_envsubst` — which inlines the referenced env vars from the local
+shell — and ships the result:
 
-```toml
-socket_addr = "0.0.0.0:59079"
-db_path = "/data/app.db"
-data_dir = "/data/properties"
-layout_path = "/data/dashboard_layout.json"
-admin_token = "change-me-in-prod"
-admins = []
-maps_api_key = "not-set"
+```sh
+REA_ADMIN_TOKEN=… GOOGLE_MAPS_KEY=… \
+  reasonable_envsubst "$(cat deploy/config.toml)" \
+  | ssh inferno_vps_tokyo 'cat > /opt/evinvest/rea-data/config.toml \
+      && chown evinvest:evinvest /opt/evinvest/rea-data/config.toml \
+      && systemctl restart evinvest-rea'
 ```
+
+`GOOGLE_MAPS_KEY` is the same var the local config (`~/.config/real_estate_allocation.nix`)
+resolves at runtime via `maps_api_key.env`; here it's inlined at ship time
+instead, since the container has no such env.
 
 ### Systemd
 
-`/etc/systemd/system/evinvest-rea.service` — rootless podman, host dir mounted
-at `/data`, port published to localhost (Caddy fronts TLS):
+`/etc/systemd/system/evinvest-rea.service` — root podman, host network (matches
+the backend unit), host dir mounted at `/data`. `socket_addr` in the config
+binds the port; Caddy fronts TLS and routes `/embed/*` here.
 
 ```ini
 [Service]
-ExecStartPre=-/usr/bin/podman rm -f evinvest-rea
-ExecStart=/usr/bin/podman run --rm --name evinvest-rea \
-  -p 127.0.0.1:59079:59079 \
+Type=simple
+ExecStartPre=-podman rm -f evinvest-rea
+ExecStart=podman run --rm --name evinvest-rea \
+  --network=host \
   -v /opt/evinvest/rea-data:/data \
-  rea:latest --config /data/config.toml
-ExecStop=/usr/bin/podman stop evinvest-rea
+  localhost/rea:latest --config /data/config.toml
 Restart=on-failure
+RestartSec=5
 ```
 
 ```sh

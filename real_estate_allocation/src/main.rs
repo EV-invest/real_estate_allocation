@@ -62,12 +62,36 @@ fn main() {
 	// inside a Dioxus runtime"). We instead attach the shared state as an axum
 	// request extension, which is present on both the SSR render request and
 	// every server-fn POST; `crate::api` reads it via `FullstackContext`.
-	use dioxus::server::axum::{Extension, Router};
+	use dioxus::server::{
+		axum::{Extension, Router},
+		http::{HeaderValue, Method, header},
+	};
+	use tower_http::{cors::CorsLayer, services::ServeDir};
 	let app_state = real_estate_allocation::api::AppState { store, config };
 	dioxus::server::serve(move || {
 		let app_state = app_state.clone();
 		async move {
-			let router = Router::new().merge(dioxus::server::router(App)).layer(Extension(app_state));
+			// The bundle runs on the landing page, so its server-fn POSTs, the
+			// module/wasm fetch, and `/mfe` asset GETs are all cross-origin from
+			// landing — one CORS layer over the whole router covers them.
+			let origins = app_state
+				.config
+				.cors_allowed_origins
+				.iter()
+				.map(|o| o.parse::<HeaderValue>().expect("cors_allowed_origins entry is a valid Origin header value"))
+				.collect::<Vec<_>>();
+			let cors = CorsLayer::new()
+				.allow_origin(origins)
+				.allow_methods([Method::GET, Method::POST])
+				.allow_headers([header::CONTENT_TYPE]);
+			// Owned upfront: an inline `.as_ref()` borrow would live to the end of
+			// the `let router` statement and clash with the `Extension(app_state)` move.
+			let mfe_dir = app_state.config.mfe_dir.clone().inner();
+			let router = Router::new()
+				.merge(dioxus::server::router(App))
+				.nest_service("/mfe", ServeDir::new(mfe_dir))
+				.layer(Extension(app_state))
+				.layer(cors);
 			Ok(router)
 		}
 	});

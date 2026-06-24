@@ -29,6 +29,27 @@
         pname = manifest.name;
         stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
 
+        # Pinned to match the workspace's `wasm-bindgen` (`=0.2.125`) — nixpkgs
+        # ships a different minor, and a CLI/crate schema skew is a hard error at
+        # `wasm-bindgen` time. Shadows `pkgs.wasm-bindgen-cli` (a `let` binding
+        # wins over `with pkgs;`) wherever it's referenced below.
+        wasm-bindgen-cli =
+          let
+            src = pkgs.fetchCrate {
+              pname = "wasm-bindgen-cli";
+              version = "0.2.125";
+              hash = "sha256-zRawtjxMOdTMX+mZaiNR3YYfTiZJhf9qj7kXSSeMxrc=";
+            };
+          in
+          pkgs.buildWasmBindgenCli {
+            inherit src;
+            cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+              inherit src;
+              inherit (src) pname version;
+              hash = "sha256-aZCfgR23Qb0Pn4Mm4ToMtuuRQqSJjXCR9li/VvP5CTM=";
+            };
+          };
+
         # Brand logo from the pinned `ev_assets` input, copied into the served
         # assets dir (gitignored; declaratively populated, never hand-edited).
         logoSrc = "${ev_assets}/logo/logo.svg";
@@ -102,13 +123,72 @@
             dx serve --package real_estate_allocation --port 59079 #--interactive false
           '';
         };
+
+        # ── microfrontend bundle builder ─────────────────────────────────────
+        # `nix run .#mfe` → build the cross-origin MFE bundle into `$REPO/mfe-dist`,
+        # which the dev `dx serve` (above) serves at `/mfe` (config `mfe_dir`). All
+        # boilerplate (custom-element registration, start fn, manifest) is the
+        # `ev_lib::mfe!` macro; these steps are the manganis-free packaging `dx`
+        # can't do for a cross-origin remote: wasm-bindgen + utilities-only CSS +
+        # seed assets, all under the bundle's own origin.
+        #
+        # `wasm-bindgen-cli` is pinned to the `wasm-bindgen` crate (`=0.2.125`); a
+        # version skew is a hard schema error at bindgen time (see the let-binding).
+        mfeSteps = pkgs.writeShellScript "build-mfe-steps" ''
+          set -eu
+          out="$REPO/mfe-dist"
+          name="real_estate_allocation_mfe"
+
+          cd "$REPO"
+          # dioxus-web touches some unstable web-sys APIs; the host config sets this
+          # cfg for the native target only, so mirror it for wasm here.
+          export RUSTFLAGS="--cfg=web_sys_unstable_apis"
+          cargo build -p "$name" --target wasm32-unknown-unknown --release
+
+          rm -rf "$out"; mkdir -p "$out"
+          wasm-bindgen --target web --out-dir "$out" --out-name "$name" \
+            "target/wasm32-unknown-unknown/release/$name.wasm"
+
+          # wasm-bindgen `--target web` doesn't auto-init; this generic 2-line ESM
+          # wrapper is the bundle's registry entrypoint — importing it runs the
+          # `start` fn that registers the custom element. No contract knowledge.
+          # (printf, not a heredoc: a heredoc body/terminator would inherit this
+          # nix string's indentation.)
+          printf 'import init from "./%s.js";\nawait init();\n' "$name" > "$out/mfe-real-estate-overview.js"
+
+          cd "$REPO/real_estate_allocation"
+          [ -d node_modules ] || npm install
+          npx @tailwindcss/cli -i ./mfe.css -o "$out/mfe.css"
+          cp -r ./assets/seed "$out/seed"
+
+          # ponytail: mirrors `MFE_MANIFEST` (the macro's const, not host-readable
+          # from a shell). One remote, hand-kept; a multi-remote setup would emit it
+          # from a tiny print step and feed it into landing's registry.
+          printf '%s\n' '{"name":"real-estate.overview","tag":"mfe-real-estate-overview","kind":"component"}' > "$out/mfe.json"
+          echo "  ▶ MFE bundle built → $out"
+        '';
+        # Run the steps *inside* the devShell: onig_sys (C, pulled by miette→syntect)
+        # cross-compiles to wasm only with the cc-wrapper the devShell sets up — a
+        # bare `writeShellApplication` PATH lacks it (fails on `gnu/stubs-32.h`). The
+        # devShell also carries `rust`, the pinned `wasm-bindgen-cli`, and `nodejs`.
+        runMfe = pkgs.writeShellApplication {
+          name = "build-mfe";
+          runtimeInputs = with pkgs; [ git ];
+          text = ''
+            REPO="$(git rev-parse --show-toplevel)"
+            export REPO
+            exec nix develop "$REPO" --command ${mfeSteps}
+          '';
+        };
       in
       {
         # `nix run .#dev` → Tailwind watch + fullstack dx serve (the one command
-        # you need for a dev view). `.#default` aliases it.
+        # you need for a dev view). `.#default` aliases it. `.#mfe` builds the
+        # microfrontend bundle dev `dx serve` serves at `/mfe`.
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
+          mfe = { type = "app"; program = "${runMfe}/bin/build-mfe"; };
         };
 
         packages =
@@ -160,7 +240,12 @@
                 # just get overwritten. The config MUST bind 0.0.0.0 to be
                 # reachable from outside the container.
                 Entrypoint = [ "/bin/real_estate_allocation" ];
-                Env = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
+                # HOME: v_utils' tracing logs to the XDG state dir, which panics
+                # (HomeMissing) without it. Point it at the writable /data volume.
+                Env = [
+                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                  "HOME=/data"
+                ];
                 # /data is a mounted volume: config.toml + sqlite db + properties.
                 WorkingDir = "/data";
                 ExposedPorts = { "59079/tcp" = { }; };
@@ -192,6 +277,7 @@
               rust
               dioxus-cli # `dx serve` (fullstack dev server)
               nodejs # standalone Tailwind v4 CLI
+              wasm-bindgen-cli # `nix run .#mfe` — must match wasm-bindgen =0.2.125
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
             env.RUST_BACKTRACE = 1;

@@ -63,15 +63,13 @@ impl DeepLink {
 		Self { building: None, appt: None, filter: vec![PropertyStateKind::Purchased] }
 	}
 }
-/// Two surfaces off one binary: the full dashboard at `/`, and the iframe-only
-/// marketing overview at `/embed/overview`. The split lives in the router so the
-/// embed carries none of the dashboard's shell, contexts, or Maps script.
+/// One surface: the full dashboard at `/`. The marketing overview is no longer a
+/// route here — `embed::Overview` is mounted only by the cross-origin microfrontend
+/// bundle (`real_estate_allocation_mfe`), which the landing host composes directly.
 #[derive(Clone, PartialEq, Routable)]
 enum Route {
 	#[route("/")]
 	Home {},
-	#[route("/embed/overview")]
-	EmbedOverview {},
 }
 
 #[component]
@@ -192,11 +190,4 @@ fn cycle_appt(building: BuildingResource, mut appt: SelectedAppt, dir: i32) {
 	let next = nums[(((idx + dir) % len + len) % len) as usize];
 	drop(guard);
 	appt.set(Some(next));
-}
-
-#[component]
-fn EmbedOverview() -> Element {
-	rsx! {
-		crate::embed::Overview {}
-	}
 }

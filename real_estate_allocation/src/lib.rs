@@ -4,6 +4,9 @@ pub mod api;
 pub mod app;
 pub mod dashboard;
 pub mod domain;
+// Only the microfrontend bundle renders the embed surface now; gating it off the
+// dashboard build drops the `ev_lib::mfe` SDK (and its wasm-bindgen JS) from it.
+#[cfg(feature = "mfe")]
 pub mod embed;
 pub mod error;
 pub mod factors;
