@@ -148,6 +148,15 @@
             # (C); cross-compiling it to wasm needs the devShell's cc-wrapper (the bare
             # app PATH fails on `gnu/stubs-32.h`). The MFE bundle above is pure Rust and
             # builds bare; only this dashboard build needs the delegation.
+            #
+            # Override `.cargo/config.toml`'s native rustflags for dx only (RUSTFLAGS
+            # env fully replaces `[target.*].rustflags`, it doesn't merge): keep just
+            # the correctness cfgs, drop the speed flags dx can't tolerate. `dx`
+            # intercepts linking via its own linker shim, so a `-fuse-ld=mold`
+            # link-arg breaks it ("Failed to read link args from file"); and its
+            # incremental build ICEs under the parallel front-end (`-Z threads`).
+            # Plain `cargo b`/`cargo r`/`nix build` still read the config and keep both.
+            export RUSTFLAGS='--cfg tokio_unstable --cfg web_sys_unstable_apis'
             nix develop "$repo" --command dx serve --package real_estate_allocation --port ${reaPort} #--interactive false
           '';
         };
@@ -282,15 +291,104 @@
             if [ "$fail" = 0 ]; then echo "✅ healthcheck PASS"; else echo "❌ healthcheck FAIL"; exit 1; fi
           '';
         };
+
+        # ── production image builder ─────────────────────────────────────────
+        # `nix run .#buildImage` → the whole prod artifact in one command: builds
+        # the MFE bundle + the dx release dashboard (WASM client + manganis-resolved
+        # assets), overlays both onto the pure nix2container base (`.#image`, which
+        # carries the runtime closure + config), and writes a `podman load`-able
+        # archive. The VPS is too weak to build, so: `nix run .#buildImage` → scp →
+        # `podman load` → restart.
+        #
+        # Why a `nix run` and not the pure `.#image`: `dx build` downloads a
+        # version-matched wasm-opt, which the build sandbox forbids — same reason
+        # `.#mfe` is impure. dx also patches the *server binary* (manganis URLs),
+        # so the cargo-only `.#image` binary can't just gain a `public/`; the dx
+        # server binary must replace it.
+        #
+        # `-C strip=debuginfo` is prod-only (dev `dx serve` keeps full debuginfo):
+        # dx forces DWARF into the release wasm, which wasm-opt's binary writer
+        # aborts on; stripping both fixes the abort and halves the bundle.
+        runBuildImage = pkgs.writeShellApplication {
+          name = "build-image";
+          runtimeInputs = [ rust pkgs.dioxus-cli wasm-bindgen-cli pkgs.tailwindcss_4 pkgs.binaryen pkgs.git pkgs.coreutils pkgs.zstd pkgs.patchelf ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            # `result/` so the multi-GB artifact stays out of the worktree root (it's
+            # gitignored). A leftover `nix build` `result` symlink isn't a dir — drop it.
+            [ -d "$repo/result" ] || rm -f "$repo/result"
+            mkdir -p "$repo/result"
+            out="$repo/result/rea-image.tar.zst"
+
+            # sccache's daemon can hold a dead nix-shell's TMPDIR; respawn it clean.
+            sccache --stop-server >/dev/null 2>&1 || true
+
+            cp -f ${logoSrc} "$repo/real_estate_allocation/assets/logo.svg"
+            ( cd "$repo/real_estate_allocation" && tailwindcss -i ./input.css -o ./assets/tailwind.css )
+
+            echo "▶ building MFE bundle…"
+            REPO="$repo" ${mfeSteps}
+
+            echo "▶ building dashboard (dx build --release)…"
+            ( cd "$repo/real_estate_allocation"
+              export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
+              dx build --release --package real_estate_allocation )
+
+            web="$repo/target/dx/real_estate_allocation/release/web"
+            test -x "$web/server"
+            test -f "$web/public/index.html"
+
+            ctx="$(mktemp -d)"
+            # copied store paths are read-only, so chmod before rm or cleanup errors.
+            trap 'chmod -R u+w "$ctx" 2>/dev/null || true; rm -rf "$ctx"' EXIT
+            cp -a "$web/server"            "$ctx/server"
+            cp -a "$web/public"            "$ctx/public"
+            cp -a "$repo/target/mfe-dist"  "$ctx/mfe-dist"
+
+            # dx builds the binary in the dev shell, whose glibc/libgcc differ from
+            # any sandbox-built base — so overlaying onto one leaves the ELF
+            # interpreter missing. Bundle the binary's *actual* runtime closure
+            # (interpreter + rpath store paths + cacert for outbound TLS) and build
+            # FROM scratch: correct for whatever toolchain dx used, and far smaller
+            # than a full base. (printf over heredoc: a nix '''' string bakes its
+            # own indentation into a heredoc body/terminator.)
+            echo "▶ collecting the dx binary's nix closure…"
+            roots="$(patchelf --print-interpreter "$ctx/server"; patchelf --print-rpath "$ctx/server" | tr ':' '\n'; printf '%s\n' ${pkgs.cacert})"
+            sp="$(printf '%s\n' "$roots" | grep -oE '/nix/store/[^/]+' | sort -u)"
+            mkdir -p "$ctx/nixstore"
+            # word-splitting of $sp (newline-separated store paths) is intentional
+            # shellcheck disable=SC2046,SC2086
+            for p in $(nix-store -qR $sp | sort -u); do cp -a "$p" "$ctx/nixstore/"; done
+
+            printf 'FROM scratch\nCOPY nixstore /nix/store\nCOPY server /bin/real_estate_allocation\nCOPY public /bin/public\nCOPY mfe-dist /mfe-dist\nENV SSL_CERT_FILE=%s/etc/ssl/certs/ca-bundle.crt HOME=/data\nWORKDIR /data\nEXPOSE ${reaPort}\nENTRYPOINT ["/bin/real_estate_allocation"]\n' ${pkgs.cacert} > "$ctx/Dockerfile"
+
+            echo "▶ building image (FROM scratch)…"
+            docker build -t localhost/rea:latest "$ctx"
+
+            # Stream straight into zstd (no multi-GB intermediate tar). `--long=27`
+            # (128 MB window) catches cross-file redundancy gzip's 32 KB can't;
+            # `-T0` multithreads it.
+            echo "▶ compressing (zstd --long=27)…"
+            docker save localhost/rea:latest | zstd -19 -T0 --long=27 -o "$out" -f
+            echo "✅ image → $out ($(du -h "$out" | cut -f1))"
+            # `docker save` writes the tag into the OCI ref name, so podman load
+            # names it `localhost/latest:latest`; retag to what the unit expects.
+            echo "   deploy:"
+            echo "     scp \"$out\" inferno_vps_tokyo:/tmp/"
+            echo "     ssh inferno_vps_tokyo 'zstd -dc --long=27 /tmp/rea-image.tar.zst | podman load; podman tag localhost/latest:latest localhost/rea:latest; systemctl restart evinvest-rea'"
+          '';
+        };
       in
       {
         # `nix run .#dev` → Tailwind watch + fullstack dx serve (the one command
         # you need for a dev view). `.#default` aliases it. `.#mfe` builds the
-        # microfrontend bundle dev `dx serve` serves at `/mfe`.
+        # microfrontend bundle dev `dx serve` serves at `/mfe`. `.#buildImage`
+        # builds the full prod image (dashboard + MFE) → loadable archive.
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
           mfe = { type = "app"; program = "${runMfe}/bin/build-mfe"; };
+          buildImage = { type = "app"; program = "${runBuildImage}/bin/build-image"; };
           healthcheck = { type = "app"; program = "${runHealthcheck}/bin/healthcheck"; };
         };
 

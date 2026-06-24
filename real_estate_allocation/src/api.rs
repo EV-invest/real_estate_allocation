@@ -6,6 +6,11 @@ use crate::domain::{Building, BuildingId, FileKind, PropertyFile, PropertyStateK
 
 #[cfg(not(target_arch = "wasm32"))]
 const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
+/// The committed default arrangement, baked into the binary so a fresh prod volume
+/// (no saved `layout_path` yet) still opens onto the curated layout instead of the
+/// bare built-in seed. Pressing `s` writes `layout_path`, which overrides this.
+#[cfg(not(target_arch = "wasm32"))]
+const DEFAULT_LAYOUT: &str = include_str!("../../public/dashboard_layout.json");
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
 /// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
 /// `main`), and is called as an async fn from the wasm client.
@@ -144,14 +149,15 @@ pub async fn save_default_layout(json: String) -> Result<(), ServerFnError> {
 	std::fs::write(path, json).map_err(|e| ServerFnError::new(format!("write layout: {e}")))?;
 	Ok(())
 }
-/// The saved global default, or `None` when none has been saved yet (the client then
-/// falls back to the built-in seed). A genuine read failure surfaces as an error.
+
+/// The saved global default, falling back to the committed `DEFAULT_LAYOUT` when none
+/// has been saved on this volume yet. A genuine read failure surfaces as an error.
 #[server]
 pub async fn load_default_layout() -> Result<Option<String>, ServerFnError> {
 	let path = app_state().await?.config.layout_path;
 	match std::fs::read_to_string(path.as_ref()) {
 		Ok(s) => Ok(Some(s)),
-		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Some(DEFAULT_LAYOUT.to_string())),
 		Err(e) => Err(ServerFnError::new(format!("read layout: {e}"))),
 	}
 }
