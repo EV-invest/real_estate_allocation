@@ -83,7 +83,8 @@
           lastSupportedVersion = "nightly-2026-06-16";
           jobs.default = true;
           gitignore.extra = ''
-            real_estate_allocation/assets/tokens.css
+            **/node_modules/
+            real_estate_allocation/assets/tailwind.css
             real_estate_allocation/assets/logo.svg
           '';
         };
@@ -107,7 +108,7 @@
         # (node_modules/) can write. Run `nix run .#dev` from anywhere in the repo.
         runDev = pkgs.writeShellApplication {
           name = "run-dev";
-          runtimeInputs = with pkgs; [ rust dioxus-cli nodejs git wasm-bindgen-cli ];
+          runtimeInputs = with pkgs; [ rust dioxus-cli tailwindcss_4 git wasm-bindgen-cli ];
           text = ''
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo/real_estate_allocation"
@@ -118,13 +119,8 @@
 
             cp -f ${logoSrc} ./assets/logo.svg
 
-            # Tailwind v4 standalone CLI needs `tailwindcss` resolvable from
-            # node_modules; install once, then build + watch.
-            if [ ! -d node_modules ]; then
-              npm install
-            fi
-            npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css
-            npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch & css=$!
+            tailwindcss -i ./input.css -o ./assets/tailwind.css
+            tailwindcss -i ./input.css -o ./assets/tailwind.css --watch & css=$!
             trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
 
             # Build the cross-origin MFE bundle (served at /mfe by dx serve below)
@@ -157,7 +153,7 @@
         };
 
         # ── microfrontend bundle builder ─────────────────────────────────────
-        # `nix run .#mfe` → build the cross-origin MFE bundle into `$REPO/mfe-dist`,
+        # `nix run .#mfe` → build the cross-origin MFE bundle into `$REPO/target/mfe-dist`,
         # which the dev `dx serve` (above) serves at `/mfe` (config `mfe_dir`). All
         # boilerplate (custom-element registration, start fn, manifest) is the
         # `ev_lib::mfe!` macro; these steps are the manganis-free packaging `dx`
@@ -168,7 +164,7 @@
         # version skew is a hard schema error at bindgen time (see the let-binding).
         mfeSteps = pkgs.writeShellScript "build-mfe-steps" ''
           set -eu
-          out="$REPO/mfe-dist"
+          out="$REPO/target/mfe-dist"
           name="real_estate_allocation_mfe"
 
           cd "$REPO"
@@ -193,8 +189,7 @@
           printf 'import init from "./%s.js";\nawait init();\n' "$name" > "$out/mfe-real-estate-overview.js"
 
           cd "$REPO/real_estate_allocation"
-          [ -d node_modules ] || npm install
-          npx @tailwindcss/cli -i ./mfe.css -o "$out/mfe.css"
+          tailwindcss -i ./mfe.css -o "$out/mfe.css"
           cp -r ./assets/seed "$out/seed"
 
           # ponytail: mirrors `MFE_MANIFEST` (the macro's const, not host-readable
@@ -206,10 +201,10 @@
         # Approach B's wasm graph is pure Rust (miette/syntect/onig dropped with the
         # embed's move off the full REA lib), so the bare `writeShellApplication`
         # PATH builds it — no devShell delegation for a cc-wrapper. Carries `rust`,
-        # the pinned `wasm-bindgen-cli`, and `nodejs` the steps need.
+        # the pinned `wasm-bindgen-cli`, and the standalone Tailwind v4 CLI.
         runMfe = pkgs.writeShellApplication {
           name = "build-mfe";
-          runtimeInputs = with pkgs; [ rust wasm-bindgen-cli nodejs git ];
+          runtimeInputs = with pkgs; [ rust wasm-bindgen-cli tailwindcss_4 git ];
           text = ''
             REPO="$(git rev-parse --show-toplevel)"
             export REPO
@@ -314,14 +309,20 @@
                 openssl.dev
                 sqlite
               ];
-              nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook ];
+              nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook tailwindcss_4 ];
 
               cargoLock.lockFile = ./Cargo.lock;
               src = pkgs.lib.cleanSource ./.;
 
-              # `asset!("/assets/logo.svg")` needs the file present at compile
-              # time; the gitignored copy isn't in the pure source, so stage it.
-              postPatch = "cp -f ${logoSrc} real_estate_allocation/assets/logo.svg";
+              # `asset!()` needs these present at compile time, but both are
+              # gitignored generated artifacts absent from the pure source:
+              # `logo.svg` is staged from ev_assets, `tailwind.css` is built from
+              # `input.css` here — the same offline CLI the dev/mfe paths use, so
+              # release CSS can't drift from a stale committed copy.
+              postPatch = ''
+                cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
+                ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
+              '';
               # Dioxus fullstack looks for `public/` next to its own binary.
               # buildEnv symlinks don't work (binary resolves realpath), so the
               # dir must be in the same store path as the binary.
@@ -384,7 +385,7 @@
               pkg-config
               rust
               dioxus-cli # `dx serve` (fullstack dev server)
-              nodejs # standalone Tailwind v4 CLI
+              tailwindcss_4 # standalone Tailwind v4 CLI (input.css + mfe.css)
               wasm-bindgen-cli # `nix run .#mfe` — must match wasm-bindgen =0.2.125
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 

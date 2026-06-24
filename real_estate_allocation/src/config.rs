@@ -21,7 +21,7 @@ pub struct AppConfig {
 	pub socket_addr: SocketAddr,
 	/// Built microfrontend bundle (`nix run .#mfe` output), served at `/mfe`. The
 	/// `embed::Overview` bundle derives its asset/server-fn URLs from this origin.
-	#[default(ExpandedPath::from("./mfe-dist"))]
+	#[default(ExpandedPath::from("./target/mfe-dist"))]
 	pub mfe_dir: ExpandedPath,
 	/// Origins allowed to call this server cross-origin. The landing host loads the
 	/// microfrontend bundle into its own page, so the bundle's server-fn POSTs and

@@ -26,15 +26,15 @@ dockview_dioxus = "^0.1.2"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 reqwest = { version = "^0.13", default-features = false, features = ["json", "rustls"] }
-v_utils = { version = "^2.15.52", features = ["io", "macros", "cli"] }
+v_utils = { version = "^2.15.53", features = ["io", "macros", "cli"] }
 
 # microfrontend stack — pinned to the exact revs `site` verified against.
 async-trait = "^0.1"
 dioxus = { version = "^0.7" }
 dioxus-ssr = "0.7"
-ev_lib = "^0.3"
+ev_lib = "^0.3.3"
 getrandom = { version = "^0.4", features = ["wasm_js"] }
-gloo-net = "^0.6"
+gloo-net = "^0.7"
 insta = "^1"
 jiff = { version = "^0.2", features = ["serde"] }
 real_estate_allocation_core = { path = "real_estate_allocation_core" }
@@ -54,6 +54,6 @@ web-sys = "0.3"
 # Local checkout overrides the crates.io source — we edit the lib alongside the app.
 # Required until ev_lib's `mfe` feature (the producer SDK) is published; the path
 # build is identical to 0.3.1 for the dashboard (mfe is additive + off there).
-[patch.crates-io]
-ev_lib = { path = "../lib/rust" }
+#[patch.crates-io]
+#ev_lib = { path = "../lib/rust" }
 #dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"
