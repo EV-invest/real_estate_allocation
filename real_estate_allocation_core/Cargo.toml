@@ -14,9 +14,7 @@ serde.workspace = true
 strum = { workspace = true, features = ["strum_macros", "derive"] }
 thiserror.workspace = true
 uuid.workspace = true
-# `Money`'s Display uses `LargeNumber` (in the always-on `other` module); `trades`
-# is the minimal, wasm-safe feature set (mirrors the main crate's wasm build).
-v_utils = { version = "^2.15.53", default-features = false, features = ["trades"] }
+v_utils = { workspace = true, features = ["trades"] }
 
 [lints]
 workspace = true

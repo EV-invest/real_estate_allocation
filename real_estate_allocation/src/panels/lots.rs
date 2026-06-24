@@ -15,7 +15,7 @@ pub fn LotsPanel() -> Element {
 
 	rsx! {
 		Card { class: "flex h-full flex-col overflow-hidden",
-			CardContent { class: "flex-1 overflow-y-auto",
+			CardContent { class: "flex-1 overflow-hidden",
 				match &*building.read() {
 					Some(Some(b)) if appt().is_none() => rsx! { Lots { building: b.clone() } },
 					Some(Some(_)) => rsx! { p { class: "text-sm text-muted-foreground", "Lot breakdown is shown at building level." } },
@@ -41,28 +41,33 @@ fn Lots(building: Building) -> Element {
 	// golds adjacent across the left so the slice you own reads against the rest sold.
 	let s1 = pct(sold_others);
 	let s2 = s1 + pct(available);
-	let gradient = format!(
-		"conic-gradient(from 0deg, #f2c94c 0% {s1:.2}%, #2c3342 {s1:.2}% {s2:.2}%, #f6dd86 {s2:.2}% 100%)"
-	);
+	let gradient = format!("conic-gradient(from 0deg, #f2c94c 0% {s1:.2}%, #2c3342 {s1:.2}% {s2:.2}%, #f6dd86 {s2:.2}% 100%)");
+
+	// The block is laid out once at its natural size; rea_fit_scale uniformly scales it to
+	// fit the pane, so every part keeps its proportion under one resize rule.
+	#[cfg(target_arch = "wasm32")]
+	use_effect(|| fit_scale("rea-lots-fit"));
 
 	rsx! {
-		div { class: "flex flex-col gap-7",
-			div { class: "grid grid-cols-3 gap-3",
-				Tile { label: "Total lots", value: total, value_class: "text-white" }
-				Tile { label: "Sold", value: sold, value_class: "text-main-accent-t3" }
-				Tile { label: "Available", value: available, value_class: "text-main-accent-t2" }
-			}
-			div { class: "flex flex-col items-center gap-6",
-				div { class: "relative h-48 w-48 rounded-full", style: "background:{gradient}",
-					div { class: "absolute inset-[26%] flex flex-col items-center justify-center gap-0.5 rounded-full bg-main-card",
-						span { class: "font-serif text-3xl font-semibold text-main-accent-t3", "{share * 100.0:.1}%" }
-						span { class: "text-[10px] uppercase tracking-widest text-muted-foreground", "Your share" }
-					}
+		div { id: "rea-lots-fit", class: "flex h-full w-full items-center justify-center overflow-hidden",
+			div { class: "flex w-80 flex-col gap-7",
+				div { class: "grid grid-cols-3 gap-3",
+					Tile { label: "Total lots", value: total, value_class: "text-white" }
+					Tile { label: "Sold", value: sold, value_class: "text-main-accent-t3" }
+					Tile { label: "Available", value: available, value_class: "text-main-accent-t2" }
 				}
-				div { class: "flex items-center gap-5 text-xs text-muted-foreground",
-					Legend { color: "#f2c94c", label: "Sold" }
-					Legend { color: "#f6dd86", label: "Your Selection" }
-					Legend { color: "#2c3342", label: "Available" }
+				div { class: "flex flex-col items-center gap-6",
+					div { class: "relative h-48 w-48 rounded-full", style: "background:{gradient}",
+						div { class: "absolute inset-[26%] flex flex-col items-center justify-center gap-0.5 rounded-full bg-main-card",
+							span { class: "font-serif text-3xl font-semibold text-main-accent-t3", "{share * 100.0:.1}%" }
+							span { class: "text-[10px] uppercase tracking-widest text-muted-foreground", "Your share" }
+						}
+					}
+					div { class: "flex items-center gap-5 text-xs text-muted-foreground",
+						Legend { color: "#f2c94c", label: "Sold" }
+						Legend { color: "#f6dd86", label: "Your Selection" }
+						Legend { color: "#2c3342", label: "Available" }
+					}
 				}
 			}
 		}
@@ -87,4 +92,26 @@ fn Legend(color: String, label: String) -> Element {
 			"{label}"
 		}
 	}
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+export function rea_fit_scale(id) {
+  const wrap = document.getElementById(id);
+  const child = wrap && wrap.firstElementChild;
+  if (!child || wrap.__reaRO) return;
+  const fit = () => {
+    const nw = child.offsetWidth, nh = child.offsetHeight;
+    if (!nw || !nh) return;
+    const s = Math.min(wrap.clientWidth / nw, wrap.clientHeight / nh);
+    child.style.transform = 'scale(' + s + ')';
+  };
+  wrap.__reaRO = new ResizeObserver(fit);
+  wrap.__reaRO.observe(wrap);
+  fit();
+}
+"#)]
+extern "C" {
+	#[wasm_bindgen(js_name = rea_fit_scale)]
+	fn fit_scale(id: &str);
 }

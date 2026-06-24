@@ -37,6 +37,8 @@ getrandom = { version = "^0.4", features = ["wasm_js"] }
 gloo-net = "^0.6"
 insta = "^1"
 jiff = { version = "^0.2", features = ["serde"] }
+real_estate_allocation_core = { path = "real_estate_allocation_core" }
+real_estate_allocation_embeds = { path = "real_estate_allocation_embeds" }
 secrecy = "^0.10"
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
@@ -47,6 +49,7 @@ thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.125"
+web-sys = "0.3"
 
 # Local checkout overrides the crates.io source — we edit the lib alongside the app.
 # Required until ev_lib's `mfe` feature (the producer SDK) is published; the path

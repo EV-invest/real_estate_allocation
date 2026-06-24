@@ -11,11 +11,11 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-real_estate_allocation_embeds = { path = "../real_estate_allocation_embeds" }
-ev_lib = { workspace = true, features = ["uikit", "wasm", "mfe"] }
 dioxus = { workspace = true, features = ["web"] }
+ev_lib = { workspace = true, features = ["uikit", "wasm", "mfe"] }
+real_estate_allocation_embeds.workspace = true
 wasm-bindgen.workspace = true
-web-sys = { version = "0.3", features = ["Element"] }
+web-sys = { workspace = true, features = ["Element"] }
 
 [lints]
 workspace = true

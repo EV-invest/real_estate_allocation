@@ -41,7 +41,7 @@ dioxus = { workspace = true, features = ["fullstack", "router"] }
 dockview_dioxus.workspace = true
 jiff.workspace = true
 miette.workspace = true
-real_estate_allocation_core = { path = "../real_estate_allocation_core" }
+real_estate_allocation_core.workspace = true
 real_estate_allocation_macros.workspace = true
 secrecy.workspace = true
 serde.workspace = true

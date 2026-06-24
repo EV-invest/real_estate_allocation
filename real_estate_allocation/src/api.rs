@@ -45,27 +45,6 @@ pub async fn get_building(id: BuildingId) -> Result<Option<Building>, ServerFnEr
 	}
 	Ok(building)
 }
-/// `store.get` + the per-lot `price_series` synthesis (the basis for
-/// `appreciation_yoy`). No coord resolution — callers that need a map pin add it
-/// (`get_building`); the embed route deliberately skips it (no Places call).
-#[cfg(not(target_arch = "wasm32"))]
-async fn enrich_building(state: &AppState, id: BuildingId) -> Result<Option<Building>, crate::error::DomainError> {
-	use crate::{domain::ApartmentStatus, store::BuildingRepository};
-
-	let mut building = state.store.get(id).await?;
-	if let Some(b) = building.as_mut() {
-		let root = id.raw().as_u64_pair().0;
-		for a in b.apartments.iter_mut() {
-			let seed = root ^ (a.number as u64).wrapping_mul(0x9E3779B97F4A7C15);
-			let purchased = match a.status {
-				ApartmentStatus::Purchased(ts) => Some(ts),
-				_ => None,
-			};
-			a.price_series = mock_series(seed, purchased);
-		}
-	}
-	Ok(building)
-}
 /// Plain-HTTP sibling of `get_building` for the CSR microfrontend embed (which has
 /// no `#[server]`/fullstack runtime). Same enriched `Building` JSON on the wire;
 /// always 200 with `null` body on a bad id or repo fault (logged) — the embed maps
@@ -104,7 +83,15 @@ pub async fn list_files(id: BuildingId, appt: Option<u32>) -> Result<Vec<Propert
 	Ok(files.into_iter().filter(|f| f.apt == appt).collect())
 }
 #[server]
-pub async fn upload_file(building_id: BuildingId, appt: Option<u32>, kind: FileKind, filename: String, content_type: String, bytes: Vec<u8>, token: String) -> Result<PropertyFile, ServerFnError> {
+pub async fn upload_file(
+	building_id: BuildingId,
+	appt: Option<u32>,
+	kind: FileKind,
+	filename: String,
+	content_type: String,
+	bytes: Vec<u8>,
+	token: String,
+) -> Result<PropertyFile, ServerFnError> {
 	use secrecy::ExposeSecret as _;
 
 	use crate::store::BuildingRepository;
@@ -174,6 +161,27 @@ pub async fn maps_api_key() -> Result<String, ServerFnError> {
 
 	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
+}
+/// `store.get` + the per-lot `price_series` synthesis (the basis for
+/// `appreciation_yoy`). No coord resolution — callers that need a map pin add it
+/// (`get_building`); the embed route deliberately skips it (no Places call).
+#[cfg(not(target_arch = "wasm32"))]
+async fn enrich_building(state: &AppState, id: BuildingId) -> Result<Option<Building>, crate::error::DomainError> {
+	use crate::{domain::ApartmentStatus, store::BuildingRepository};
+
+	let mut building = state.store.get(id).await?;
+	if let Some(b) = building.as_mut() {
+		let root = id.raw().as_u64_pair().0;
+		for a in b.apartments.iter_mut() {
+			let seed = root ^ (a.number as u64).wrapping_mul(0x9e3779b97f4a7c15);
+			let purchased = match a.status {
+				ApartmentStatus::Purchased(ts) => Some(ts),
+				_ => None,
+			};
+			a.price_series = mock_series(seed, purchased);
+		}
+	}
+	Ok(building)
 }
 /// Epoch second until which the Places API has told us to back off (via a `429`
 /// `Retry-After`). Process-global because the whole API key is what's throttled,

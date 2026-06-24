@@ -169,6 +169,13 @@ export function rea_plot_prices(elId, pointsJson, purchaseMs, colorKey) {
     showlegend: false,
   };
   window.Plotly.react(el, traces, layout, { displayModeBar: false, responsive: true });
+
+  // responsive:true only fires on window resize; observe the element so the chart
+  // also reflows when its container resizes (split-pane drag, sibling collapse).
+  if (!el.__reaRO) {
+    el.__reaRO = new ResizeObserver(() => { if (window.Plotly) window.Plotly.Plots.resize(el); });
+    el.__reaRO.observe(el);
+  }
 }
 "#)]
 extern "C" {
