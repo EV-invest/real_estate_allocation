@@ -24,9 +24,6 @@ result
 .direnv/
 .devenv/
 
-## Built microfrontend bundle (`nix run .#mfe` output, served at /mfe)
-mfe-dist/
-
 ## Vim
 *.sw[po]
 

@@ -1,0 +1,1 @@
+export function rea_admin_token() { return (typeof window !== 'undefined' && window.__reaAdminToken) ? window.__reaAdminToken : ''; }

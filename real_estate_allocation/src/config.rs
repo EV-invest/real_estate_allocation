@@ -25,8 +25,21 @@ pub struct AppConfig {
 	pub mfe_dir: ExpandedPath,
 	/// Origins allowed to call this server cross-origin. The landing host loads the
 	/// microfrontend bundle into its own page, so the bundle's server-fn POSTs and
-	/// the module/wasm/`/mfe` asset fetches all originate from the *landing* origin
-	/// and need CORS. Dev default is landing's `npm run dev`; add prod origins here.
-	#[default(vec!["http://localhost:3000".to_string()])]
+	/// the module/wasm/`/mfe` asset fetches all carry the *landing page's* origin and
+	/// need CORS. Dev default derives from the build-time `PORT` (see
+	/// [`default_cors_origins`]); add prod origins via config.
+	#[default(default_cors_origins())]
 	pub cors_allowed_origins: Vec<String>,
+}
+
+/// Build-time-derived dev CORS allowlist: the landing page (`PORT`) and its API
+/// origin (`PORT + 1`). `PORT` is baked by the flake; absent it (a bare `cargo
+/// build`), we fall back to landing's `next dev` port. A *set* but unparseable
+/// `PORT` is a build misconfig — panic rather than silently pick the fallback.
+fn default_cors_origins() -> Vec<String> {
+	let port: u16 = match option_env!("PORT") {
+		Some(p) => p.parse().expect("PORT (build-time env) must be a valid u16"),
+		None => 58843,
+	};
+	vec![format!("http://localhost:{port}"), format!("http://localhost:{}", port + 1)]
 }

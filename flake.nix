@@ -29,6 +29,15 @@
         pname = manifest.name;
         stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
 
+        # Landing's dev page port. Baked into the REA build (`option_env!("PORT")`)
+        # so the CORS allowlist default tracks it: config `cors_allowed_origins`
+        # defaults to `{PORT}` (the page) + `{PORT}+1` (its API origin). Single
+        # source for the build paths below; non-flake `cargo build` falls back to
+        # this same value in `config.rs`. It collides in name with dioxus' runtime
+        # bind `PORT`, but that's overridden at run time (dx owns the address in
+        # dev; main.rs forces 59079 in prod), so a build-time value never binds.
+        port = "58843";
+
         # Pinned to match the workspace's `wasm-bindgen` (`=0.2.125`) — nixpkgs
         # ships a different minor, and a CLI/crate schema skew is a hard error at
         # `wasm-bindgen` time. Shadows `pkgs.wasm-bindgen-cli` (a `let` binding
@@ -98,6 +107,10 @@
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo/real_estate_allocation"
 
+            # Build-time only (REA CORS default, see `port`); dx overrides the
+            # server's runtime bind PORT, so this doesn't affect the served address.
+            export PORT=${port}
+
             cp -f ${logoSrc} ./assets/logo.svg
 
             # Tailwind v4 standalone CLI needs `tailwindcss` resolvable from
@@ -108,6 +121,16 @@
             npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css
             npx @tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch & css=$!
             trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
+
+            # Build the cross-origin MFE bundle (served at /mfe by dx serve below)
+            # so one `nix run .#dev` gives a working page — the portfolio section is
+            # this bundle. Run inside the devShell for the C toolchain onig_sys needs
+            # (the bare app PATH lacks it; dx's own wasm build sets it up internally,
+            # a raw `cargo build --target wasm32` here does not). One-shot: dx serve
+            # rebuilds the dashboard on change but not this separate artifact, so
+            # after editing the embed run `nix run .#mfe` to refresh just the bundle.
+            echo "  ▶ building MFE bundle…"
+            REPO="$repo" nix develop "$repo" --command ${mfeSteps}
 
             # No `exec`: keep this shell as parent so the trap above reaps
             # tailwind on exit. `--interactive false` stops dx from detaching
@@ -180,6 +203,77 @@
             exec nix develop "$REPO" --command ${mfeSteps}
           '';
         };
+
+        # ── end-to-end healthcheck ───────────────────────────────────────────
+        # `nix run .#healthcheck` → verify the whole MFE path against the running
+        # dev servers: REA serving /mfe with CORS + seed assets, then a real
+        # headless-browser load of the landing page asserting the custom element
+        # mounts AND the embed content (#portfolio, #calculator) actually renders
+        # with no console/page errors. Assumes `nix run .#dev` (REA :59079) and the
+        # landing dev server (:58843) are up; reports clearly if not.
+        healthCheckJs = pkgs.writeText "mfe-healthcheck.mjs" ''
+          import { chromium } from "@playwright/test";
+          import { readdirSync } from "node:fs";
+          const B = process.env.PLAYWRIGHT_BROWSERS_PATH;
+          // nixpkgs' browser revision may not match @playwright/test's expected one;
+          // point straight at the headless-shell binary it ships instead.
+          const dir = readdirSync(B).find(d => d.startsWith("chromium_headless_shell-"));
+          const exe = B + "/" + dir + "/chrome-headless-shell-linux64/chrome-headless-shell";
+          const LANDING = process.env.LANDING_URL || "http://localhost:58843";
+          const errors = [];
+          const browser = await chromium.launch({ executablePath: exe });
+          const page = await (await browser.newContext()).newPage();
+          page.on("console", m => { if (m.type() === "error") errors.push("[console] " + m.text()); });
+          page.on("pageerror", e => errors.push("[pageerror] " + e.message));
+          await page.goto(LANDING, { waitUntil: "networkidle", timeout: 30000 });
+          await page.waitForTimeout(7000);
+          const tag = await page.locator("mfe-real-estate-overview").count();
+          const portfolio = await page.locator("#portfolio").count();
+          const calc = await page.locator("#calculator").count();
+          await browser.close();
+          console.log("  element mounted: " + (tag > 0) + " | #portfolio: " + (portfolio > 0) + " | #calculator: " + (calc > 0) + " | errors: " + errors.length);
+          errors.forEach(e => console.log("    " + e));
+          const ok = tag > 0 && portfolio > 0 && calc > 0 && errors.length === 0;
+          console.log(ok ? "  browser check PASS" : "  browser check FAIL");
+          process.exit(ok ? 0 : 1);
+        '';
+        runHealthcheck = pkgs.writeShellApplication {
+          name = "healthcheck";
+          runtimeInputs = with pkgs; [ curl nodejs git ];
+          text = ''
+            REA="''${REA_URL:-http://localhost:59079}"
+            LANDING="''${LANDING_URL:-http://localhost:58843}"
+            fail=0
+
+            echo "▶ REA /mfe endpoints ($REA)"
+            if curl -fsS "$REA/mfe/mfe.json" >/dev/null 2>&1; then
+              echo "  ✓ mfe.json served"
+            else
+              echo "  ✗ mfe.json unreachable — is 'nix run .#dev' running?"; fail=1
+            fi
+            acao=$(curl -fsS -D - -o /dev/null -H "Origin: $LANDING" "$REA/mfe/mfe-real-estate-overview.js" 2>/dev/null | grep -i access-control-allow-origin || true)
+            if [ -n "$acao" ]; then echo "  ✓ CORS on bundle ($acao)"; else echo "  ✗ no CORS header on bundle JS"; fail=1; fi
+            if curl -fsS -o /dev/null "$REA/mfe/seed/q1_tower/render.jpg" 2>/dev/null; then echo "  ✓ seed images served"; else echo "  ✗ seed image not served"; fail=1; fi
+
+            echo "▶ browser render check ($LANDING)"
+            repo="$(git rev-parse --show-toplevel)"
+            landing_fe="$repo/../landing/frontend"
+            if [ ! -d "$landing_fe/node_modules/@playwright" ]; then
+              echo "  ✗ landing frontend deps not found at $landing_fe (need sibling ../landing, npm-installed)"; exit 1
+            fi
+            export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+            export LANDING_URL="$LANDING"
+            # Run from landing's frontend so node resolves `@playwright/test` from its
+            # node_modules (the script lives in /nix/store, which has none).
+            tmp="$landing_fe/.mfe-healthcheck.mjs"
+            cp ${healthCheckJs} "$tmp"
+            trap 'rm -f "$tmp"' EXIT
+            if ( cd "$landing_fe" && node "$tmp" ); then :; else fail=1; fi
+
+            echo
+            if [ "$fail" = 0 ]; then echo "✅ healthcheck PASS"; else echo "❌ healthcheck FAIL"; exit 1; fi
+          '';
+        };
       in
       {
         # `nix run .#dev` → Tailwind watch + fullstack dx serve (the one command
@@ -189,6 +283,7 @@
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
           mfe = { type = "app"; program = "${runMfe}/bin/build-mfe"; };
+          healthcheck = { type = "app"; program = "${runHealthcheck}/bin/healthcheck"; };
         };
 
         packages =
@@ -282,6 +377,9 @@
 
             env.RUST_BACKTRACE = 1;
             env.RUST_LIB_BACKTRACE = 0;
+            # Baked into the REA build → CORS allowlist default (see the `port`
+            # let-binding). `nix run .#mfe` inherits this via `nix develop`.
+            env.PORT = port;
           };
       }
     );
