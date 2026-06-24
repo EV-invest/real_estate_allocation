@@ -1,4 +1,6 @@
 use dioxus::prelude::*;
+#[cfg(not(target_arch = "wasm32"))]
+use dioxus::server::axum::{Extension, Json, extract::Path};
 
 use crate::domain::{Building, BuildingId, FileKind, PropertyFile, PropertyStateKind};
 
@@ -36,10 +38,21 @@ pub async fn list_buildings(filter: Option<Vec<PropertyStateKind>>) -> Result<Ve
 }
 #[server]
 pub async fn get_building(id: BuildingId) -> Result<Option<Building>, ServerFnError> {
+	let state = app_state().await?;
+	let mut building = enrich_building(&state, id).await.map_err(to_server_err)?;
+	if let Some(b) = building.as_mut() {
+		b.coords = resolve_coords(id, &b.place, &state.config).await;
+	}
+	Ok(building)
+}
+/// `store.get` + the per-lot `price_series` synthesis (the basis for
+/// `appreciation_yoy`). No coord resolution — callers that need a map pin add it
+/// (`get_building`); the embed route deliberately skips it (no Places call).
+#[cfg(not(target_arch = "wasm32"))]
+async fn enrich_building(state: &AppState, id: BuildingId) -> Result<Option<Building>, crate::error::DomainError> {
 	use crate::{domain::ApartmentStatus, store::BuildingRepository};
 
-	let state = app_state().await?;
-	let mut building = state.store.get(id).await.map_err(to_server_err)?;
+	let mut building = state.store.get(id).await?;
 	if let Some(b) = building.as_mut() {
 		let root = id.raw().as_u64_pair().0;
 		for a in b.apartments.iter_mut() {
@@ -50,9 +63,29 @@ pub async fn get_building(id: BuildingId) -> Result<Option<Building>, ServerFnEr
 			};
 			a.price_series = mock_series(seed, purchased);
 		}
-		b.coords = resolve_coords(id, &b.place, &state.config).await;
 	}
 	Ok(building)
+}
+/// Plain-HTTP sibling of `get_building` for the CSR microfrontend embed (which has
+/// no `#[server]`/fullstack runtime). Same enriched `Building` JSON on the wire;
+/// always 200 with `null` body on a bad id or repo fault (logged) — the embed maps
+/// `null` to its "ERR"/loading fallback.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn building_json(Extension(state): Extension<AppState>, Path(id): Path<String>) -> Json<Option<Building>> {
+	let building = match crate::domain::parse_building_id(&id) {
+		Ok(bid) => match enrich_building(&state, bid).await {
+			Ok(b) => b,
+			Err(e) => {
+				dioxus::logger::tracing::error!(%e, building = %id, "embed building_json: enrich failed");
+				None
+			}
+		},
+		Err(e) => {
+			dioxus::logger::tracing::warn!(%e, raw = %id, "embed building_json: bad building id");
+			None
+		}
+	};
+	Json(building)
 }
 #[server]
 pub async fn get_developer(name: String) -> Result<Option<crate::domain::Developer>, ServerFnError> {

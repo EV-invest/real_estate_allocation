@@ -9,10 +9,6 @@ edition = "2024"
 default = []
 web = ["dioxus/web"]
 server = ["dioxus/server"]
-# Compiles the `embed::Overview` surface for the cross-origin microfrontend bundle
-# (`real_estate_allocation_mfe`). Client-only (implies `web`); never enabled for
-# the native dashboard build, so `embed` and the `ev_lib::mfe` SDK stay out of it.
-mfe = ["web", "ev_lib/mfe"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
@@ -45,6 +41,7 @@ dioxus = { workspace = true, features = ["fullstack", "router"] }
 dockview_dioxus.workspace = true
 jiff.workspace = true
 miette.workspace = true
+real_estate_allocation_core = { path = "../real_estate_allocation_core" }
 real_estate_allocation_macros.workspace = true
 secrecy.workspace = true
 serde.workspace = true

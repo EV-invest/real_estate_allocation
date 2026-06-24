@@ -6,8 +6,7 @@
 
 use dioxus::prelude::*;
 use ev_lib::{mfe::bundle_origin, uikit::Container};
-
-use crate::factors::profile;
+use real_estate_allocation_core::{domain::Building, factors::profile};
 
 // Both tiles are real listings. Banners are served from the bundle's own origin
 // under `/mfe/seed/…` (copied there by the build) — paths relative to that origin,
@@ -73,10 +72,12 @@ pub fn Overview() -> Element {
 #[component]
 fn FeaturedCard() -> Element {
 	// Pull Q1's live figures so the headline stats track the DB rather than hard-coded
-	// copy. `get_building` populates `price_series`, the basis for `appreciation_yoy`.
+	// copy. The server enriches the building with `price_series` (the basis for
+	// `appreciation_yoy`) before serializing — wire-compatible with `core::domain::Building`.
 	let building = use_resource(|| async move {
-		let id = crate::domain::parse_building_id(Q1_PROPERTY).ok()?;
-		crate::api::get_building(id).await.ok().flatten()
+		let url = format!("{}/api/embed/building/{}", bundle_origin(), Q1_PROPERTY);
+		let b: Option<Building> = gloo_net::http::Request::get(&url).send().await.ok()?.json().await.ok()?;
+		b
 	});
 	// "-" is reserved for appreciation (genuinely unknown until a year of prices exists).
 	// A missing yield or status is a data fault, not an empty value — trace it loudly and

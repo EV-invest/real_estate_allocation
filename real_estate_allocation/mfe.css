@@ -12,5 +12,5 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "./assets/tokens.css";
 
-/* Scan the embed RSX for class names. */
-@source "./src/**/*.rs";
+/* Scan the embed RSX for class names — they live in the embeds crate now. */
+@source "../real_estate_allocation_embeds/src/**/*.rs";

@@ -4,15 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 # The cross-origin microfrontend bundle: a self-registering custom element built
-# with `wasm-bindgen --target web` (manganis-free — see `ev_lib::mfe`). Reuses the
-# REA `embed::Overview` surface; all the producer boilerplate is the `mfe!` macro.
+# with `wasm-bindgen --target web` (manganis-free — see `ev_lib::mfe`). A real CSR
+# widget — `dioxus/web` only, no fullstack/hydration. Reuses the embed `Overview`
+# surface; all the producer boilerplate is the `mfe!` macro.
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-real_estate_allocation = { path = "../real_estate_allocation", features = ["mfe"] }
+real_estate_allocation_embeds = { path = "../real_estate_allocation_embeds" }
 ev_lib = { workspace = true, features = ["uikit", "wasm", "mfe"] }
-dioxus = { workspace = true, features = ["fullstack", "web"] }
+dioxus = { workspace = true, features = ["web"] }
 wasm-bindgen.workspace = true
 web-sys = { version = "0.3", features = ["Element"] }
 

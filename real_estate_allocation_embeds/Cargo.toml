@@ -1,0 +1,25 @@
+[package]
+name = "real_estate_allocation_embeds"
+version = "0.1.0"
+edition = "2024"
+
+# The client UI for the cross-origin microfrontend bundle: a real CSR widget
+# (`dioxus/web` only — no fullstack, no hydration). Reaches REA's data over plain
+# HTTP (`gloo-net`) rather than `#[server]` fns, so it depends on the fullstack-free
+# `core` crate, not the full REA lib.
+[dependencies]
+dioxus = { workspace = true, features = ["web"] }
+ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm", "mfe"] }
+gloo-net.workspace = true
+real_estate_allocation_core = { path = "../real_estate_allocation_core" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
+# Transitive 0.3 (ahash ← ustr ← v_utils): enable its wasm_js backend feature, the
+# same alias the main crate's wasm build uses. The backend cfg (`getrandom_backend`)
+# is set in the flake `mfeSteps` RUSTFLAGS for the bundle build.
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+uuid = { workspace = true, features = ["js"] }
+
+[lints]
+workspace = true

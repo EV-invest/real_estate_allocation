@@ -89,6 +89,7 @@ fn main() {
 			let mfe_dir = app_state.config.mfe_dir.clone().inner();
 			let router = Router::new()
 				.merge(dioxus::server::router(App))
+				.route("/api/embed/building/{id}", dioxus::server::axum::routing::get(real_estate_allocation::api::building_json))
 				.nest_service("/mfe", ServeDir::new(mfe_dir))
 				.layer(Extension(app_state))
 				.layer(cors);

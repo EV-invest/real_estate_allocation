@@ -3,13 +3,10 @@
 pub mod api;
 pub mod app;
 pub mod dashboard;
-pub mod domain;
-// Only the microfrontend bundle renders the embed surface now; gating it off the
-// dashboard build drops the `ev_lib::mfe` SDK (and its wasm-bindgen JS) from it.
-#[cfg(feature = "mfe")]
-pub mod embed;
-pub mod error;
-pub mod factors;
+// The domain layer lives in a fullstack-free crate so the wasm embed bundle can
+// share it; re-exported here so every `crate::domain::*` / `factors` / `error`
+// path keeps resolving unchanged.
+pub use real_estate_allocation_core::{domain, error, factors};
 pub mod map;
 pub mod panels;
 mod uikit;

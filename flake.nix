@@ -38,6 +38,11 @@
         # dev; main.rs forces 59079 in prod), so a build-time value never binds.
         port = "58843";
 
+        # REA's own dev/prod serving port (the bundle origin landing fetches from).
+        # Single source for the `dx serve` bind, the healthcheck default, the
+        # container's exposed port, and the devShell `REA_PORT` env below.
+        reaPort = "59079";
+
         # Pinned to match the workspace's `wasm-bindgen` (`=0.2.125`) — nixpkgs
         # ships a different minor, and a CLI/crate schema skew is a hard error at
         # `wasm-bindgen` time. Shadows `pkgs.wasm-bindgen-cli` (a `let` binding
@@ -102,7 +107,7 @@
         # (node_modules/) can write. Run `nix run .#dev` from anywhere in the repo.
         runDev = pkgs.writeShellApplication {
           name = "run-dev";
-          runtimeInputs = with pkgs; [ rust dioxus-cli nodejs git ];
+          runtimeInputs = with pkgs; [ rust dioxus-cli nodejs git wasm-bindgen-cli ];
           text = ''
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo/real_estate_allocation"
@@ -124,13 +129,13 @@
 
             # Build the cross-origin MFE bundle (served at /mfe by dx serve below)
             # so one `nix run .#dev` gives a working page — the portfolio section is
-            # this bundle. Run inside the devShell for the C toolchain onig_sys needs
-            # (the bare app PATH lacks it; dx's own wasm build sets it up internally,
-            # a raw `cargo build --target wasm32` here does not). One-shot: dx serve
-            # rebuilds the dashboard on change but not this separate artifact, so
-            # after editing the embed run `nix run .#mfe` to refresh just the bundle.
+            # this bundle. Under approach B the wasm graph is pure Rust (no onig/C
+            # cross-compile), so the bare app PATH (rust + wasm-bindgen-cli) suffices
+            # — no devShell delegation. One-shot: dx serve rebuilds the dashboard on
+            # change but not this separate artifact, so after editing the embed run
+            # `nix run .#mfe` to refresh just the bundle.
             echo "  ▶ building MFE bundle…"
-            REPO="$repo" nix develop "$repo" --command ${mfeSteps}
+            REPO="$repo" ${mfeSteps}
 
             # No `exec`: keep this shell as parent so the trap above reaps
             # tailwind on exit. `--interactive false` stops dx from detaching
@@ -142,8 +147,12 @@
             # always propagate SIGINT to its spawned server child, leaving a
             # `server-<hash>` binary holding the port).
             pkill -f 'target/dx/real_estate_allocation/.*/server-' 2>/dev/null || true
-            echo "  ▶ serving on http://127.0.0.1:59079"
-            dx serve --package real_estate_allocation --port 59079 #--interactive false
+            echo "  ▶ serving on http://127.0.0.1:${reaPort}"
+            # dx builds the dashboard wasm client, which still pulls miette → onig_sys
+            # (C); cross-compiling it to wasm needs the devShell's cc-wrapper (the bare
+            # app PATH fails on `gnu/stubs-32.h`). The MFE bundle above is pure Rust and
+            # builds bare; only this dashboard build needs the delegation.
+            nix develop "$repo" --command dx serve --package real_estate_allocation --port ${reaPort} #--interactive false
           '';
         };
 
@@ -163,9 +172,13 @@
           name="real_estate_allocation_mfe"
 
           cd "$REPO"
-          # dioxus-web touches some unstable web-sys APIs; the host config sets this
-          # cfg for the native target only, so mirror it for wasm here.
-          export RUSTFLAGS="--cfg=web_sys_unstable_apis"
+          # web_sys_unstable_apis: dioxus-web touches unstable web-sys (the host
+          # config sets it for the native target only, so mirror it for wasm).
+          # getrandom_backend: getrandom 0.3 (transitive via ahash) needs its wasm
+          # backend selected by cfg, not just its feature. Set here, not in
+          # `.cargo/config.toml`, so the dashboard's `dx serve` wasm build (which
+          # keeps onig and reuses its devShell-built cache) isn't refingerprinted.
+          export RUSTFLAGS='--cfg=web_sys_unstable_apis --cfg=getrandom_backend="wasm_js"'
           cargo build -p "$name" --target wasm32-unknown-unknown --release
 
           rm -rf "$out"; mkdir -p "$out"
@@ -190,17 +203,17 @@
           printf '%s\n' '{"name":"real-estate.overview","tag":"mfe-real-estate-overview","kind":"component"}' > "$out/mfe.json"
           echo "  ▶ MFE bundle built → $out"
         '';
-        # Run the steps *inside* the devShell: onig_sys (C, pulled by miette→syntect)
-        # cross-compiles to wasm only with the cc-wrapper the devShell sets up — a
-        # bare `writeShellApplication` PATH lacks it (fails on `gnu/stubs-32.h`). The
-        # devShell also carries `rust`, the pinned `wasm-bindgen-cli`, and `nodejs`.
+        # Approach B's wasm graph is pure Rust (miette/syntect/onig dropped with the
+        # embed's move off the full REA lib), so the bare `writeShellApplication`
+        # PATH builds it — no devShell delegation for a cc-wrapper. Carries `rust`,
+        # the pinned `wasm-bindgen-cli`, and `nodejs` the steps need.
         runMfe = pkgs.writeShellApplication {
           name = "build-mfe";
-          runtimeInputs = with pkgs; [ git ];
+          runtimeInputs = with pkgs; [ rust wasm-bindgen-cli nodejs git ];
           text = ''
             REPO="$(git rev-parse --show-toplevel)"
             export REPO
-            exec nix develop "$REPO" --command ${mfeSteps}
+            exec ${mfeSteps}
           '';
         };
 
@@ -209,7 +222,7 @@
         # dev servers: REA serving /mfe with CORS + seed assets, then a real
         # headless-browser load of the landing page asserting the custom element
         # mounts AND the embed content (#portfolio, #calculator) actually renders
-        # with no console/page errors. Assumes `nix run .#dev` (REA :59079) and the
+        # with no console/page errors. Assumes `nix run .#dev` (REA :${reaPort}) and the
         # landing dev server (:58843) are up; reports clearly if not.
         healthCheckJs = pkgs.writeText "mfe-healthcheck.mjs" ''
           import { chromium } from "@playwright/test";
@@ -241,7 +254,7 @@
           name = "healthcheck";
           runtimeInputs = with pkgs; [ curl nodejs git ];
           text = ''
-            REA="''${REA_URL:-http://localhost:59079}"
+            REA="''${REA_URL:-http://localhost:${reaPort}}"
             LANDING="''${LANDING_URL:-http://localhost:58843}"
             fail=0
 
@@ -343,7 +356,7 @@
                 ];
                 # /data is a mounted volume: config.toml + sqlite db + properties.
                 WorkingDir = "/data";
-                ExposedPorts = { "59079/tcp" = { }; };
+                ExposedPorts = { "${reaPort}/tcp" = { }; };
               };
             };
           in
@@ -380,6 +393,8 @@
             # Baked into the REA build → CORS allowlist default (see the `port`
             # let-binding). `nix run .#mfe` inherits this via `nix develop`.
             env.PORT = port;
+            # REA's serving port, for a manual `dx serve --port $REA_PORT` in the shell.
+            env.REA_PORT = reaPort;
           };
       }
     );
