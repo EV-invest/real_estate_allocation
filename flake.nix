@@ -24,6 +24,11 @@
           extensions = [ "rust-src" "rust-analyzer" "rust-docs" "rustc-codegen-cranelift-preview" ];
           targets = [ "wasm32-unknown-unknown" ];
         });
+        # rust-lld (the wasm32 linker) embeds a bad rpath on macOS — it looks for
+        # libLLVM.dylib in bin/../lib but Nix puts it in <rust>/lib, so a wasm build
+        # aborts (SIGABRT) at link time. The FALLBACK var only kicks in when normal
+        # resolution fails, so it's a safe no-op on Linux. (Same shim landing carries.)
+        dyldFallback = ''export DYLD_FALLBACK_LIBRARY_PATH="${rust}/lib''${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"'';
         pre-commit-check = pre-commit-hooks.lib.${system}.run (v_flakes.files.preCommit { inherit pkgs; });
         manifest = (pkgs.lib.importTOML ./real_estate_allocation/Cargo.toml).package;
         pname = manifest.name;
@@ -173,6 +178,7 @@
         # version skew is a hard schema error at bindgen time (see the let-binding).
         mfeSteps = pkgs.writeShellScript "build-mfe-steps" ''
           set -eu
+          ${dyldFallback}
           out="$REPO/target/mfe-dist"
           name="real_estate_allocation_mfe"
 
@@ -475,6 +481,7 @@
               + ''
                 cp -f ${(v_flakes.files.treefmt) { inherit pkgs; }} ./.treefmt.toml
                 cp -f ${logoSrc} ./real_estate_allocation/assets/logo.svg
+                ${dyldFallback}
               '';
 
             packages = [
