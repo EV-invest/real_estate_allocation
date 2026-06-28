@@ -1,10 +1,17 @@
-# Prod config template. Deploy pipes this through `reasonable_envsubst`, which
-# inlines the env references below from the local env, then ships the result to
-# the VPS as /data/config.toml. No secrets live in the repo.
+# Prod config, baked into the container image (secret-free, so it's committable).
+# The two secrets resolve at startup from the container's env, which the
+# gitops-owned k8s Secret injects (`envFrom` the `real_estate_allocation-env`
+# Secret). `{ env = "…" }` is the config primitive's indirection — a missing var
+# fails the boot loudly rather than degrading to an empty key. Everything else is
+# the fixed in-container layout under the `/data` PVC.
 socket_addr = "0.0.0.0:59079"
 db_path = "/data/app.db"
 data_dir = "/data/properties"
 layout_path = "/data/dashboard_layout.json"
-admin_token = "${REA_ADMIN_TOKEN}"
 admins = []
-maps_api_key = "${GOOGLE_MAPS_KEY}"
+maps_api_key = { env = "GOOGLE_MAPS_KEY" }
+admin_token = { env = "REA_ADMIN_TOKEN" }
+# cors_allowed_origins = [ "https://<prod-landing-origin>" ]
+# Set once the landing origin is decided (docs/ARCHITECTURE.md defers it); until
+# then the build-time dev default (localhost only) applies and cross-origin embed
+# POSTs from a real prod landing host would be refused.

@@ -323,7 +323,15 @@
         };
 
         # reaDxBuild's closure is pulled via the Entrypoint store-path ref.
-        # Secret env (REA_ADMIN_TOKEN, GOOGLE_MAPS_KEY) comes from gitops's Secret.
+        # Secret-free prod config baked into the image; its `{ env = … }` fields
+        # pull the two secrets (GOOGLE_MAPS_KEY, REA_ADMIN_TOKEN) from the
+        # container env that gitops' k8s Secret injects (`envFrom`). Without an
+        # explicit `--config`, the binary searches only XDG dirs + the prefixed
+        # `REAL_ESTATE_ALLOCATION_*` env namespace — neither of which sees the
+        # bare-named Secret vars nor the `/data` prod paths, so it would silently
+        # boot on dev defaults (empty maps key, 127.0.0.1 bind that fails the
+        # k8s probe). Pointing at this file is what makes the container prod-correct.
+        prodConfig = ./deploy/config.toml;
         containerStd = v_flakes.container.implement {
           inherit pkgs pname;
           containers."" = {
@@ -331,7 +339,7 @@
             mounts = [ "/data" ];
             healthPath = "/health";
             criticality = "normal";
-            entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" ];
+            entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" "--config" "${prodConfig}" ];
             workingDir = "/data";
             imageEnv = [ "HOME=/data" ];
           };
