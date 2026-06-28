@@ -1,3 +1,4 @@
+#![feature(default_field_values)]
 //! Marketing surface mounted by the cross-origin microfrontend bundle
 //! (`real_estate_allocation_mfe`). A standalone port of the landing "Premium Asset
 //! Portfolio" bento section — no app shell, so the landing host composes `<tag>`
@@ -8,10 +9,13 @@ use dioxus::prelude::*;
 use ev_lib::{mfe::bundle_origin, uikit::Container};
 use real_estate_allocation_core::{domain::Building, factors::profile};
 
-// Both tiles are real listings. Banners are served from the bundle's own origin
-// under `/mfe/seed/…` (copied there by the build) — paths relative to that origin,
-// resolved against `bundle_origin()` at render. A click breaks out to the REA
-// dashboard home with the property pre-selected (absolute, cross-origin link).
+// Two origins. Banners are static assets served alongside the bundle, so they
+// resolve against `bundle_origin()` (wherever the `.js` loaded from — the landing
+// host once it bakes the bundle into its own `public/`). The data fetch and the
+// dashboard breakout links target REA's *backend*, which is a different origin
+// once landing serves the bundle — `rea_origin()` reads it from the host's
+// `<meta name="rea-url">`, falling back to `bundle_origin()` (the bundle served by
+// REA itself, e.g. standalone). Both tiles are real listings.
 const Q1_BANNER: &str = "seed/q1_tower/render.jpg";
 const Q1_PROPERTY: &str = "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a";
 const TMS_BANNER: &str = "seed/tms/building.jpg";
@@ -21,6 +25,7 @@ const TMS_PROPERTY: &str = "c19bded1-1a13-49ad-a0f0-549b2aec2d0e";
 const A_MIN: f64 = 0.0;
 const A_MAX: f64 = 100.0;
 const A_STEP: f64 = 1.0;
+
 #[component]
 pub fn Overview() -> Element {
 	let mut tab = use_signal(|| "all".to_string());
@@ -67,6 +72,18 @@ pub fn Overview() -> Element {
 		}
 	}
 }
+/// REA backend origin for the data fetch + dashboard breakout links. The host page
+/// advertises it via `<meta name="rea-url">` (its `NEXT_PUBLIC_REA_URL`); absent it,
+/// fall back to the bundle's own origin (REA serving the bundle itself). A plain DOM
+/// read — `web-sys` is already linked by dioxus-web, so this costs the bundle nothing.
+fn rea_origin() -> String {
+	web_sys::window()
+		.and_then(|w| w.document())
+		.and_then(|d| d.query_selector("meta[name=\"rea-url\"]").ok().flatten())
+		.and_then(|m| m.get_attribute("content"))
+		.filter(|s| !s.is_empty())
+		.unwrap_or_else(bundle_origin)
+}
 
 /// Large featured tile (spans two columns). Links to the Q1 Tower property page.
 #[component]
@@ -75,7 +92,7 @@ fn FeaturedCard() -> Element {
 	// copy. The server enriches the building with `price_series` (the basis for
 	// `appreciation_yoy`) before serializing — wire-compatible with `core::domain::Building`.
 	let building = use_resource(|| async move {
-		let url = format!("{}/api/embed/building/{}", bundle_origin(), Q1_PROPERTY);
+		let url = format!("{}/api/embed/building/{}", rea_origin(), Q1_PROPERTY);
 		let b: Option<Building> = gloo_net::http::Request::get(&url).send().await.ok()?.json().await.ok()?;
 		b
 	});
@@ -111,10 +128,11 @@ fn FeaturedCard() -> Element {
 		}
 	};
 	let origin = bundle_origin();
+	let rea = rea_origin();
 
 	rsx! {
 		a {
-			href: "{origin}/?building={Q1_PROPERTY}",
+			href: "{rea}/?building={Q1_PROPERTY}",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
@@ -146,9 +164,10 @@ fn FeaturedCard() -> Element {
 #[component]
 fn SideCard() -> Element {
 	let origin = bundle_origin();
+	let rea = rea_origin();
 	rsx! {
 		a {
-			href: "{origin}/?building={TMS_PROPERTY}",
+			href: "{rea}/?building={TMS_PROPERTY}",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",

@@ -66,14 +66,15 @@ fn main() {
 		axum::{Extension, Router},
 		http::{HeaderValue, Method, header},
 	};
-	use tower_http::{cors::CorsLayer, services::ServeDir};
+	use tower_http::cors::CorsLayer;
 	let app_state = real_estate_allocation::api::AppState { store, config };
 	dioxus::server::serve(move || {
 		let app_state = app_state.clone();
 		async move {
-			// The bundle runs on the landing page, so its server-fn POSTs, the
-			// module/wasm fetch, and `/mfe` asset GETs are all cross-origin from
-			// landing — one CORS layer over the whole router covers them.
+			// The bundle runs on the landing page, so its server-fn POSTs and the
+			// `/api/embed` GET are cross-origin from landing — one CORS layer over
+			// the whole router covers them. (The bundle's own static assets are
+			// served by the landing host, not here.)
 			let origins = app_state
 				.config
 				.cors_allowed_origins
@@ -84,13 +85,9 @@ fn main() {
 				.allow_origin(origins)
 				.allow_methods([Method::GET, Method::POST])
 				.allow_headers([header::CONTENT_TYPE]);
-			// Owned upfront: an inline `.as_ref()` borrow would live to the end of
-			// the `let router` statement and clash with the `Extension(app_state)` move.
-			let mfe_dir = app_state.config.mfe_dir.clone().inner();
 			let router = Router::new()
 				.merge(dioxus::server::router(App))
 				.route("/api/embed/building/{id}", dioxus::server::axum::routing::get(real_estate_allocation::api::building_json))
-				.nest_service("/mfe", ServeDir::new(mfe_dir))
 				.layer(Extension(app_state))
 				.layer(cors);
 			Ok(router)

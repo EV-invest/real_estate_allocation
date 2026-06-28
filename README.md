@@ -16,7 +16,7 @@ Real Estate allocation service and its microfrontend
 
 ## Deployment
 
-Target: `inferno_vps_tokyo` (Ubuntu 22.04, 2 vCPU, 2 GiB).
+Target: `${vps_addr}` (Ubuntu 22.04, 2 vCPU, 2 GiB).
 Same box as the landing site which iframes `/embed/overview`.
 
 Shipped as an OCI image (same flow as the landing backend), built locally and
@@ -27,8 +27,8 @@ Shipped as an OCI image (same flow as the landing backend), built locally and
 ```sh
 nix build .#image
 nix run .#image.copyTo -- oci-archive:/tmp/rea.tar:rea:latest
-scp /tmp/rea.tar inferno_vps_tokyo:/tmp/
-ssh inferno_vps_tokyo 'podman load < /tmp/rea.tar && systemctl restart evinvest-rea'
+scp /tmp/rea.tar ${vps_addr}:/tmp/
+ssh ${vps_addr} 'podman load < /tmp/rea.tar && systemctl restart evinvest-rea'
 ```
 
 The image is a `nix2container` build: every `/nix/store` path is its own
@@ -50,7 +50,7 @@ shell — and ships the result:
 ```sh
 REA_ADMIN_TOKEN=… GOOGLE_MAPS_KEY=… \
   reasonable_envsubst "$(cat deploy/config.toml)" \
-  | ssh inferno_vps_tokyo 'cat > /opt/evinvest/rea-data/config.toml \
+  | ssh ${vps_addr} 'cat > /opt/evinvest/rea-data/config.toml \
       && chown evinvest:evinvest /opt/evinvest/rea-data/config.toml \
       && systemctl restart evinvest-rea'
 ```

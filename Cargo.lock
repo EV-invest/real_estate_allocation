@@ -4025,6 +4025,7 @@ dependencies = [
  "gloo-net 0.7.0",
  "real_estate_allocation_core",
  "uuid",
+ "web-sys",
 ]
 
 [[package]]

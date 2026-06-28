@@ -5,8 +5,6 @@ socket_addr = "0.0.0.0:59079"
 db_path = "/data/app.db"
 data_dir = "/data/properties"
 layout_path = "/data/dashboard_layout.json"
-# Baked into the image by `nix run .#buildImage` (dev default is ./target/mfe-dist).
-mfe_dir = "/mfe-dist"
 admin_token = "${REA_ADMIN_TOKEN}"
 admins = []
 maps_api_key = "${GOOGLE_MAPS_KEY}"
