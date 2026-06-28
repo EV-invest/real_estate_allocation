@@ -25,9 +25,10 @@
         });
         # rust-lld (the wasm32 linker) embeds a bad rpath on macOS — it looks for
         # libLLVM.dylib in bin/../lib but Nix puts it in <rust>/lib, so a wasm build
-        # aborts (SIGABRT) at link time. The FALLBACK var only kicks in when normal
-        # resolution fails, so it's a safe no-op on Linux. (Same shim landing carries.)
-        dyldFallback = ''export DYLD_FALLBACK_LIBRARY_PATH="${rust}/lib''${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"'';
+        # aborts (SIGABRT) at link time. Point the dynamic loader at <rust>/lib.
+        # Darwin-only: the var doesn't exist on Linux's loader.
+        dyldFallback = pkgs.lib.optionalString pkgs.stdenv.isDarwin
+          ''export DYLD_FALLBACK_LIBRARY_PATH="${rust}/lib''${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"'';
         pre-commit-check = pre-commit-hooks.lib.${system}.run (v_flakes.files.preCommit { inherit pkgs; });
         manifest = (pkgs.lib.importTOML ./real_estate_allocation/Cargo.toml).package;
         pname = manifest.name;
@@ -341,11 +342,104 @@
               '';
               doCheck = false;
             };
+            # //TEST ─ pure-nix feasibility of the `nix run .#buildImage` flow ──
+            # Does in-sandbox what `runBuildImage` does dynamically: `dx build
+            # --release` with downloads disabled. `NO_DOWNLOADS=1` flips dx 0.7's
+            # `prefer_no_downloads()`, so its `wasm_opt`/`wasm_bindgen` stages
+            # resolve binaries via `which` off PATH (nix `binaryen` 129 matches
+            # dx's pinned BINARYEN_VERSION; `wasm-bindgen-cli` =0.2.125 passes
+            # dx's exact-version check) instead of fetching — the one thing that
+            # forced the imperative `nix run`. Vendored cargo (cargoLock) covers
+            # the offline crate graph. Output mirrors `reaBin`: server binary +
+            # sibling `public/` in one store path (dioxus resolves `public` by the
+            # binary's realpath). Marked //TEST throughout so it greps-and-nukes
+            # cleanly if dx touches the network somewhere the source-read missed.
+            reaDxBuild = rustPlatform.buildRustPackage {
+              pname = "${pname}-dx"; # //TEST
+              version = manifest.version;
+              src = pkgs.lib.cleanSource ./.;
+              cargoLock.lockFile = ./Cargo.lock;
+
+              buildInputs = with pkgs; [ openssl.dev sqlite ];
+              nativeBuildInputs = with pkgs; [
+                pkg-config
+                cmake
+                perl
+                mold
+                pkgs.rustPlatform.bindgenHook
+                dioxus-cli
+                wasm-bindgen-cli
+                binaryen
+                tailwindcss_4
+                removeReferencesTo # //TEST
+              ];
+
+              postPatch = ''
+                cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
+                ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
+              '';
+
+              buildPhase = ''
+                runHook preBuild
+                ${dyldFallback}
+                export PORT=${port}
+                export NO_DOWNLOADS=1 # //TEST: dx resolves wasm-opt/wasm-bindgen off PATH
+                export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
+                ( cd real_estate_allocation && dx build --release --package real_estate_allocation )
+                runHook postBuild
+              '';
+
+              installPhase = ''
+                runHook preInstall
+                web="target/dx/real_estate_allocation/release/web"
+                test -x "$web/server"
+                test -f "$web/public/index.html"
+                mkdir -p "$out/bin"
+                cp -a "$web/server" "$out/bin/real_estate_allocation"
+                cp -a "$web/public" "$out/bin/public"
+                # //TEST: the server binary and the wasm bake the nightly std
+                # source path (`…/rust-default/…/library/alloc/src/string.rs`) into
+                # `#[track_caller]` panic-location strings — pure data never opened
+                # at runtime, but nix's reference scanner sees it and dockerTools
+                # drags the whole 2.2 GB toolchain into the image. `runBuildImage`
+                # dodges this only by hand-collecting the (clean) rpath instead of
+                # the nix closure. Scrub just that one path; the glibc/gcc RUNPATH
+                # the binary genuinely needs is a different store path, untouched.
+                chmod -R u+w "$out/bin"
+                remove-references-to -t ${rust} "$out/bin/real_estate_allocation"
+                find "$out/bin/public" -name '*.wasm' \
+                  -exec remove-references-to -t ${rust} {} +
+                runHook postInstall
+              '';
+              doCheck = false;
+            };
+
+            # //TEST ─ pure replacement for the imperative podman/zstd assembly.
+            # `dockerTools.buildLayeredImage` is pure + built-in (no nix2container
+            # input), and pulls `reaDxBuild`'s closure automatically — so the
+            # manual `patchelf`/`nix-store -qR` closure dance in `runBuildImage`
+            # isn't needed: the binary is sandbox-built, its rpath is already
+            # proper store paths.
+            pureContainerFeasibility = pkgs.dockerTools.buildLayeredImage {
+              name = "rea"; # //TEST
+              tag = "latest";
+              contents = [ pkgs.cacert ];
+              config = {
+                Entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" ];
+                WorkingDir = "/data";
+                ExposedPorts = { "${reaPort}/tcp" = { }; };
+                Env = [
+                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                  "HOME=/data"
+                ];
+              };
+            };
           in
           {
             default = reaBin;
             bin = reaBin;
             embeds = embeds;
+            pureContainerFeasibility = pureContainerFeasibility; # //TEST
           };
 
         devShells.default =
