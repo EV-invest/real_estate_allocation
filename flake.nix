@@ -159,198 +159,197 @@
         };
 
       in
+      let
+        rustc = rust;
+        cargo = rust;
+        rustPlatform = pkgs.makeRustPlatform {
+          inherit rustc cargo stdenv;
+        };
+        reaBin = rustPlatform.buildRustPackage {
+          inherit pname;
+          version = manifest.version;
+
+          buildInputs = with pkgs; [
+            openssl.dev
+            sqlite
+          ];
+          nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook tailwindcss_4 ];
+
+          cargoLock.lockFile = ./Cargo.lock;
+          src = pkgs.lib.cleanSource ./.;
+
+          # `asset!()` needs these present at compile time, but both are
+          # gitignored generated artifacts absent from the pure source:
+          # `logo.svg` is staged from ev_assets, `tailwind.css` is built from
+          # `input.css` here — the same offline CLI the dev/mfe paths use, so
+          # release CSS can't drift from a stale committed copy.
+          postPatch = ''
+            cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
+            ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
+          '';
+          # Dioxus fullstack looks for `public/` next to its own binary.
+          # buildEnv symlinks don't work (binary resolves realpath), so the
+          # dir must be in the same store path as the binary.
+          postInstall = "mkdir -p $out/bin/public";
+          doCheck = false;
+        };
+
+        # ── microfrontend bundle (the `embeds` half of the split) ──────────
+        # `nix build .#embeds` → the cross-origin MFE bundle as a pure artifact
+        # the landing host bakes into its own `public/` and serves same-origin
+        # (the way it bakes the whitepaper/blog). The master image no longer
+        # carries it. The wasm graph is pure Rust (miette/syntect/onig dropped
+        # with the embed's move off the full REA lib), so it builds in the
+        # sandbox with no `dx`/wasm-opt download.
+        #
+        # All boilerplate (custom-element registration, start fn, manifest) is
+        # the `ev_lib::mfe!` macro; these steps are the manganis-free packaging
+        # `dx` can't do for a cross-origin remote: wasm-bindgen + utilities-only
+        # CSS + seed assets. `wasm-bindgen-cli` is pinned to the `wasm-bindgen`
+        # crate (=0.2.125); a skew is a hard schema error at bindgen time.
+        embeds = rustPlatform.buildRustPackage {
+          pname = "${pname}-mfe";
+          version = manifest.version;
+          src = pkgs.lib.cleanSource ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = [ wasm-bindgen-cli pkgs.tailwindcss_4 ];
+
+          # Build only the wasm crate; the default workspace build would pull the
+          # native graph. web_sys_unstable_apis: dioxus-web touches unstable
+          # web-sys (mirror the host config's native-target cfg for wasm).
+          # getrandom_backend: getrandom 0.3 (transitive via ahash) selects its
+          # wasm backend by cfg, not just a feature.
+          buildPhase = ''
+            runHook preBuild
+            ${dyldFallback}
+            export RUSTFLAGS='--cfg=web_sys_unstable_apis --cfg=getrandom_backend="wasm_js"'
+            cargo build -p real_estate_allocation_mfe --target wasm32-unknown-unknown --release --offline
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            name=real_estate_allocation_mfe
+            mkdir -p "$out"
+            wasm-bindgen --target web --out-dir "$out" --out-name "$name" \
+              "target/wasm32-unknown-unknown/release/$name.wasm"
+
+            # wasm-bindgen `--target web` doesn't auto-init; this generic 2-line
+            # ESM wrapper is the bundle's registry entrypoint — importing it runs
+            # the `start` fn that registers the custom element. (printf, not a
+            # heredoc: a heredoc body/terminator would inherit nix-string indent.)
+            printf 'import init from "./%s.js";\nawait init();\n' "$name" > "$out/mfe-real-estate-overview.js"
+
+            ( cd real_estate_allocation && tailwindcss -i ./mfe.css -o "$out/mfe.css" )
+            cp -r real_estate_allocation/assets/seed "$out/seed"
+
+            # ponytail: mirrors `MFE_MANIFEST` (the macro's const, not readable
+            # from a build script). One remote, hand-kept; a multi-remote setup
+            # would emit it from a tiny print step into landing's registry.
+            printf '%s\n' '{"name":"real-estate.overview","tag":"mfe-real-estate-overview","kind":"component"}' > "$out/mfe.json"
+            runHook postInstall
+          '';
+          doCheck = false;
+        };
+        # Server binary + sibling public/, wrapped into `.#container`.
+        # `NO_DOWNLOADS=1` flips dx 0.7's `prefer_no_downloads()`, so its
+        # `wasm_opt`/`wasm_bindgen` stages resolve binaries via `which` off
+        # PATH (nix `binaryen` 129 matches dx's pinned BINARYEN_VERSION;
+        # `wasm-bindgen-cli` =0.2.125 passes dx's exact-version check) instead
+        # of fetching — what used to force an imperative `nix run`. Vendored
+        # cargo (cargoLock) covers the offline crate graph. Output mirrors
+        # `reaBin`: server binary + sibling `public/` in one store path
+        # (dioxus resolves `public` by the binary's realpath). The embed
+        # bundle is NOT baked in — that's `.#embeds`, served by landing.
+        reaDxBuild = rustPlatform.buildRustPackage {
+          pname = "${pname}-dx";
+          version = manifest.version;
+          src = pkgs.lib.cleanSource ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+
+          buildInputs = with pkgs; [ openssl.dev sqlite ];
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            cmake
+            perl
+            mold
+            pkgs.rustPlatform.bindgenHook
+            dioxus-cli
+            wasm-bindgen-cli
+            binaryen
+            tailwindcss_4
+            removeReferencesTo
+          ];
+
+          postPatch = ''
+            cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
+            ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
+          '';
+
+          # `-C strip=debuginfo` is prod-only: dx forces DWARF into the release
+          # wasm, which wasm-opt's binary writer aborts on; stripping both fixes
+          # the abort and halves the bundle.
+          buildPhase = ''
+            runHook preBuild
+            ${dyldFallback}
+            export PORT=${port}
+            export NO_DOWNLOADS=1
+            export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
+            ( cd real_estate_allocation && dx build --release --package real_estate_allocation )
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+            web="target/dx/real_estate_allocation/release/web"
+            test -x "$web/server"
+            test -f "$web/public/index.html"
+            mkdir -p "$out/bin"
+            cp -a "$web/server" "$out/bin/real_estate_allocation"
+            cp -a "$web/public" "$out/bin/public"
+            # The server binary and the wasm bake the nightly std source path
+            # (`…/rust-default/…/library/alloc/src/string.rs`) into `#[track_caller]`
+            # panic-location strings — pure data never opened at runtime, but
+            # nix's reference scanner sees it and dockerTools would drag the whole
+            # 2.2 GB toolchain into the image. Scrub just that one path; the
+            # glibc/gcc RUNPATH the binary genuinely needs is a different store
+            # path, untouched. (Drops the image from ~2.4 GB to ~106 MB.)
+            chmod -R u+w "$out/bin"
+            remove-references-to -t ${rust} "$out/bin/real_estate_allocation"
+            find "$out/bin/public" -name '*.wasm' \
+              -exec remove-references-to -t ${rust} {} +
+            runHook postInstall
+          '';
+          doCheck = false;
+        };
+
+        # reaDxBuild's closure is pulled via the Entrypoint store-path ref.
+        # Secret env (REA_ADMIN_TOKEN, GOOGLE_MAPS_KEY) comes from gitops's Secret.
+        containerStd = v_flakes.container.implement {
+          inherit pkgs pname;
+          containers."" = {
+            port = pkgs.lib.toInt reaPort;
+            mounts = [ "/data" ];
+            healthPath = "/health";
+            criticality = "normal";
+            entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" ];
+            workingDir = "/data";
+            imageEnv = [ "HOME=/data" ];
+          };
+        };
+      in
       {
-        # `nix run .#dev` → Tailwind watch + fullstack dx serve (the one command
-        # you need for a dev view). `.#default` aliases it. The dashboard prod
-        # image is `nix build .#container` (the v_flakes standard, pushed to GHCR
-        # on a tag). The embed bundle is `nix build .#embeds` (consumed by landing).
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
         };
 
-        packages =
-          let
-            rustc = rust;
-            cargo = rust;
-            rustPlatform = pkgs.makeRustPlatform {
-              inherit rustc cargo stdenv;
-            };
-            reaBin = rustPlatform.buildRustPackage {
-              inherit pname;
-              version = manifest.version;
+        packages = {
+          default = reaBin;
+          bin = reaBin;
+          embeds = embeds;
+        } // containerStd.packages;
 
-              buildInputs = with pkgs; [
-                openssl.dev
-                sqlite
-              ];
-              nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook tailwindcss_4 ];
-
-              cargoLock.lockFile = ./Cargo.lock;
-              src = pkgs.lib.cleanSource ./.;
-
-              # `asset!()` needs these present at compile time, but both are
-              # gitignored generated artifacts absent from the pure source:
-              # `logo.svg` is staged from ev_assets, `tailwind.css` is built from
-              # `input.css` here — the same offline CLI the dev/mfe paths use, so
-              # release CSS can't drift from a stale committed copy.
-              postPatch = ''
-                cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
-                ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
-              '';
-              # Dioxus fullstack looks for `public/` next to its own binary.
-              # buildEnv symlinks don't work (binary resolves realpath), so the
-              # dir must be in the same store path as the binary.
-              postInstall = "mkdir -p $out/bin/public";
-              doCheck = false;
-            };
-
-            # ── microfrontend bundle (the `embeds` half of the split) ──────────
-            # `nix build .#embeds` → the cross-origin MFE bundle as a pure artifact
-            # the landing host bakes into its own `public/` and serves same-origin
-            # (the way it bakes the whitepaper/blog). The master image no longer
-            # carries it. The wasm graph is pure Rust (miette/syntect/onig dropped
-            # with the embed's move off the full REA lib), so it builds in the
-            # sandbox with no `dx`/wasm-opt download.
-            #
-            # All boilerplate (custom-element registration, start fn, manifest) is
-            # the `ev_lib::mfe!` macro; these steps are the manganis-free packaging
-            # `dx` can't do for a cross-origin remote: wasm-bindgen + utilities-only
-            # CSS + seed assets. `wasm-bindgen-cli` is pinned to the `wasm-bindgen`
-            # crate (=0.2.125); a skew is a hard schema error at bindgen time.
-            embeds = rustPlatform.buildRustPackage {
-              pname = "${pname}-mfe";
-              version = manifest.version;
-              src = pkgs.lib.cleanSource ./.;
-              cargoLock.lockFile = ./Cargo.lock;
-              nativeBuildInputs = [ wasm-bindgen-cli pkgs.tailwindcss_4 ];
-
-              # Build only the wasm crate; the default workspace build would pull the
-              # native graph. web_sys_unstable_apis: dioxus-web touches unstable
-              # web-sys (mirror the host config's native-target cfg for wasm).
-              # getrandom_backend: getrandom 0.3 (transitive via ahash) selects its
-              # wasm backend by cfg, not just a feature.
-              buildPhase = ''
-                runHook preBuild
-                ${dyldFallback}
-                export RUSTFLAGS='--cfg=web_sys_unstable_apis --cfg=getrandom_backend="wasm_js"'
-                cargo build -p real_estate_allocation_mfe --target wasm32-unknown-unknown --release --offline
-                runHook postBuild
-              '';
-              installPhase = ''
-                runHook preInstall
-                name=real_estate_allocation_mfe
-                mkdir -p "$out"
-                wasm-bindgen --target web --out-dir "$out" --out-name "$name" \
-                  "target/wasm32-unknown-unknown/release/$name.wasm"
-
-                # wasm-bindgen `--target web` doesn't auto-init; this generic 2-line
-                # ESM wrapper is the bundle's registry entrypoint — importing it runs
-                # the `start` fn that registers the custom element. (printf, not a
-                # heredoc: a heredoc body/terminator would inherit nix-string indent.)
-                printf 'import init from "./%s.js";\nawait init();\n' "$name" > "$out/mfe-real-estate-overview.js"
-
-                ( cd real_estate_allocation && tailwindcss -i ./mfe.css -o "$out/mfe.css" )
-                cp -r real_estate_allocation/assets/seed "$out/seed"
-
-                # ponytail: mirrors `MFE_MANIFEST` (the macro's const, not readable
-                # from a build script). One remote, hand-kept; a multi-remote setup
-                # would emit it from a tiny print step into landing's registry.
-                printf '%s\n' '{"name":"real-estate.overview","tag":"mfe-real-estate-overview","kind":"component"}' > "$out/mfe.json"
-                runHook postInstall
-              '';
-              doCheck = false;
-            };
-            # Server binary + sibling public/, wrapped into `.#container`.
-            # `NO_DOWNLOADS=1` flips dx 0.7's `prefer_no_downloads()`, so its
-            # `wasm_opt`/`wasm_bindgen` stages resolve binaries via `which` off
-            # PATH (nix `binaryen` 129 matches dx's pinned BINARYEN_VERSION;
-            # `wasm-bindgen-cli` =0.2.125 passes dx's exact-version check) instead
-            # of fetching — what used to force an imperative `nix run`. Vendored
-            # cargo (cargoLock) covers the offline crate graph. Output mirrors
-            # `reaBin`: server binary + sibling `public/` in one store path
-            # (dioxus resolves `public` by the binary's realpath). The embed
-            # bundle is NOT baked in — that's `.#embeds`, served by landing.
-            reaDxBuild = rustPlatform.buildRustPackage {
-              pname = "${pname}-dx";
-              version = manifest.version;
-              src = pkgs.lib.cleanSource ./.;
-              cargoLock.lockFile = ./Cargo.lock;
-
-              buildInputs = with pkgs; [ openssl.dev sqlite ];
-              nativeBuildInputs = with pkgs; [
-                pkg-config
-                cmake
-                perl
-                mold
-                pkgs.rustPlatform.bindgenHook
-                dioxus-cli
-                wasm-bindgen-cli
-                binaryen
-                tailwindcss_4
-                removeReferencesTo
-              ];
-
-              postPatch = ''
-                cp -f ${logoSrc} real_estate_allocation/assets/logo.svg
-                ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
-              '';
-
-              # `-C strip=debuginfo` is prod-only: dx forces DWARF into the release
-              # wasm, which wasm-opt's binary writer aborts on; stripping both fixes
-              # the abort and halves the bundle.
-              buildPhase = ''
-                runHook preBuild
-                ${dyldFallback}
-                export PORT=${port}
-                export NO_DOWNLOADS=1
-                export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
-                ( cd real_estate_allocation && dx build --release --package real_estate_allocation )
-                runHook postBuild
-              '';
-
-              installPhase = ''
-                runHook preInstall
-                web="target/dx/real_estate_allocation/release/web"
-                test -x "$web/server"
-                test -f "$web/public/index.html"
-                mkdir -p "$out/bin"
-                cp -a "$web/server" "$out/bin/real_estate_allocation"
-                cp -a "$web/public" "$out/bin/public"
-                # The server binary and the wasm bake the nightly std source path
-                # (`…/rust-default/…/library/alloc/src/string.rs`) into `#[track_caller]`
-                # panic-location strings — pure data never opened at runtime, but
-                # nix's reference scanner sees it and dockerTools would drag the whole
-                # 2.2 GB toolchain into the image. Scrub just that one path; the
-                # glibc/gcc RUNPATH the binary genuinely needs is a different store
-                # path, untouched. (Drops the image from ~2.4 GB to ~106 MB.)
-                chmod -R u+w "$out/bin"
-                remove-references-to -t ${rust} "$out/bin/real_estate_allocation"
-                find "$out/bin/public" -name '*.wasm' \
-                  -exec remove-references-to -t ${rust} {} +
-                runHook postInstall
-              '';
-              doCheck = false;
-            };
-
-            # reaDxBuild's closure is pulled via the Entrypoint store-path ref.
-            # Secret env (REA_ADMIN_TOKEN, GOOGLE_MAPS_KEY) comes from gitops's Secret.
-            container = v_flakes.container.implement {
-              inherit pkgs pname;
-              port = pkgs.lib.toInt reaPort;
-              mounts = [ "/data" ];
-              healthPath = "/health";
-              criticality = "normal";
-              entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" ];
-              workingDir = "/data";
-              imageEnv = [ "HOME=/data" ];
-            };
-          in
-          {
-            default = reaBin;
-            bin = reaBin;
-            embeds = embeds;
-          } // container.packages;
+        containers = containerStd.containers;
 
         devShells.default =
           with pkgs;
