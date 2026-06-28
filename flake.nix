@@ -86,6 +86,7 @@
           inherit pkgs pname rs;
           enable = true;
           lastSupportedVersion = "nightly-2026-06-16";
+          containerRelease = { registry = "ghcr.io/EV-invest"; };
           jobs.default = true;
           gitignore.extra = ''
             **/node_modules/
@@ -157,97 +158,15 @@
           '';
         };
 
-        # ── production image builder (the `master` half of the split) ────────
-        # `nix run .#buildImage` → the dashboard prod artifact: builds the dx
-        # release dashboard (WASM client + manganis-resolved assets), assembles a
-        # FROM-scratch image around the dx server binary + its runtime closure, and
-        # writes a `podman load`-able archive. The VPS is too weak to build, so:
-        # `nix run .#buildImage` → scp → `podman load` → restart. The embed bundle
-        # is NOT baked in here — it's `.#embeds`, served by the landing host.
-        #
-        # Why a `nix run` and not a pure package: `dx build` downloads a
-        # version-matched wasm-opt, which the build sandbox forbids. (Making this
-        # pure is feasible via `NO_DOWNLOADS=1` + nix's binaryen/wasm-bindgen on
-        # PATH — deferred to the unified gitops container interface.)
-        #
-        # `-C strip=debuginfo` is prod-only (dev `dx serve` keeps full debuginfo):
-        # dx forces DWARF into the release wasm, which wasm-opt's binary writer
-        # aborts on; stripping both fixes the abort and halves the bundle.
-        runBuildImage = pkgs.writeShellApplication {
-          name = "build-image";
-          runtimeInputs = [ rust pkgs.dioxus-cli wasm-bindgen-cli pkgs.tailwindcss_4 pkgs.binaryen pkgs.git pkgs.coreutils pkgs.zstd pkgs.patchelf ];
-          text = ''
-            repo="$(git rev-parse --show-toplevel)"
-            # `result/` so the multi-GB artifact stays out of the worktree root (it's
-            # gitignored). A leftover `nix build` `result` symlink isn't a dir — drop it.
-            [ -d "$repo/result" ] || rm -f "$repo/result"
-            mkdir -p "$repo/result"
-            out="$repo/result/rea-image.tar.zst"
-
-            # sccache's daemon can hold a dead nix-shell's TMPDIR; respawn it clean.
-            sccache --stop-server >/dev/null 2>&1 || true
-
-            cp -f ${logoSrc} "$repo/real_estate_allocation/assets/logo.svg"
-            ( cd "$repo/real_estate_allocation" && tailwindcss -i ./input.css -o ./assets/tailwind.css )
-
-            echo "▶ building dashboard (dx build --release)…"
-            ( cd "$repo/real_estate_allocation"
-              export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
-              dx build --release --package real_estate_allocation )
-
-            web="$repo/target/dx/real_estate_allocation/release/web"
-            test -x "$web/server"
-            test -f "$web/public/index.html"
-
-            ctx="$(mktemp -d)"
-            # copied store paths are read-only, so chmod before rm or cleanup errors.
-            trap 'chmod -R u+w "$ctx" 2>/dev/null || true; rm -rf "$ctx"' EXIT
-            cp -a "$web/server"            "$ctx/server"
-            cp -a "$web/public"            "$ctx/public"
-
-            # dx builds the binary in the dev shell, whose glibc/libgcc differ from
-            # any sandbox-built base — so overlaying onto one leaves the ELF
-            # interpreter missing. Bundle the binary's *actual* runtime closure
-            # (interpreter + rpath store paths + cacert for outbound TLS) and build
-            # FROM scratch: correct for whatever toolchain dx used, and far smaller
-            # than a full base. (printf over heredoc: a nix '''' string bakes its
-            # own indentation into a heredoc body/terminator.)
-            echo "▶ collecting the dx binary's nix closure…"
-            roots="$(patchelf --print-interpreter "$ctx/server"; patchelf --print-rpath "$ctx/server" | tr ':' '\n'; printf '%s\n' ${pkgs.cacert})"
-            sp="$(printf '%s\n' "$roots" | grep -oE '/nix/store/[^/]+' | sort -u)"
-            mkdir -p "$ctx/nixstore"
-            # word-splitting of $sp (newline-separated store paths) is intentional
-            # shellcheck disable=SC2046,SC2086
-            for p in $(nix-store -qR $sp | sort -u); do cp -a "$p" "$ctx/nixstore/"; done
-
-            printf 'FROM scratch\nCOPY nixstore /nix/store\nCOPY server /bin/real_estate_allocation\nCOPY public /bin/public\nENV SSL_CERT_FILE=%s/etc/ssl/certs/ca-bundle.crt HOME=/data\nWORKDIR /data\nEXPOSE ${reaPort}\nENTRYPOINT ["/bin/real_estate_allocation"]\n' ${pkgs.cacert} > "$ctx/Dockerfile"
-
-            echo "▶ building image (FROM scratch)…"
-            podman build -t localhost/rea:latest "$ctx"
-
-            # Stream straight into zstd (no multi-GB intermediate tar). `--long=27`
-            # (128 MB window) catches cross-file redundancy gzip's 32 KB can't;
-            # `-T0` multithreads it.
-            echo "▶ compressing (zstd --long=27)…"
-            podman save localhost/rea:latest | zstd -19 -T0 --long=27 -o "$out" -f
-            echo "✅ image → $out ($(du -h "$out" | cut -f1))"
-            # `docker save` writes the tag into the OCI ref name, so podman load
-            # names it `localhost/latest:latest`; retag to what the unit expects.
-            echo "   deploy:"
-            echo "     scp \"$out\" \''${vps_addr}:/tmp/"
-            echo "     ssh \''${vps_addr} 'zstd -dc --long=27 /tmp/rea-image.tar.zst | podman load; podman tag localhost/latest:latest localhost/rea:latest; systemctl restart evinvest-rea'"
-          '';
-        };
       in
       {
         # `nix run .#dev` → Tailwind watch + fullstack dx serve (the one command
-        # you need for a dev view). `.#default` aliases it. `.#buildImage` builds
-        # the master (dashboard) prod image → loadable archive. The embed bundle
-        # is `nix build .#embeds` (consumed by the landing host).
+        # you need for a dev view). `.#default` aliases it. The dashboard prod
+        # image is `nix build .#container` (the v_flakes standard, pushed to GHCR
+        # on a tag). The embed bundle is `nix build .#embeds` (consumed by landing).
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
-          buildImage = { type = "app"; program = "${runBuildImage}/bin/build-image"; };
         };
 
         packages =
@@ -342,20 +261,18 @@
               '';
               doCheck = false;
             };
-            # //TEST ─ pure-nix feasibility of the `nix run .#buildImage` flow ──
-            # Does in-sandbox what `runBuildImage` does dynamically: `dx build
-            # --release` with downloads disabled. `NO_DOWNLOADS=1` flips dx 0.7's
-            # `prefer_no_downloads()`, so its `wasm_opt`/`wasm_bindgen` stages
-            # resolve binaries via `which` off PATH (nix `binaryen` 129 matches
-            # dx's pinned BINARYEN_VERSION; `wasm-bindgen-cli` =0.2.125 passes
-            # dx's exact-version check) instead of fetching — the one thing that
-            # forced the imperative `nix run`. Vendored cargo (cargoLock) covers
-            # the offline crate graph. Output mirrors `reaBin`: server binary +
-            # sibling `public/` in one store path (dioxus resolves `public` by the
-            # binary's realpath). Marked //TEST throughout so it greps-and-nukes
-            # cleanly if dx touches the network somewhere the source-read missed.
+            # Server binary + sibling public/, wrapped into `.#container`.
+            # `NO_DOWNLOADS=1` flips dx 0.7's `prefer_no_downloads()`, so its
+            # `wasm_opt`/`wasm_bindgen` stages resolve binaries via `which` off
+            # PATH (nix `binaryen` 129 matches dx's pinned BINARYEN_VERSION;
+            # `wasm-bindgen-cli` =0.2.125 passes dx's exact-version check) instead
+            # of fetching — what used to force an imperative `nix run`. Vendored
+            # cargo (cargoLock) covers the offline crate graph. Output mirrors
+            # `reaBin`: server binary + sibling `public/` in one store path
+            # (dioxus resolves `public` by the binary's realpath). The embed
+            # bundle is NOT baked in — that's `.#embeds`, served by landing.
             reaDxBuild = rustPlatform.buildRustPackage {
-              pname = "${pname}-dx"; # //TEST
+              pname = "${pname}-dx";
               version = manifest.version;
               src = pkgs.lib.cleanSource ./.;
               cargoLock.lockFile = ./Cargo.lock;
@@ -371,7 +288,7 @@
                 wasm-bindgen-cli
                 binaryen
                 tailwindcss_4
-                removeReferencesTo # //TEST
+                removeReferencesTo
               ];
 
               postPatch = ''
@@ -379,11 +296,14 @@
                 ( cd real_estate_allocation && tailwindcss -i ./input.css -o ./assets/tailwind.css )
               '';
 
+              # `-C strip=debuginfo` is prod-only: dx forces DWARF into the release
+              # wasm, which wasm-opt's binary writer aborts on; stripping both fixes
+              # the abort and halves the bundle.
               buildPhase = ''
                 runHook preBuild
                 ${dyldFallback}
                 export PORT=${port}
-                export NO_DOWNLOADS=1 # //TEST: dx resolves wasm-opt/wasm-bindgen off PATH
+                export NO_DOWNLOADS=1
                 export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
                 ( cd real_estate_allocation && dx build --release --package real_estate_allocation )
                 runHook postBuild
@@ -397,14 +317,13 @@
                 mkdir -p "$out/bin"
                 cp -a "$web/server" "$out/bin/real_estate_allocation"
                 cp -a "$web/public" "$out/bin/public"
-                # //TEST: the server binary and the wasm bake the nightly std
-                # source path (`…/rust-default/…/library/alloc/src/string.rs`) into
-                # `#[track_caller]` panic-location strings — pure data never opened
-                # at runtime, but nix's reference scanner sees it and dockerTools
-                # drags the whole 2.2 GB toolchain into the image. `runBuildImage`
-                # dodges this only by hand-collecting the (clean) rpath instead of
-                # the nix closure. Scrub just that one path; the glibc/gcc RUNPATH
-                # the binary genuinely needs is a different store path, untouched.
+                # The server binary and the wasm bake the nightly std source path
+                # (`…/rust-default/…/library/alloc/src/string.rs`) into `#[track_caller]`
+                # panic-location strings — pure data never opened at runtime, but
+                # nix's reference scanner sees it and dockerTools would drag the whole
+                # 2.2 GB toolchain into the image. Scrub just that one path; the
+                # glibc/gcc RUNPATH the binary genuinely needs is a different store
+                # path, untouched. (Drops the image from ~2.4 GB to ~106 MB.)
                 chmod -R u+w "$out/bin"
                 remove-references-to -t ${rust} "$out/bin/real_estate_allocation"
                 find "$out/bin/public" -name '*.wasm' \
@@ -414,33 +333,24 @@
               doCheck = false;
             };
 
-            # //TEST ─ pure replacement for the imperative podman/zstd assembly.
-            # `dockerTools.buildLayeredImage` is pure + built-in (no nix2container
-            # input), and pulls `reaDxBuild`'s closure automatically — so the
-            # manual `patchelf`/`nix-store -qR` closure dance in `runBuildImage`
-            # isn't needed: the binary is sandbox-built, its rpath is already
-            # proper store paths.
-            pureContainerFeasibility = pkgs.dockerTools.buildLayeredImage {
-              name = "rea"; # //TEST
-              tag = "latest";
-              contents = [ pkgs.cacert ];
-              config = {
-                Entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" ];
-                WorkingDir = "/data";
-                ExposedPorts = { "${reaPort}/tcp" = { }; };
-                Env = [
-                  "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-                  "HOME=/data"
-                ];
-              };
+            # reaDxBuild's closure is pulled via the Entrypoint store-path ref.
+            # Secret env (REA_ADMIN_TOKEN, GOOGLE_MAPS_KEY) comes from gitops's Secret.
+            container = v_flakes.container.implement {
+              inherit pkgs pname;
+              port = pkgs.lib.toInt reaPort;
+              mounts = [ "/data" ];
+              healthPath = "/health";
+              criticality = "normal";
+              entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" ];
+              workingDir = "/data";
+              imageEnv = [ "HOME=/data" ];
             };
           in
           {
             default = reaBin;
             bin = reaBin;
             embeds = embeds;
-            pureContainerFeasibility = pureContainerFeasibility; # //TEST
-          };
+          } // container.packages;
 
         devShells.default =
           with pkgs;

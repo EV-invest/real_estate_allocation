@@ -87,6 +87,7 @@ fn main() {
 				.allow_headers([header::CONTENT_TYPE]);
 			let router = Router::new()
 				.merge(dioxus::server::router(App))
+				.route("/health", dioxus::server::axum::routing::get(|| async { "ok" }))
 				.route("/api/embed/building/{id}", dioxus::server::axum::routing::get(real_estate_allocation::api::building_json))
 				.layer(Extension(app_state))
 				.layer(cors);
