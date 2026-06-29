@@ -1,5 +1,8 @@
 {
   inputs = {
+    # Pin Determinate Nix for anyone who uses this repo (lazy-trees on) so local evals
+    # match CI — same Nix CI's magic-nix-cache feeds, so input/output hashes line up.
+    determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/*";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
@@ -13,7 +16,7 @@
     # of. "Latest logo" = `nix flake update ev_assets` (bumps flake.lock).
     ev_assets = { url = "github:EV-invest/assets"; flake = false; };
   };
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes, ev_assets }:
+  outputs = { self, determinate, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes, ev_assets }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
