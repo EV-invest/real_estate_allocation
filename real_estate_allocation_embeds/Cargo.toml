@@ -20,6 +20,7 @@ dioxus = { workspace = true, features = ["web"] }
 ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm", "mfe"] }
 gloo-net.workspace = true
 real_estate_allocation_core.workspace = true
+web-sys = { workspace = true, features = ["Window", "Document", "Element"] }
 
 [lints]
 workspace = true
