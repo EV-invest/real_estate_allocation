@@ -2,9 +2,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
     pre-commit-hooks.url = "github:cachix/git-hooks.nix";
+    pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
     v_flakes.url = "github:valeratrades/v_flakes?ref=v1.6";
+    v_flakes.inputs.nixpkgs.follows = "nixpkgs";
+    v_flakes.inputs.rust-overlay.follows = "rust-overlay";
     # Brand assets. Not a flake — just a pinned source tree we copy the logo out
     # of. "Latest logo" = `nix flake update ev_assets` (bumps flake.lock).
     ev_assets = { url = "github:EV-invest/assets"; flake = false; };
@@ -323,15 +327,16 @@
         };
 
         # reaDxBuild's closure is pulled via the Entrypoint store-path ref.
-        # Secret-free prod config baked into the image; its `{ env = … }` fields
-        # pull the two secrets (GOOGLE_MAPS_KEY, REA_ADMIN_TOKEN) from the
-        # container env that gitops' k8s Secret injects (`envFrom`). Without an
-        # explicit `--config`, the binary searches only XDG dirs + the prefixed
-        # `REAL_ESTATE_ALLOCATION_*` env namespace — neither of which sees the
-        # bare-named Secret vars nor the `/data` prod paths, so it would silently
-        # boot on dev defaults (empty maps key, 127.0.0.1 bind that fails the
-        # k8s probe). Pointing at this file is what makes the container prod-correct.
-        prodConfig = ./deploy/config.toml;
+        # Secret-free prod config baked into the image; its `.env` fields pull the
+        # two secrets (GOOGLE_MAPS_KEY, REA_ADMIN_TOKEN) from the container env
+        # that gitops' k8s Secret injects (`envFrom`). Authored in nix and
+        # evaluated to JSON here — the container has no `nix`, so the binary reads
+        # the baked result, not the `.nix`. Without an explicit `--config` the
+        # binary searches only XDG dirs + the prefixed `REAL_ESTATE_ALLOCATION_*`
+        # env namespace — neither sees the bare-named Secret vars nor the `/data`
+        # prod paths, so it would silently boot on dev defaults (empty maps key,
+        # 127.0.0.1 bind that fails the k8s probe). This is what makes it correct.
+        prodConfig = pkgs.writeText "config.json" (builtins.toJSON (import ./deploy/config.nix));
         containerStd = v_flakes.container.implement {
           inherit pkgs pname;
           containers."" = {
