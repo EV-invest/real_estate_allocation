@@ -198,6 +198,13 @@
         rustPlatform = pkgs.makeRustPlatform {
           inherit rustc cargo stdenv;
         };
+        # `.cargo` holds dev-only accelerators (sccache rustc-wrapper, cranelift,
+        # mold) the hermetic sandbox lacks — drop it so the pure build uses nix's
+        # own toolchain instead of failing on a missing `sccache` on PATH.
+        pureSrc = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = path: _type: baseNameOf path != ".cargo";
+        };
         reaBin = rustPlatform.buildRustPackage {
           inherit pname;
           version = manifest.version;
@@ -209,7 +216,7 @@
           nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook tailwindcss_4 ];
 
           cargoLock.lockFile = ./Cargo.lock;
-          src = pkgs.lib.cleanSource ./.;
+          src = pureSrc;
 
           # `asset!()` needs these present at compile time, but both are
           # gitignored generated artifacts absent from the pure source:
@@ -243,7 +250,7 @@
         embeds = rustPlatform.buildRustPackage {
           pname = "${pname}-mfe";
           version = manifest.version;
-          src = pkgs.lib.cleanSource ./.;
+          src = pureSrc;
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = [ wasm-bindgen-cli pkgs.tailwindcss_4 ];
 
@@ -296,7 +303,7 @@
         reaDxBuild = rustPlatform.buildRustPackage {
           pname = "${pname}-dx";
           version = manifest.version;
-          src = pkgs.lib.cleanSource ./.;
+          src = pureSrc;
           cargoLock.lockFile = ./Cargo.lock;
 
           buildInputs = with pkgs; [ openssl.dev sqlite ];
