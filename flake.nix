@@ -33,7 +33,22 @@
         # Darwin-only: the var doesn't exist on Linux's loader.
         dyldFallback = pkgs.lib.optionalString pkgs.stdenv.isDarwin
           ''export DYLD_FALLBACK_LIBRARY_PATH="${rust}/lib''${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"'';
-        pre-commit-check = pre-commit-hooks.lib.${system}.run (v_flakes.files.preCommit { inherit pkgs; });
+        # v_flakes ships the treefmt hook; we extend it with the same `.#test`
+        # derivation (cargo test / insta snapshots). Kept on pre-push, not
+        # pre-commit — a full test run per commit is too slow; flip `stages` to
+        # ["pre-commit"] if you want it on every commit.
+        preCommitBase = v_flakes.files.preCommit { inherit pkgs; };
+        pre-commit-check = pre-commit-hooks.lib.${system}.run (preCommitBase // {
+          hooks = preCommitBase.hooks // {
+            test = {
+              enable = true;
+              name = "nix run .#test (cargo test / insta snapshots)";
+              entry = "${runTest}/bin/run-test";
+              pass_filenames = false;
+              stages = [ "pre-push" ];
+            };
+          };
+        });
         manifest = (pkgs.lib.importTOML ./real_estate_allocation/Cargo.toml).package;
         pname = manifest.name;
         stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
@@ -159,6 +174,20 @@
             # Plain `cargo b`/`cargo r`/`nix build` still read the config and keep both.
             export RUSTFLAGS='--cfg tokio_unstable --cfg web_sys_unstable_apis'
             nix develop "$repo" --command dx serve --package real_estate_allocation --port ${reaPort} #--interactive false
+          '';
+        };
+
+        # ── test suite: cargo test (runs the insta snapshots) ──────────────
+        # Delegates to `nix develop` so cargo gets the devShell toolchain (the
+        # `.cargo` sccache/cranelift/mold accelerators a bare app PATH lacks),
+        # exactly like runDev does for `dx serve`.
+        runTest = pkgs.writeShellApplication {
+          name = "run-test";
+          runtimeInputs = with pkgs; [ git ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            echo "▶ cargo test (insta snapshots)"
+            exec nix develop "$repo" --command cargo test
           '';
         };
 
@@ -351,9 +380,12 @@
         };
       in
       {
+        # `nix run .#dev`  → Tailwind watch + fullstack `dx serve`
+        # `nix run .#test` → cargo test (insta snapshots)
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
+          test = { type = "app"; program = "${runTest}/bin/run-test"; };
         };
 
         packages = {
@@ -369,7 +401,16 @@
           mkShell {
             inherit stdenv;
             shellHook =
-              pre-commit-check.shellHook
+              ''
+                if [ "$(nix config show lazy-trees 2>/dev/null)" != true ]; then
+                  printf '%s\n' \
+                    "✘ This repo requires Determinate Nix with lazy-trees=true." \
+                    "  Stock nix produces flake.lock NAR hashes that diverge from CI (private inputs fail to verify)." \
+                    "  Install: https://determinate.systems/nix   NixOS: nix.settings.lazy-trees = true" >&2
+                  exit 1
+                fi
+              ''
+              + pre-commit-check.shellHook
               + combined.shellHook
               + ''
                 cp -f ${(v_flakes.files.treefmt) { inherit pkgs; }} ./.treefmt.toml
