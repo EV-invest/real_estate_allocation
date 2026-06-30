@@ -1,5 +1,5 @@
 use dioxus::{html::HasFileData, prelude::*};
-use ev_lib::uikit::{AspectRatio, Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
+use ev_lib::uikit::{Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
 
 use crate::{
 	app::{SelectedAppt, SelectedBuilding},
@@ -84,7 +84,7 @@ fn Pic(building_id: BuildingId, appt: Option<u32>, file: PropertyFile) -> Elemen
 	let src = bytes.read().as_ref().and_then(|o| o.as_ref()).map(|b| data_url(&content_type, b));
 
 	rsx! {
-		AspectRatio { ratio: 16.0 / 9.0,
+		div { class: "aspect-video",
 			match src {
 				Some(src) => rsx! { img { class: "w-full h-full object-cover rounded-md", src } },
 				None => rsx! { Skeleton { class: "w-full h-full" } },

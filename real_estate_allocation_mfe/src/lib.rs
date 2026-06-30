@@ -2,6 +2,8 @@
 // registration, the `wasm-bindgen(start)` entrypoint, the origin self-derivation,
 // and `MFE_MANIFEST` (emitted by the build as `mfe.json`). `Overview` is the
 // reused REA portfolio surface.
+#![cfg(target_arch = "wasm32")] // `mfe!` → wasm-bindgen(start); wasm-only bundle
+
 ev_lib::mfe! {
 	service: "real-estate", name: "overview", kind: component,
 	root: real_estate_allocation_embeds::Overview, stylesheet: "mfe.css"

@@ -22,17 +22,17 @@ unused_features = "allow"
 clap = { version = "^4.6", features = ["derive"] }
 color-eyre = "^0.6"
 derive-new = "^0.7"
-dockview_dioxus = "^0.1.2"
+dockview_dioxus = "^0.1.4"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 reqwest = { version = "^0.13", default-features = false, features = ["json", "rustls"] }
-v_utils = { version = "^2.15.53", features = ["io", "macros", "cli"] }
+v_utils = { version = "^2.15.54", features = ["io", "macros", "cli"] }
 
 # microfrontend stack — pinned to the exact revs `site` verified against.
 async-trait = "^0.1"
 dioxus = { version = "^0.7" }
 dioxus-ssr = "0.7"
-ev_lib = "^0.3.3"
+ev_lib = "^0.3.7"
 getrandom = { version = "^0.4", features = ["wasm_js"] }
 gloo-net = "^0.7"
 insta = "^1"
@@ -48,7 +48,7 @@ strum = "0.28.0"
 thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
-wasm-bindgen = "=0.2.125"
+wasm-bindgen = "=0.2.126"
 web-sys = "0.3"
 
 # Local checkout overrides the crates.io source — we edit the lib alongside the app.

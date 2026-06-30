@@ -54,11 +54,6 @@ uuid.workspace = true
 dioxus-ssr.workspace = true
 insta.workspace = true
 
-# examples live at the repo root, not under the crate.
-[[example]]
-name = "portfolio_diff"
-path = "../examples/portfolio_diff.rs"
-
 [[example]]
 name = "seed_smoke"
 path = "../examples/seed_smoke.rs"

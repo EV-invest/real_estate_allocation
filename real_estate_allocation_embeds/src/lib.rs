@@ -1,4 +1,5 @@
 #![feature(default_field_values)]
+#![cfg(target_arch = "wasm32")] // web-sys/gloo-net + `ev_lib::mfe` — wasm-only bundle
 //! Marketing surface mounted by the cross-origin microfrontend bundle
 //! (`real_estate_allocation_mfe`). A standalone port of the landing "Premium Asset
 //! Portfolio" bento section — no app shell, so the landing host composes `<tag>`
