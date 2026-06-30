@@ -13,8 +13,11 @@ use crate::{
 #[component]
 pub fn PortfolioHeatmap() -> Element {
 	let filter = use_context::<Filter>();
+	// The heatmap is a portfolio view: `Interesting` is never a holding, so it stays out
+	// even when the user has it selected.
+	let states = use_memo(move || filter().into_iter().filter(|k| *k != PropertyStateKind::Interesting).collect::<Vec<_>>());
 	let buildings = use_resource(move || {
-		let states = filter();
+		let states = states();
 		async move { crate::api::list_buildings(Some(states)).await.unwrap_or_default() }
 	});
 
@@ -30,7 +33,7 @@ pub fn PortfolioHeatmap() -> Element {
 							"No holdings to display."
 						}
 					},
-					Some(list) => rsx! { Treemap { buildings: list.clone(), states: filter() } },
+					Some(list) => rsx! { Treemap { buildings: list.clone(), states: states() } },
 				}
 			}
 		}
@@ -450,6 +453,26 @@ mod tests {
 		let html = render(included, states.to_vec());
 		assert!(html.contains("repeating-linear-gradient"), "prospect tile must be hatched");
 		assert!(html.contains("opacity-50"), "prospect tile must be dimmed");
+	}
+
+	/// `Interesting` is never a holding: even with every kind selected, the portfolio
+	/// heatmap drops it before fetch + layout, so an interesting-only building never tiles.
+	#[test]
+	fn interesting_never_tiled_even_when_selected() {
+		use PropertyStateKind::*;
+		let bought: Timestamp = "2024-01-01T00:00:00Z".parse().unwrap();
+		let book = vec![
+			building(250, "Purchased", vec![apt(1, ApartmentStatus::Purchased(bought), Some(90000.0))]),
+			building(700, "Purchasing", vec![apt(1, ApartmentStatus::Purchasing, Some(60000.0))]),
+			building(900, "Interesting", vec![apt(1, ApartmentStatus::Interesting, Some(40000.0))]),
+		];
+
+		let states: Vec<PropertyStateKind> = vec![Purchased, Interesting, Purchasing].into_iter().filter(|k| *k != Interesting).collect();
+		let included: Vec<Building> = book.into_iter().filter(|b| b.state_kinds().any(|k| states.contains(&k))).collect();
+
+		let html = render(included, states);
+		assert!(!html.contains("Interesting"), "interesting building must not tile");
+		assert!(html.contains("Purchased") && html.contains("Purchasing"), "holdings must tile");
 	}
 
 	#[test]

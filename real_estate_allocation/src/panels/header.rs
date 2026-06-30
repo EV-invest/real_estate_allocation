@@ -19,7 +19,7 @@ pub fn TopBar() -> Element {
 		header { class: "sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur",
 			// Inner column shares the body's max-width so the header aligns with the
 			// content beneath it, while the border/background stay full-bleed.
-			div { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-2 px-6 py-5 lg:px-8",
+			div { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-2 py-5",
 				match &*building.read() {
 					Some(Some(b)) => rsx! { Loaded { building: b.clone(), appt: appt() } },
 					Some(None) => rsx! { Empty {} },

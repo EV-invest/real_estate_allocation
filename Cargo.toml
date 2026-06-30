@@ -22,7 +22,7 @@ unused_features = "allow"
 clap = { version = "^4.6", features = ["derive"] }
 color-eyre = "^0.6"
 derive-new = "^0.7"
-dockview_dioxus = "^0.1.4"
+dockview_dioxus = "^0.1.5"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 reqwest = { version = "^0.13", default-features = false, features = ["json", "rustls"] }
@@ -48,8 +48,18 @@ strum = "0.28.0"
 thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
 uuid = { version = "^1", features = ["serde", "v4"] }
-wasm-bindgen = "=0.2.126"
+wasm-bindgen = "=0.2.125" #NB: don't bump carelessly, - must match installed
 web-sys = "0.3"
+
+# Incremental compilation ICEs on the pinned nightly (`explicit_implied_predicates_of`
+# fingerprint mismatch over the new MetaSized hierarchy) — disabled for dx's profiles.
+[profile.server-dev]
+inherits = "dev"
+incremental = false
+
+[profile.wasm-dev]
+inherits = "dev"
+incremental = false
 
 # Local checkout overrides the crates.io source — we edit the lib alongside the app.
 # Required until ev_lib's `mfe` feature (the producer SDK) is published; the path
