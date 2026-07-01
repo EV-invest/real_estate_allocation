@@ -161,6 +161,7 @@ fn Home() -> Element {
 			}
 			document::Script { src: "https://cdn.plot.ly/plotly-basic-2.35.2.min.js", defer: true }
 			Dashboard {}
+			BuildTag {}
 			// Discord-style prev/next, only while viewing an apartment; wraps around.
 			if appt().is_some() {
 				button {
@@ -176,6 +177,23 @@ fn Home() -> Element {
 					"›"
 				}
 			}
+		}
+	}
+}
+
+/// Inconspicuous deployed-version tag pinned to the bottom-right, linking to the
+/// exact commit on GitHub so we can tell what's live at a glance. `GIT_HASH` is
+/// baked at build time by `build.rs` (short SHA, "unknown" without git).
+#[component]
+fn BuildTag() -> Element {
+	let hash = env!("GIT_HASH");
+	rsx! {
+		a {
+			href: "https://github.com/ev-invest/real_estate_allocation/commit/{hash}",
+			target: "_blank",
+			rel: "noopener noreferrer",
+			class: "fixed bottom-1 right-2 z-10 font-mono text-[10px] text-muted-foreground/25 transition-colors hover:text-muted-foreground/70",
+			"v{env!(\"CARGO_PKG_VERSION\")}·{hash}"
 		}
 	}
 }

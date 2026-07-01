@@ -291,8 +291,10 @@ fn extract(tgz: &[u8]) -> Result<Vec<(String, Vec<u8>)>, DomainError> {
 /// (name, bytes) set. Order-independent and tar-independent, so it survives a
 /// round-trip and flags a corrupt download.
 fn hash(entries: &[(String, Vec<u8>)]) -> String {
+	let mut sorted: Vec<&(String, Vec<u8>)> = entries.iter().collect();
+	sorted.sort_by(|a, b| a.0.cmp(&b.0));
 	let mut h = Sha256::new();
-	for (name, bytes) in entries {
+	for (name, bytes) in sorted {
 		h.update((name.len() as u64).to_le_bytes());
 		h.update(name.as_bytes());
 		h.update((bytes.len() as u64).to_le_bytes());
