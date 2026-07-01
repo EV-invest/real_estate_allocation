@@ -108,8 +108,18 @@ fn main() {
 		return;
 	}
 
-	// Real content arrives via `db pull`, never fabricated on boot — the server only
-	// ensures the schema is current (via `open`) and serves what's there.
+	// A fresh volume (empty `/data` PVC) bootstraps from the latest R2 snapshot:
+	// with sync configured and no DB present, pull before serving. An existing DB
+	// is left untouched — once a volume has data, prod is authoritative until the
+	// operator explicitly `db push`/`pull`s. A configured pull that fails is fatal:
+	// booting empty would silently serve nothing.
+	if !config.sync_bucket.is_empty() && !config.db_path.as_ref().exists() {
+		use real_estate_allocation::sync;
+		exit_on_error(rt.block_on(sync::pull(&config, false)));
+	}
+
+	// Content otherwise arrives via `db pull`, never fabricated on boot — the server
+	// only ensures the schema is current (via `open`) and serves what's there.
 	let store = rt.block_on(async { SqliteStore::open(config.db_path.as_ref(), config.data_dir.clone().inner()).await.expect("open sqlite store") });
 
 	// dioxus' server launch reads the bind address from these env vars
