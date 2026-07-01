@@ -328,6 +328,11 @@
           # `-C strip=debuginfo` is prod-only: dx forces DWARF into the release
           # wasm, which wasm-opt's binary writer aborts on; stripping both fixes
           # the abort and halves the bundle.
+          # The hermetic sandbox has no `.git`, so build.rs's `GIT_HASH` is "unknown"
+          # here; hand the flake rev in under a separate name the footer reads directly
+          # (`option_env!`), leaving the v_flakes-generated build.rs untouched.
+          REA_BUILD_REV = self.shortRev or self.dirtyShortRev or "";
+
           buildPhase = ''
             runHook preBuild
             ${dyldFallback}
@@ -421,6 +426,7 @@
               + combined.shellHook
               + ''
                 cp -f ${(v_flakes.files.treefmt) { inherit pkgs; }} ./.treefmt.toml
+                cp -f ${(v_flakes.files.gitattributes) { inherit pkgs; lfs = false; }} ./.gitattributes
                 cp -f ${logoSrc} ./real_estate_allocation/assets/logo.svg
                 ${dyldFallback}
               '';

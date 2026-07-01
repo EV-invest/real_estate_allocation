@@ -182,11 +182,12 @@ fn Home() -> Element {
 }
 
 /// Inconspicuous deployed-version tag pinned to the bottom-right, linking to the
-/// exact commit on GitHub so we can tell what's live at a glance. `GIT_HASH` is
-/// baked at build time by `build.rs` (short SHA, "unknown" without git).
+/// exact commit on GitHub so we can tell what's live at a glance. The hermetic Nix
+/// build has no `.git`, so it passes the flake rev as `REA_BUILD_REV`; local `dx`
+/// builds leave that unset and fall back to build.rs's `git rev-parse` `GIT_HASH`.
 #[component]
 fn BuildTag() -> Element {
-	let hash = env!("GIT_HASH");
+	let hash = option_env!("REA_BUILD_REV").filter(|s| !s.is_empty()).unwrap_or(env!("GIT_HASH"));
 	rsx! {
 		a {
 			href: "https://github.com/ev-invest/real_estate_allocation/commit/{hash}",
