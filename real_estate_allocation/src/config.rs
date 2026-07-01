@@ -34,6 +34,7 @@ pub struct AppConfig {
 	pub sync_endpoint: String,
 	/// Key prefix within the bucket, so one bucket can hold several apps' snapshots.
 	#[default("real-estate-allocation".to_string())]
+	#[primitives(skip)]
 	pub sync_prefix: String,
 }
 

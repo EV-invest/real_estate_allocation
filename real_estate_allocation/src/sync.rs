@@ -29,36 +29,6 @@ const DB_ENTRY: &str = "app.db";
 const LAYOUT_ENTRY: &str = "dashboard_layout.json";
 const DATA_PREFIX: &str = "properties/";
 
-#[derive(Deserialize, Serialize)]
-struct Manifest {
-	version: u64,
-	state_hash: String,
-	created_at: i64,
-	created_by: String,
-}
-
-#[derive(Deserialize, Serialize)]
-struct Marker {
-	version: u64,
-	state_hash: String,
-}
-
-struct Targets {
-	db: PathBuf,
-	data: PathBuf,
-	layout: PathBuf,
-}
-
-impl Targets {
-	fn of(config: &AppConfig) -> Self {
-		Self {
-			db: config.db_path.clone().inner(),
-			data: config.data_dir.clone().inner(),
-			layout: config.layout_path.clone().inner(),
-		}
-	}
-}
-
 pub async fn push(config: &AppConfig, force: bool) -> Result<(), DomainError> {
 	let t = Targets::of(config);
 	let (entries, ch) = current(&t).await?;
@@ -96,7 +66,6 @@ pub async fn push(config: &AppConfig, force: bool) -> Result<(), DomainError> {
 	println!("pushed v{version} ({})", short(&ch));
 	Ok(())
 }
-
 pub async fn pull(config: &AppConfig, force: bool) -> Result<(), DomainError> {
 	let t = Targets::of(config);
 	let (store, prefix) = client(config)?;
@@ -138,7 +107,6 @@ pub async fn pull(config: &AppConfig, force: bool) -> Result<(), DomainError> {
 	println!("pulled v{} ({})", remote.version, short(&remote.state_hash));
 	Ok(())
 }
-
 pub async fn status(config: &AppConfig) -> Result<(), DomainError> {
 	let t = Targets::of(config);
 	let (_, ch) = current(&t).await?;
@@ -172,6 +140,35 @@ pub async fn status(config: &AppConfig) -> Result<(), DomainError> {
 	};
 	println!("verdict    : {verdict}");
 	Ok(())
+}
+#[derive(Deserialize, Serialize)]
+struct Manifest {
+	version: u64,
+	state_hash: String,
+	created_at: i64,
+	created_by: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct Marker {
+	version: u64,
+	state_hash: String,
+}
+
+struct Targets {
+	db: PathBuf,
+	data: PathBuf,
+	layout: PathBuf,
+}
+
+impl Targets {
+	fn of(config: &AppConfig) -> Self {
+		Self {
+			db: config.db_path.clone().inner(),
+			data: config.data_dir.clone().inner(),
+			layout: config.layout_path.clone().inner(),
+		}
+	}
 }
 
 /// Current on-disk state: `(entries, hash)`. Folds the WAL into the DB first so the
