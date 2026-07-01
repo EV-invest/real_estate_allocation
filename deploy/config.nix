@@ -12,7 +12,8 @@
   admins = [ ];
   maps_api_key.env = "GOOGLE_MAPS_KEY";
   admin_token.env = "REA_ADMIN_TOKEN";
-  # cors_allowed_origins = [ "https://<prod-landing-origin>" ];
-  # Set once the landing origin is decided (docs/ARCHITECTURE.md defers it); until
-  # then the build-time dev default (localhost only) applies.
+  # The landing host (apex + www) fetches /api/embed cross-origin from this
+  # server; without these it falls back to the localhost-only build default and
+  # the browser blocks the embed's data fetch.
+  cors_allowed_origins = [ "https://evinvest.ltd" "https://www.evinvest.ltd" ];
 }
