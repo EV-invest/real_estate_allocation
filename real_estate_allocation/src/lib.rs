@@ -18,6 +18,9 @@ mod uikit;
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod store;
+// R2 snapshot sync for the local DB + files; driven by the `db` CLI subcommand.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod sync;
 
 pub use app::App;
 #[cfg(not(target_arch = "wasm32"))]

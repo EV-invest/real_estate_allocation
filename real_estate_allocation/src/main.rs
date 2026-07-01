@@ -26,23 +26,91 @@ fn main() {
 			#[command(subcommand)]
 			cmd: SettingsCommand,
 		},
+		/// Manage the database: apply migrations, seed the test fixture, and sync to/from R2.
+		Db {
+			#[command(subcommand)]
+			cmd: DbCommand,
+		},
+	}
+
+	#[derive(clap::Subcommand)]
+	enum DbCommand {
+		/// Apply any pending schema migrations.
+		Migrate,
+		/// Insert the sample portfolio (test fixture; no-op if the DB is non-empty).
+		Seed,
+		/// Delete the local DB + files, re-migrate, and reseed. Dev only.
+		Reset,
+		/// Snapshot the local DB + files to R2 as a new version.
+		Push {
+			/// Overwrite even if the remote advanced past your last sync.
+			#[arg(long)]
+			force: bool,
+		},
+		/// Replace the local DB + files with the latest R2 version.
+		Pull {
+			/// Discard local changes that were never pushed.
+			#[arg(long)]
+			force: bool,
+		},
+		/// Show local vs remote versions and whether they diverged.
+		Status,
 	}
 
 	v_utils::clientside!();
-	let cli = Cli::parse();
-	if let Some(Command::Config { cmd }) = cli.command {
-		// Never returns — performs the requested config operation and exits.
-		AppConfig::handle_settings_command(cmd, cli.settings);
-	}
-	let live_settings = Arc::new(exit_on_error(LiveSettings::new(cli.settings, Duration::from_secs(5))));
+	let Cli { settings, command } = Cli::parse();
+	// `Config` runs before the config file is loaded (it may write a fresh one) and
+	// never returns; only a `Db` command survives to be handled after config load.
+	let db_command = match command {
+		Some(Command::Config { cmd }) => {
+			AppConfig::handle_settings_command(cmd, settings);
+			return;
+		}
+		Some(Command::Db { cmd }) => Some(cmd),
+		None => None,
+	};
+
+	let live_settings = Arc::new(exit_on_error(LiveSettings::new(settings, Duration::from_secs(5))));
 	let config = live_settings.config().expect("config valid on startup").clone();
 
 	let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-	let store = rt.block_on(async {
-		let store = SqliteStore::open(config.db_path.as_ref(), config.data_dir.clone().inner()).await.expect("open sqlite store");
-		seed(&store).await.expect("seed sample properties");
-		store
-	});
+
+	if let Some(cmd) = db_command {
+		use real_estate_allocation::sync;
+		rt.block_on(async {
+			let open = || SqliteStore::open(config.db_path.as_ref(), config.data_dir.clone().inner());
+			let res = match cmd {
+				// `open` applies migrations; a bare open is the migrate step.
+				DbCommand::Migrate => open().await.map(|_| ()),
+				DbCommand::Seed => match open().await {
+					Ok(store) => seed(&store).await,
+					Err(e) => Err(e),
+				},
+				DbCommand::Reset => {
+					let db = config.db_path.as_ref();
+					for suffix in ["", "-wal", "-shm"] {
+						// remove-if-present: a clean reset need not have prior files.
+						let _ = std::fs::remove_file(format!("{}{suffix}", db.display()));
+					}
+					let _ = std::fs::remove_dir_all(config.data_dir.clone().inner());
+					let _ = std::fs::remove_file(config.layout_path.as_ref());
+					match open().await {
+						Ok(store) => seed(&store).await,
+						Err(e) => Err(e),
+					}
+				}
+				DbCommand::Push { force } => sync::push(&config, force).await,
+				DbCommand::Pull { force } => sync::pull(&config, force).await,
+				DbCommand::Status => sync::status(&config).await,
+			};
+			exit_on_error(res);
+		});
+		return;
+	}
+
+	// Real content arrives via `db pull`, never fabricated on boot — the server only
+	// ensures the schema is current (via `open`) and serves what's there.
+	let store = rt.block_on(async { SqliteStore::open(config.db_path.as_ref(), config.data_dir.clone().inner()).await.expect("open sqlite store") });
 
 	// dioxus' server launch reads the bind address from these env vars
 	// (`dioxus_cli_config::fullstack_address_or_localhost`), falling back to

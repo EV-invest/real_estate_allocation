@@ -15,31 +15,6 @@ use crate::{
 	error::DomainError,
 };
 
-/// A `Building` (with its apartments) is persisted whole as a serialised document, so
-/// the Rust aggregate is the single source of truth — no column can drift out of sync
-/// with the struct, and a lot cannot exist apart from its building. `developers` stays
-/// a lookup table the `developer` reference is validated against on write (in
-/// `SqliteStore::put`, since the reference now lives inside the JSON document).
-const SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS developers (
-	name TEXT PRIMARY KEY,
-	note TEXT NOT NULL DEFAULT '',
-	page TEXT
-);
-CREATE TABLE IF NOT EXISTS properties (
-	id TEXT PRIMARY KEY,
-	doc TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS property_files (
-	id TEXT PRIMARY KEY,
-	property_id TEXT NOT NULL REFERENCES properties(id),
-	apt INTEGER,
-	kind TEXT NOT NULL,
-	filename TEXT NOT NULL,
-	content_type TEXT NOT NULL
-);
-";
-
 /// Leaf port over the `ev_lib` repository markers. No `UnitOfWork`: every write here
 /// is a single row, so a transaction boundary would buy nothing.
 #[async_trait]
@@ -75,7 +50,10 @@ impl SqliteStore {
 			.create_if_missing(true)
 			.foreign_keys(true);
 		let pool = SqlitePoolOptions::new().connect_with(opts).await.map_err(map_sqlx_error)?;
-		sqlx::query(SCHEMA).execute(&pool).await.map_err(map_sqlx_error)?;
+		// Schema is versioned in `migrations/`; applied here so a bare server boot keeps
+		// the DB current, and via `db migrate` for explicit/CI use. The `Building` doc
+		// shape stays owned by the Rust struct — migrations only touch table structure.
+		sqlx::migrate!().run(&pool).await.map_err(|e| DomainError::Repository(format!("migrate: {e}")))?;
 		Ok(Self { pool, data_dir })
 	}
 
@@ -208,7 +186,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			id: "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a", // matches embed::Q1_PROPERTY
 			name: "Q1 Tower (Cadia Quy Nhơn)",
 			place: "ChIJDQMq0yFtbzERY32pkB70paY", // Q1 Tower Quy Nhơn, 1 Ngô Mây
-			price: Some(90_000.0), // provisional: pre-handover branded beachfront residence
+			price: Some(90_000.0),                // provisional: pre-handover branded beachfront residence
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
 			target_appreciation: 12.0,
@@ -226,7 +204,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			id: "c19bded1-1a13-49ad-a0f0-549b2aec2d0e", // matches embed::TMS_PROPERTY
 			name: "TMS Luxury Hotel & Residence Quy Nhơn",
 			place: "ChIJBVOIrolsbzERr_9ibfn1t-I", // Grand Hyams Hotel — the 5-star hotel occupying the TMS tower
-			price: Some(76_000.0), // average apartment ≈ 1.9 tỷ VND @ ~25,000 VND/USD
+			price: Some(76_000.0),                // average apartment ≈ 1.9 tỷ VND @ ~25,000 VND/USD
 			state: PropertyState::Interesting,
 			construction: ConstructionStatus::Completed,
 			target_appreciation: 12.0,
@@ -240,7 +218,7 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			id: "9c4acfee-9597-455e-b983-b60143fdaa90",
 			name: "Triton — Quy Nhơn Sky Residence",
 			place: "ChIJ7QjTJQBtbzERetFnxYHlsUM", // Triton Sky Residence, 72B Tây Sơn
-			price: Some(72_000.0), // provisional: pricing still firming up (launched 2025)
+			price: Some(72_000.0),                // provisional: pricing still firming up (launched 2025)
 			state: PropertyState::Purchasing,
 			construction: ConstructionStatus::UnderConstruction,
 			target_appreciation: 0.0,
@@ -350,9 +328,9 @@ fn mock_apartments(id: BuildingId, our_state: PropertyState, base: Option<Money>
 
 	let root = id.raw().as_u64_pair().0;
 	let mix = |i: u64| -> u64 {
-		let mut z = root.wrapping_add(i.wrapping_mul(0x9E3779B97F4A7C15));
-		z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-		z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+		let mut z = root.wrapping_add(i.wrapping_mul(0x9e3779b97f4a7c15));
+		z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+		z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
 		z ^ (z >> 31)
 	};
 	let total = 20 + (mix(0) % 21) as u32; // 20..=40 lots

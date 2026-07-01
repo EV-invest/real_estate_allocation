@@ -60,7 +60,11 @@ impl DeepLink {
 			}
 		}
 		#[cfg(not(target_arch = "wasm32"))]
-		Self { building: None, appt: None, filter: vec![PropertyStateKind::Purchased] }
+		Self {
+			building: None,
+			appt: None,
+			filter: vec![PropertyStateKind::Purchased],
+		}
 	}
 }
 /// One surface: the full dashboard at `/`. The marketing overview is no longer a

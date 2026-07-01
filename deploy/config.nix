@@ -12,6 +12,11 @@
   admins = [ ];
   maps_api_key.env = "GOOGLE_MAPS_KEY";
   admin_token.env = "REA_ADMIN_TOKEN";
+  # R2 snapshot sync (`db push`/`pull`). Bucket + endpoint are non-secret; the
+  # access key / secret come from the container env (k8s Secret): R2_ACCESS_KEY_ID,
+  # R2_SECRET_ACCESS_KEY. Fill these in to enable sync.
+  # sync_bucket = "ev-invest-state";
+  # sync_endpoint = "https://<accountid>.r2.cloudflarestorage.com";
   # The landing host (apex + www) fetches /api/embed cross-origin from this
   # server; without these it falls back to the localhost-only build default and
   # the browser blocks the embed's data fetch.

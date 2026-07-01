@@ -43,7 +43,7 @@ secrecy = "^0.10"
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
 smart-default = "^0.7"
-sqlx = { version = "^0.9", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
+sqlx = { version = "^0.9", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
 strum = "0.28.0"
 thiserror = "^2.0"
 tokio = { version = "^1", features = ["full"] }
