@@ -107,6 +107,17 @@ pub async fn pull(config: &AppConfig, force: bool) -> Result<(), DomainError> {
 	println!("pulled v{} ({})", remote.version, short(&remote.state_hash));
 	Ok(())
 }
+/// First-boot volume bootstrap. If sync is configured and this volume has never
+/// synced (no marker — a fresh PVC, or one predating R2 sync), adopt the latest
+/// remote snapshot, force-replacing any unmanaged local data: prod content only
+/// ever originates from `push`/`pull`, so a markerless volume holds nothing
+/// operator-authored to preserve. A volume that has synced before is left untouched.
+pub async fn bootstrap(config: &AppConfig) -> Result<(), DomainError> {
+	if config.sync_bucket.is_empty() || load_marker().is_some() {
+		return Ok(());
+	}
+	pull(config, true).await
+}
 pub async fn status(config: &AppConfig) -> Result<(), DomainError> {
 	let t = Targets::of(config);
 	let (_, ch) = current(&t).await?;

@@ -108,14 +108,13 @@ fn main() {
 		return;
 	}
 
-	// A fresh volume (empty `/data` PVC) bootstraps from the latest R2 snapshot:
-	// with sync configured and no DB present, pull before serving. An existing DB
-	// is left untouched — once a volume has data, prod is authoritative until the
-	// operator explicitly `db push`/`pull`s. A configured pull that fails is fatal:
-	// booting empty would silently serve nothing.
-	if !config.sync_bucket.is_empty() && !config.db_path.as_ref().exists() {
+	// First-boot bootstrap: a volume that has never synced (no marker — a fresh PVC,
+	// or one predating R2 sync) adopts the latest remote snapshot before serving. A
+	// volume that has synced is left to the operator (`db push`/`pull`). Fatal on
+	// failure: booting on absent/stale data would silently serve the wrong thing.
+	{
 		use real_estate_allocation::sync;
-		exit_on_error(rt.block_on(sync::pull(&config, false)));
+		exit_on_error(rt.block_on(sync::bootstrap(&config)));
 	}
 
 	// Content otherwise arrives via `db pull`, never fabricated on boot — the server
