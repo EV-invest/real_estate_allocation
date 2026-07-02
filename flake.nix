@@ -1,32 +1,26 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
     pre-commit-hooks.url = "github:cachix/git-hooks.nix";
     pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
     v_flakes.url = "github:valeratrades/v_flakes?ref=v1.6";
     v_flakes.inputs.nixpkgs.follows = "nixpkgs";
-    v_flakes.inputs.rust-overlay.follows = "rust-overlay";
     # Brand assets. Not a flake — just a pinned source tree we copy the logo out
     # of. "Latest logo" = `nix flake update ev_assets` (bumps flake.lock).
     ev_assets = { url = "github:EV-invest/assets"; flake = false; };
   };
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, pre-commit-hooks, v_flakes, ev_assets }:
+  outputs = { self, nixpkgs, flake-utils, pre-commit-hooks, v_flakes, ev_assets }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
-          inherit system overlays;
+          inherit system;
           allowUnfree = true;
         };
-        #NB: can't load rust-bin from nightly.latest, as there are week guarantees of which components will be available on each day.
-        rust = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
-          extensions = [ "rust-src" "rust-analyzer" "rust-docs" "rustc-codegen-cranelift-preview" ];
-          targets = [ "wasm32-unknown-unknown" ];
-        });
+        # Canonical toolchain pinned in v_flakes — byte-identical across repos, so
+        # the nix store dedups it and sccache cross-references compilations.
+        rust = v_flakes.rs.default_nightly system;
         # rust-lld (the wasm32 linker) embeds a bad rpath on macOS — it looks for
         # libLLVM.dylib in bin/../lib but Nix puts it in <rust>/lib, so a wasm build
         # aborts (SIGABRT) at link time. Point the dynamic loader at <rust>/lib.
