@@ -24,6 +24,11 @@ ev_lib::mfe! {
 // once landing serves the bundle — `rea_origin()` reads it from the host's
 // `<meta name="rea-url">`, falling back to `bundle_origin()` (the bundle served by
 // REA itself, e.g. standalone). Both tiles are real listings.
+// Banners ride a fixed `/mfe/seed/...` path under a 4h CDN TTL, so a stale copy
+// (e.g. the past LFS-pointer bug) outlives a rebuild. `?v=` gives a fresh cache
+// key — bump on any banner-bytes change. ponytail: manual; a content hash would
+// auto-bust if this churns.
+const ASSET_V: &str = "2";
 const Q1_BANNER: &str = "seed/q1_tower/render.jpg";
 const Q1_PROPERTY: &str = "b41510ef-1e74-4d4f-a15c-1dfafdd0ee5a";
 const TMS_BANNER: &str = "seed/tms/building.jpg";
@@ -144,7 +149,7 @@ fn FeaturedCard() -> Element {
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
-				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({origin}/mfe/{Q1_BANNER})",
+				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({origin}/mfe/{Q1_BANNER}?v={ASSET_V})",
 			}
 			div { class: "absolute right-4 top-4 bg-main-accent-t1 px-3 py-1.5 font-mono text-[0.625rem] font-bold uppercase tracking-widest text-main-black",
 				"Featured Deal"
@@ -179,7 +184,7 @@ fn SideCard() -> Element {
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
-				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({origin}/mfe/{TMS_BANNER})",
+				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({origin}/mfe/{TMS_BANNER}?v={ASSET_V})",
 			}
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
