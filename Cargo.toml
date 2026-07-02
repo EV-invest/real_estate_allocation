@@ -22,7 +22,7 @@ unused_features = "allow"
 clap = { version = "^4.6", features = ["derive"] }
 color-eyre = "^0.6"
 derive-new = "^0.7"
-dockview_dioxus = "^0.1.6"
+dockview_dioxus = "0.1.8"
 miette = { version = "^7.6", features = ["fancy", "serde", "syntect-highlighter"] }
 real_estate_allocation_macros = { path = "real_estate_allocation_macros" }
 reqwest = { version = "^0.13", default-features = false, features = ["json", "rustls"] }
@@ -53,4 +53,3 @@ web-sys = "0.3"
 
 [patch.crates-io]
 #ev_lib = { path = "../lib/rust" }
-#dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"
