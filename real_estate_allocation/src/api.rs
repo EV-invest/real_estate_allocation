@@ -14,7 +14,7 @@ const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
 /// onto the curated layout instead of the bare built-in seed. Pressing `s` writes
 /// `layout_path`, which overrides this.
 #[cfg(not(target_arch = "wasm32"))]
-const DEFAULT_LAYOUT: &str = include_str!("../../public/dashboard_layout.json");
+const DEFAULT_LAYOUT: &str = include_str!("../assets/dashboard_layout.json");
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
 /// `SqliteStore` / `AppConfig` out of the per-request axum extension (attached in
 /// `main`), and is called as an async fn from the wasm client.

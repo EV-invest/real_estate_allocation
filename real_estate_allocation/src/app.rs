@@ -23,6 +23,11 @@ pub type Filter = Signal<Vec<PropertyStateKind>>;
 /// Outer `None` = still loading; `Some(None)` = nothing selected.
 pub type BuildingResource = Resource<Option<Building>>;
 
+/// Seed group the dashboard currently has applied (`seed_key`: "xl"/"md"/"sm"),
+/// written by the dashboard's load-or-seed effect and surfaced in [`BuildTag`].
+/// `None` until the first load.
+pub type SeedGroup = Signal<Option<&'static str>>;
+
 #[component]
 pub fn App() -> Element {
 	// The router canonicalises the URL to the matched route the instant it mounts,
@@ -69,7 +74,7 @@ impl DeepLink {
 }
 /// One surface: the full dashboard at `/`. The marketing overview is no longer a
 /// route here — `embed::Overview` is mounted only by the cross-origin microfrontend
-/// bundle (`real_estate_allocation_mfe`), which the landing host composes directly.
+/// bundle (`real_estate_allocation_embeds`), which the landing host composes directly.
 #[derive(Clone, PartialEq, Routable)]
 enum Route {
 	#[route("/")]
@@ -87,6 +92,9 @@ fn Home() -> Element {
 
 	let filter: Filter = use_signal(|| deep.filter.clone());
 	use_context_provider(|| filter);
+
+	let seed_group: SeedGroup = use_signal(|| None);
+	use_context_provider(|| seed_group);
 
 	// Mirror the state filter into `?selection=` so a shared link restores the set.
 	#[cfg(target_arch = "wasm32")]
@@ -181,13 +189,15 @@ fn Home() -> Element {
 	}
 }
 
-/// Inconspicuous deployed-version tag pinned to the bottom-right, linking to the
-/// exact commit on GitHub so we can tell what's live at a glance. The hermetic Nix
-/// build has no `.git`, so it passes the flake rev as `REA_BUILD_REV`; local `dx`
-/// builds leave that unset and fall back to build.rs's `git rev-parse` `GIT_HASH`.
+/// Inconspicuous deployed-version tag pinned to the bottom-right (plus the seed group
+/// the dock is on), linking to the exact commit on GitHub so we can tell what's live
+/// at a glance. The hermetic Nix build has no `.git`, so it passes the flake rev as
+/// `REA_BUILD_REV`; local `dx` builds leave that unset and fall back to build.rs's
+/// `git rev-parse` `GIT_HASH`.
 #[component]
 fn BuildTag() -> Element {
 	let hash = option_env!("REA_BUILD_REV").filter(|s| !s.is_empty()).unwrap_or(env!("GIT_HASH"));
+	let seed_group = use_context::<SeedGroup>();
 	rsx! {
 		a {
 			href: "https://github.com/ev-invest/real_estate_allocation/commit/{hash}",
@@ -195,6 +205,9 @@ fn BuildTag() -> Element {
 			rel: "noopener noreferrer",
 			class: "fixed bottom-1 right-2 z-10 font-mono text-[10px] text-muted-foreground/25 transition-colors hover:text-muted-foreground/70",
 			"v{env!(\"CARGO_PKG_VERSION\")}·{hash}"
+			if let Some(g) = seed_group() {
+				"·{g}"
+			}
 		}
 	}
 }

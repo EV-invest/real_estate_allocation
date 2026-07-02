@@ -53,8 +53,9 @@ pub fn Dashboard() -> Element {
 	// measure, so the band is classified), and again whenever a resize crosses into another
 	// group — each group points at its own arrangement. Falls back to the built-in one
 	// (map+media tabbed, the rest packed beside). Unsaved tweaks are dropped on a group
-	// switch; `s` is what persists them.
-	let mut loaded_group = use_signal(|| None::<&'static str>);
+	// switch; `s` is what persists them. The group lands in the shared `SeedGroup` so the
+	// build tag can show which seed is live.
+	let mut loaded_group = use_context::<crate::app::SeedGroup>();
 	let min = MinSize::Steps { w: Step(2), h: Step(2) };
 	use_effect(move || {
 		let Some(api) = api_handle() else { return };

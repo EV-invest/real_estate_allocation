@@ -4146,23 +4146,13 @@ dependencies = [
  "gloo-net 0.7.0",
  "real_estate_allocation_core",
  "uuid",
+ "wasm-bindgen",
  "web-sys",
 ]
 
 [[package]]
 name = "real_estate_allocation_macros"
 version = "0.1.0"
-
-[[package]]
-name = "real_estate_allocation_mfe"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "ev_lib",
- "real_estate_allocation_embeds",
- "wasm-bindgen",
- "web-sys",
-]
 
 [[package]]
 name = "redox_syscall"

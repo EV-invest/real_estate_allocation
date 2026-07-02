@@ -2,9 +2,9 @@
 
 ## Bundle Size
 
-### MFE wasm (`real_estate_allocation_mfe`)
+### MFE wasm (`real_estate_allocation_embeds`)
 
-Measured on `real_estate_allocation_mfe_bg.wasm` (2.3 MB, `wasm-bindgen --target web --release`)
+Measured on `real_estate_allocation_embeds_bg.wasm` (2.3 MB, `wasm-bindgen --target web --release`)
 with `twiggy top`; shallow bytes summed per crate. Recorded for later size work — none is a bug.
 
 Free wins, not yet applied:

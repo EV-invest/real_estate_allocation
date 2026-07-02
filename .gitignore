@@ -74,4 +74,5 @@ venv/
 **/node_modules/
 real_estate_allocation/assets/tailwind.css
 real_estate_allocation/assets/logo.svg
+/data/
 

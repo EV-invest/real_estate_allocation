@@ -3,6 +3,13 @@ name = "real_estate_allocation_embeds"
 version = "0.1.0"
 edition = "2024"
 
+# The cross-origin microfrontend bundle: a self-registering custom element built
+# with `wasm-bindgen --target web` (manganis-free — see `ev_lib::mfe`). A real CSR
+# widget — `dioxus/web` only, no fullstack/hydration. All the producer boilerplate
+# is the `mfe!` macro.
+[lib]
+crate-type = ["cdylib"]
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { workspace = true, features = ["wasm_js"] }
 # Transitive 0.3 (ahash ← ustr ← v_utils): enable its wasm_js backend feature, the
@@ -20,6 +27,7 @@ dioxus = { workspace = true, features = ["web"] }
 ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm", "mfe"] }
 gloo-net.workspace = true
 real_estate_allocation_core.workspace = true
+wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = ["Window", "Document", "Element"] }
 
 [lints]

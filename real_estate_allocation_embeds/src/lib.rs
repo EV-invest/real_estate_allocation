@@ -1,7 +1,6 @@
 #![feature(default_field_values)]
 #![cfg(target_arch = "wasm32")] // web-sys/gloo-net + `ev_lib::mfe` — wasm-only bundle
-//! Marketing surface mounted by the cross-origin microfrontend bundle
-//! (`real_estate_allocation_mfe`). A standalone port of the landing "Premium Asset
+//! Marketing surface and cross-origin microfrontend bundle. A standalone port of the landing "Premium Asset
 //! Portfolio" bento section — no app shell, so the landing host composes `<tag>`
 //! directly into its page. Static content mirroring the landing source; the only
 //! interactive tile is the self-contained correlation / risk-premia terminal.
@@ -9,6 +8,14 @@
 use dioxus::prelude::*;
 use ev_lib::{mfe::bundle_origin, uikit::Container};
 use real_estate_allocation_core::{domain::Building, factors::profile};
+
+// The producer entrypoint: generates the custom-element registration, the
+// `wasm-bindgen(start)` entrypoint, the origin self-derivation, and `MFE_MANIFEST`
+// (emitted by the build as `mfe.json`).
+ev_lib::mfe! {
+	service: "real-estate", name: "overview", kind: component,
+	root: crate::Overview, stylesheet: "mfe.css"
+}
 
 // Two origins. Banners are static assets served alongside the bundle, so they
 // resolve against `bundle_origin()` (wherever the `.js` loaded from — the landing

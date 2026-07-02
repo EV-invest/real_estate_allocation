@@ -112,6 +112,7 @@
             **/node_modules/
             real_estate_allocation/assets/tailwind.css
             real_estate_allocation/assets/logo.svg
+            /data/
           '';
         };
         readme = v_flakes.readme-fw {
@@ -264,12 +265,12 @@
             runHook preBuild
             ${dyldFallback}
             export RUSTFLAGS='--cfg=web_sys_unstable_apis --cfg=getrandom_backend="wasm_js"'
-            cargo build -p real_estate_allocation_mfe --target wasm32-unknown-unknown --release --offline
+            cargo build -p real_estate_allocation_embeds --target wasm32-unknown-unknown --release --offline
             runHook postBuild
           '';
           installPhase = ''
             runHook preInstall
-            name=real_estate_allocation_mfe
+            name=real_estate_allocation_embeds
             mkdir -p "$out"
             wasm-bindgen --target web --out-dir "$out" --out-name "$name" \
               "target/wasm32-unknown-unknown/release/$name.wasm"
