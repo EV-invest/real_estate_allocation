@@ -47,16 +47,16 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 					Some(a) => rsx! {
 						Badge { variant: status_variant(a.status), "{status_label(a.status)}" }
 						match a.price {
-							Some(p) => rsx! { span { class: "text-sm font-medium text-muted-foreground", "{p}" } },
+							Some(p) => rsx! { span { class: "text-sm font-medium text-main-accent-t2", "{p}" } },
 							None => rsx! { span { class: "text-sm font-medium text-warn", "?" } },
 						}
 					},
 					None => rsx! {
-						span { class: "text-sm font-medium text-muted-foreground",
+						span { class: "text-sm font-medium text-main-accent-t1",
 							"{building.lots_total()} lots"
 						}
 						match building.avg_price() {
-							Some(p) => rsx! { span { class: "text-sm font-medium text-muted-foreground", "avg {p}" } },
+							Some(p) => rsx! { span { class: "text-sm font-medium text-main-accent-t2", "avg {p}" } },
 							None => rsx! { span { class: "text-sm font-medium text-warn", "?" } },
 						}
 					},

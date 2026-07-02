@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::collections::BTreeMap;
 
 use dioxus::prelude::*;
@@ -140,9 +141,9 @@ pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
-/// Persist the current dock arrangement as this breakpoint's global seed (in the map
-/// at `config.layout_path`). An `xl` save also becomes the `default` seed, the one
-/// bands without their own save open onto.
+/// Persist the current dock arrangement as its band group's global seed (in the map
+/// at `config.layout_path`). An `xl`-group save also becomes the `default` seed, the
+/// one groups without their own save open onto.
 #[server]
 pub async fn save_default_layout(json: String, breakpoint: dockview_dioxus::Breakpoint) -> Result<(), ServerFnError> {
 	let layout: serde_json::Value = serde_json::from_str(&json).map_err(|e| ServerFnError::new(format!("layout not json: {e}")))?;
@@ -153,10 +154,11 @@ pub async fn save_default_layout(json: String, breakpoint: dockview_dioxus::Brea
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
 		Err(e) => return Err(ServerFnError::new(format!("read layout: {e}"))),
 	};
-	if breakpoint == dockview_dioxus::Breakpoint::Xl {
+	let key = seed_key(breakpoint);
+	if key == "xl" {
 		seeds.insert("default".into(), layout.clone());
 	}
-	seeds.insert(breakpoint.to_string(), layout);
+	seeds.insert(key.into(), layout);
 	if let Some(parent) = path.parent() {
 		std::fs::create_dir_all(parent).map_err(|e| ServerFnError::new(format!("create layout dir: {e}")))?;
 	}
@@ -164,7 +166,7 @@ pub async fn save_default_layout(json: String, breakpoint: dockview_dioxus::Brea
 	Ok(())
 }
 
-/// This breakpoint's saved seed, falling back to the `default` one, from the saved
+/// This band group's saved seed, falling back to the `default` one, from the saved
 /// map (or the committed `DEFAULT_LAYOUT` when none has been saved on this volume
 /// yet). A genuine read failure surfaces as an error.
 #[server]
@@ -175,7 +177,7 @@ pub async fn load_default_layout(breakpoint: dockview_dioxus::Breakpoint) -> Res
 		Err(e) if e.kind() == std::io::ErrorKind::NotFound => parse_seeds(DEFAULT_LAYOUT).expect("committed seeds parse"),
 		Err(e) => return Err(ServerFnError::new(format!("read layout: {e}"))),
 	};
-	Ok(seeds.get(&breakpoint.to_string()).or_else(|| seeds.get("default")).map(|v| v.to_string()))
+	Ok(seeds.get(seed_key(breakpoint)).or_else(|| seeds.get("default")).map(|v| v.to_string()))
 }
 
 #[server]
@@ -185,6 +187,17 @@ pub async fn maps_api_key() -> Result<String, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
 }
+/// Seeds are kept coarser than the measured band: xl/lg share one arrangement, so do
+/// sm/xs. Not gated server-side — the client keys its save toast off the same grouping.
+pub(crate) fn seed_key(breakpoint: dockview_dioxus::Breakpoint) -> &'static str {
+	use dockview_dioxus::Breakpoint::*;
+	match breakpoint {
+		Xl | Lg => "xl",
+		Md => "md",
+		Sm | Xs => "sm",
+	}
+}
+
 /// `BTreeMap` so the file's bytes are deterministic — it participates in the sync
 /// snapshot's content hash. A `version` top-level key marks the pre-seeds format
 /// (one bare arrangement): adopt it as `default`.
@@ -196,7 +209,15 @@ fn parse_seeds(s: &str) -> Result<BTreeMap<String, serde_json::Value>, String> {
 	if m.contains_key("version") {
 		return Ok([("default".to_string(), serde_json::Value::Object(m))].into());
 	}
-	const KEYS: [&str; 6] = ["default", "xs", "sm", "md", "lg", "xl"];
+	// An earlier scheme kept a seed per band; fold `lg`/`xs` into the group that
+	// subsumed them, the group's own save winning.
+	let mut m = m;
+	for (old, new) in [("lg", "xl"), ("xs", "sm")] {
+		if let Some(v) = m.remove(old) {
+			m.entry(new).or_insert(v);
+		}
+	}
+	const KEYS: [&str; 4] = ["default", "xl", "md", "sm"];
 	if let Some(k) = m.keys().find(|k| !KEYS.contains(&k.as_str())) {
 		return Err(format!("layout file: unknown seed key `{k}`"));
 	}
@@ -387,18 +408,24 @@ mod tests {
 	use super::*;
 
 	// The seed-resolution invariant: a pre-seeds file (one bare arrangement) is adopted
-	// as `default`, a seeds map resolves per-band falling back to `default`, and any
-	// other shape is rejected loudly.
+	// as `default`, a seeds map resolves per band group (xl/lg, md, sm/xs) falling back
+	// to `default`, legacy per-band keys fold into their group, and any other shape is
+	// rejected loudly.
 	#[test]
 	fn seed_resolution() {
-		let resolve = |file: &str, bp: &str| {
+		use dockview_dioxus::Breakpoint::*;
+		let resolve = |file: &str, bp: dockview_dioxus::Breakpoint| {
 			let seeds = parse_seeds(file).unwrap();
-			seeds.get(bp).or_else(|| seeds.get("default")).cloned()
+			seeds.get(seed_key(bp)).or_else(|| seeds.get("default")).cloned()
 		};
-		assert_eq!(resolve(r#"{"version":1,"grid":{}}"#, "md"), Some(serde_json::json!({"version":1,"grid":{}})));
-		assert_eq!(resolve(r#"{"default":1,"md":2}"#, "md"), Some(serde_json::json!(2)));
-		assert_eq!(resolve(r#"{"default":1,"md":2}"#, "xl"), Some(serde_json::json!(1)));
-		assert_eq!(resolve(r#"{"md":2}"#, "xl"), None);
+		assert_eq!(resolve(r#"{"version":1,"grid":{}}"#, Md), Some(serde_json::json!({"version":1,"grid":{}})));
+		assert_eq!(resolve(r#"{"default":1,"md":2}"#, Md), Some(serde_json::json!(2)));
+		assert_eq!(resolve(r#"{"default":1,"md":2}"#, Xl), Some(serde_json::json!(1)));
+		assert_eq!(resolve(r#"{"md":2}"#, Xl), None);
+		assert_eq!(resolve(r#"{"xl":1}"#, Lg), Some(serde_json::json!(1)));
+		assert_eq!(resolve(r#"{"sm":1}"#, Xs), Some(serde_json::json!(1)));
+		assert_eq!(resolve(r#"{"lg":2}"#, Xl), Some(serde_json::json!(2)));
+		assert_eq!(resolve(r#"{"xl":1,"lg":2,"xs":3}"#, Lg), Some(serde_json::json!(1)));
 		assert!(parse_seeds(r#"{"bogus":1}"#).is_err());
 		assert!(parse_seeds("[]").is_err());
 		assert!(parse_seeds(DEFAULT_LAYOUT).unwrap().contains_key("default"), "committed seeds must carry a default");

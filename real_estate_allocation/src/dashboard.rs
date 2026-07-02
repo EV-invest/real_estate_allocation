@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dockview_dioxus::{Breakpoint, Config, DockPanel, Group, GroupId, Keybind, MinSize, PackedApi, PackedArea, PanelId, Step};
+use dockview_dioxus::{Config, DockPanel, Group, GroupId, Keybind, MinSize, PackedApi, PackedArea, PanelId, Step};
 
 use crate::{
 	api::load_default_layout,
@@ -49,22 +49,27 @@ pub fn Dashboard() -> Element {
 	let mut api_handle = use_signal(|| None::<PackedApi>);
 	let on_ready = Callback::new(move |api: PackedApi| api_handle.set(Some(api)));
 
-	// Once the grid handle arrives (post first measure, so the band is classified): fetch this
-	// breakpoint's saved seed and restore it, else fall back to the built-in arrangement
-	// (map+media tabbed, the rest packed beside).
-	let mut applied = use_signal(|| false);
+	// Fetch and restore the band group's saved seed: once the grid handle arrives (post first
+	// measure, so the band is classified), and again whenever a resize crosses into another
+	// group — each group points at its own arrangement. Falls back to the built-in one
+	// (map+media tabbed, the rest packed beside). Unsaved tweaks are dropped on a group
+	// switch; `s` is what persists them.
+	let mut loaded_group = use_signal(|| None::<&'static str>);
 	let min = MinSize::Steps { w: Step(2), h: Step(2) };
 	use_effect(move || {
-		if applied() {
+		let Some(api) = api_handle() else { return };
+		let bp = *api.breakpoint.read();
+		let group = crate::api::seed_key(bp);
+		if *loaded_group.peek() == Some(group) {
 			return;
 		}
-		let Some(api) = api_handle() else { return };
-		applied.set(true);
+		loaded_group.set(Some(group));
 
-		let bp = *api.breakpoint.peek();
 		spawn(async move {
 			let mut api = api;
 			let seed = |api: &mut PackedApi| {
+				// A group switch lands on a populated grid; the built-in seed replaces it wholesale.
+				*api.grid.write() = Default::default();
 				let map_group = {
 					let id = api.grid.write().mint_group_id();
 					Group {
@@ -80,7 +85,12 @@ pub fn Dashboard() -> Element {
 				}
 			};
 
-			match load_default_layout(bp).await {
+			let result = load_default_layout(bp).await;
+			// A later group switch superseded this fetch while it was in flight.
+			if *loaded_group.peek() != Some(group) {
+				return;
+			}
+			match result {
 				Ok(Some(json)) => {
 					if let Err(e) = api.load(&json) {
 						// A corrupt saved layout must not blank the dashboard; log it and seed the default.
@@ -98,7 +108,7 @@ pub fn Dashboard() -> Element {
 		});
 	});
 
-	// `s` → save the live arrangement as this breakpoint's global seed (an `xl` save doubles as
+	// `s` → save the live arrangement as its band group's global seed (an xl/lg save doubles as
 	// the `default`), registered as a `PackedArea` host action. The closure gets the same
 	// `PackedApi` `on_ready` handed us and POSTs its serialized grid; only fires browser-side
 	// (the listener is wasm-only) but compiles everywhere. The toast gives the user feedback
@@ -109,8 +119,10 @@ pub fn Dashboard() -> Element {
 		let bp = *api.breakpoint.peek();
 		spawn(async move {
 			let msg = match crate::api::save_default_layout(json, bp).await {
-				Ok(()) if bp == Breakpoint::Xl => "Layout saved (xl + default)".to_string(),
-				Ok(()) => format!("Layout saved ({bp})"),
+				Ok(()) => match crate::api::seed_key(bp) {
+					"xl" => "Layout saved (xl/lg + default)".to_string(),
+					key => format!("Layout saved ({key})"),
+				},
 				Err(e) => {
 					dioxus::logger::tracing::error!(%e, "save default layout failed");
 					"Save failed".to_string()
