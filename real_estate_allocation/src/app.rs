@@ -204,10 +204,10 @@ fn BuildTag() -> Element {
 			target: "_blank",
 			rel: "noopener noreferrer",
 			class: "fixed bottom-1 right-2 z-10 font-mono text-[10px] text-muted-foreground/25 transition-colors hover:text-muted-foreground/70",
-			"v{env!(\"CARGO_PKG_VERSION\")}·{hash}"
 			if let Some(g) = seed_group() {
-				"·{g}"
+				"{g}·"
 			}
+			"v{env!(\"CARGO_PKG_VERSION\")}·{hash}"
 		}
 	}
 }

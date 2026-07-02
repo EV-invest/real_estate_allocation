@@ -68,8 +68,25 @@ pub fn MapPanel() -> Element {
 		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex-1 relative p-0",
 				div { id: "rea-map", class: "absolute inset-0" }
-				div { class: "absolute right-3 top-3 z-10",
+				div { class: "absolute right-3 top-3 z-10 flex items-center gap-1.5",
 					StateFilter { filter }
+					button {
+						r#type: "button",
+						class: "flex h-7 w-7 items-center justify-center rounded-md bg-background text-muted-foreground transition hover:text-foreground",
+						"aria-label": "Center map on buildings",
+						onclick: move |_| {
+							#[cfg(target_arch = "wasm32")]
+							center_map();
+						},
+						// Material "my_location" — the same crosshair Google Maps uses for recenter.
+						svg {
+							view_box: "0 0 24 24",
+							width: "16",
+							height: "16",
+							fill: "currentColor",
+							path { d: "M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" }
+						}
+					}
 				}
 				if buildings.read().is_none() {
 					Skeleton { class: "absolute inset-0" }
@@ -184,6 +201,15 @@ export function rea_render_markers(elId, propsJson, selectedId) {
   if (!__reaFitted && !bounds.isEmpty()) { __reaMap.fitBounds(bounds, 48); __reaFitted = true; }
 }
 
+export function rea_center() {
+  if (!__reaMap) return;
+  const bounds = new google.maps.LatLngBounds();
+  Object.values(__reaMarkers).forEach(m => bounds.extend(m.getPosition()));
+  // No pins (all filtered out / unresolved) → fall back to Quy Nhon itself.
+  if (bounds.isEmpty()) { __reaMap.setCenter({ lat: 13.78, lng: 109.22 }); __reaMap.setZoom(12); }
+  else { __reaMap.fitBounds(bounds, 48); }
+}
+
 export function rea_on_select(cb) { window.__reaSelect = cb; }
 
 export function rea_on_keynav(cb) {
@@ -225,6 +251,8 @@ extern "C" {
 	#[wasm_bindgen(js_name = rea_render_markers)]
 	fn render_markers(el_id: &str, props_json: &str, selected_id: &str);
 	fn rea_on_select(cb: &wasm_bindgen::closure::Closure<dyn FnMut(String)>);
+	#[wasm_bindgen(js_name = rea_center)]
+	fn center_map();
 	#[wasm_bindgen(js_name = rea_on_keynav)]
 	pub fn on_keynav(cb: &wasm_bindgen::closure::Closure<dyn FnMut(i32)>);
 	#[wasm_bindgen(js_name = rea_sync_url)]

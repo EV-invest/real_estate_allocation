@@ -1802,6 +1802,8 @@ dependencies = [
 [[package]]
 name = "dockview_dioxus"
 version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56ed194967e7790f24b28ab87d018a99ff1f245646aecc8b1bbbfddaf7c2600c"
 dependencies = [
  "dioxus",
  "serde",

@@ -92,7 +92,7 @@ fn Empty() -> Element {
 		// Stats/actions are meaningless without a building, so row 2 becomes the mild
 		// warning nudging towards selecting one. `h-9` matches the action row's height.
 		div { class: "flex h-9 items-center text-sm font-medium text-main-accent-t3",
-			"Select a building to populate the dashboard"
+			"Select a building on the map, to populate the dashboard"
 		}
 	}
 }
