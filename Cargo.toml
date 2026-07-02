@@ -53,4 +53,4 @@ web-sys = "0.3"
 
 [patch.crates-io]
 #ev_lib = { path = "../lib/rust" }
-dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"
+#dockview_dioxus.path = "../dockview_dioxus/dockview_dioxus/"
