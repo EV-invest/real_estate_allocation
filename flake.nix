@@ -107,6 +107,7 @@
           lastSupportedVersion = "nightly-2026-06-16";
           containerRelease = { registry = "ghcr.io/EV-invest"; };
           jobs.default = true;
+          lfs = false;
           gitignore.extra = ''
             **/node_modules/
             real_estate_allocation/assets/tailwind.css

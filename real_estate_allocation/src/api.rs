@@ -6,9 +6,10 @@ use crate::domain::{Building, BuildingId, FileKind, PropertyFile, PropertyStateK
 
 #[cfg(not(target_arch = "wasm32"))]
 const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
-/// The committed default arrangement, baked into the binary so a fresh prod volume
-/// (no saved `layout_path` yet) still opens onto the curated layout instead of the
-/// bare built-in seed. Pressing `s` writes `layout_path`, which overrides this.
+/// The committed seeds (breakpoint → arrangement, keyed like `layout_path`), baked
+/// into the binary so a fresh prod volume (no saved `layout_path` yet) still opens
+/// onto the curated layout instead of the bare built-in seed. Pressing `s` writes
+/// `layout_path`, which overrides this.
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_LAYOUT: &str = include_str!("../../public/dashboard_layout.json");
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
