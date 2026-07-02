@@ -281,6 +281,12 @@
 
             ( cd real_estate_allocation && tailwindcss -i ./mfe.css -o "$out/mfe.css" )
             cp -r real_estate_allocation/assets/seed "$out/seed"
+            # A git-LFS pointer ships as ~130 bytes of text and renders as a blank
+            # hero once landing serves it as image/*. Fail loud rather than silently.
+            if grep -rlq 'git-lfs.github.com/spec' "$out/seed"; then
+              echo "seed assets are unmaterialized git-LFS pointers, not images" >&2
+              exit 1
+            fi
 
             # ponytail: mirrors `MFE_MANIFEST` (the macro's const, not readable
             # from a build script). One remote, hand-kept; a multi-remote setup
