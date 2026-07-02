@@ -6,10 +6,11 @@ use crate::{
 	domain::{ApartmentStatus, Building, PropertyStateKind},
 };
 
-/// Persistent page header: breadcrumb, headline, and the one real action we have
-/// (open the research link). At apartment level it also carries the back-to-building
-/// control. The host micro-frontend owns the surrounding shell/nav, so there is
-/// intentionally no sidebar here.
+/// Persistent page header, two rows: breadcrumb (the only place the name appears),
+/// then stats on the left and the one real action we have (open the research link)
+/// on the right. At apartment level it also carries the back-to-building control.
+/// The host micro-frontend owns the surrounding shell/nav, so there is intentionally
+/// no sidebar here.
 #[component]
 pub fn TopBar() -> Element {
 	let building = use_context::<BuildingResource>();
@@ -19,13 +20,13 @@ pub fn TopBar() -> Element {
 		header { class: "sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur",
 			// Inner column shares the body's max-width so the header aligns with the
 			// content beneath it, while the border/background stay full-bleed.
-			div { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-2 py-5",
+			div { class: "mx-auto flex w-full max-w-[1200px] flex-col gap-2 py-3",
 				match &*building.read() {
 					Some(Some(b)) => rsx! { Loaded { building: b.clone(), appt: appt() } },
 					Some(None) => rsx! { Empty {} },
 					None => rsx! {
 						div { class: "h-4 w-40 animate-pulse rounded bg-accent" }
-						div { class: "h-8 w-64 animate-pulse rounded bg-accent" }
+						div { class: "h-9 w-64 animate-pulse rounded bg-accent" }
 					},
 				}
 			}
@@ -42,10 +43,8 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 		Breadcrumb { building: building.name.clone(), appt }
 		div { class: "flex flex-wrap items-center justify-between gap-3",
 			div { class: "flex items-center gap-3",
-				h1 { class: "font-serif text-3xl font-semibold tracking-tight", "{building.name}" }
 				match &apt {
 					Some(a) => rsx! {
-						span { class: "text-lg font-medium text-muted-foreground", "Apt {a.number}" }
 						Badge { variant: status_variant(a.status), "{status_label(a.status)}" }
 						match a.price {
 							Some(p) => rsx! { span { class: "text-sm font-medium text-muted-foreground", "{p}" } },
@@ -90,7 +89,11 @@ fn Empty() -> Element {
 		nav { class: "flex items-center gap-2 text-sm text-muted-foreground",
 			span { class: "text-foreground", "Buildings" }
 		}
-		h1 { class: "font-serif text-3xl font-semibold tracking-tight text-muted-foreground", "Select a building" }
+		// Stats/actions are meaningless without a building, so row 2 becomes the mild
+		// warning nudging towards selecting one. `h-9` matches the action row's height.
+		div { class: "flex h-9 items-center text-sm font-medium text-main-accent-t3",
+			"Select a building to populate the dashboard"
+		}
 	}
 }
 

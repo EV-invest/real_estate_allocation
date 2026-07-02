@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use dioxus::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 use dioxus::server::axum::{Extension, Json, extract::Path};
@@ -138,36 +140,67 @@ pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
-/// Persist the current dock arrangement as the global default (served from
-/// `config.layout_path`), so every visitor opens onto this layout until it's saved again.
+/// Persist the current dock arrangement as this breakpoint's global seed (in the map
+/// at `config.layout_path`). An `xl` save also becomes the `default` seed, the one
+/// bands without their own save open onto.
 #[server]
-pub async fn save_default_layout(json: String) -> Result<(), ServerFnError> {
+pub async fn save_default_layout(json: String, breakpoint: dockview_dioxus::Breakpoint) -> Result<(), ServerFnError> {
+	let layout: serde_json::Value = serde_json::from_str(&json).map_err(|e| ServerFnError::new(format!("layout not json: {e}")))?;
 	let path = app_state().await?.config.layout_path;
 	let path = path.as_ref();
+	let mut seeds = match std::fs::read_to_string(path) {
+		Ok(s) => parse_seeds(&s).map_err(ServerFnError::new)?,
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+		Err(e) => return Err(ServerFnError::new(format!("read layout: {e}"))),
+	};
+	if breakpoint == dockview_dioxus::Breakpoint::Xl {
+		seeds.insert("default".into(), layout.clone());
+	}
+	seeds.insert(breakpoint.to_string(), layout);
 	if let Some(parent) = path.parent() {
 		std::fs::create_dir_all(parent).map_err(|e| ServerFnError::new(format!("create layout dir: {e}")))?;
 	}
-	std::fs::write(path, json).map_err(|e| ServerFnError::new(format!("write layout: {e}")))?;
+	std::fs::write(path, serde_json::to_string(&seeds).expect("seeds map serializes")).map_err(|e| ServerFnError::new(format!("write layout: {e}")))?;
 	Ok(())
 }
 
-/// The saved global default, falling back to the committed `DEFAULT_LAYOUT` when none
-/// has been saved on this volume yet. A genuine read failure surfaces as an error.
+/// This breakpoint's saved seed, falling back to the `default` one, from the saved
+/// map (or the committed `DEFAULT_LAYOUT` when none has been saved on this volume
+/// yet). A genuine read failure surfaces as an error.
 #[server]
-pub async fn load_default_layout() -> Result<Option<String>, ServerFnError> {
+pub async fn load_default_layout(breakpoint: dockview_dioxus::Breakpoint) -> Result<Option<String>, ServerFnError> {
 	let path = app_state().await?.config.layout_path;
-	match std::fs::read_to_string(path.as_ref()) {
-		Ok(s) => Ok(Some(s)),
-		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Some(DEFAULT_LAYOUT.to_string())),
-		Err(e) => Err(ServerFnError::new(format!("read layout: {e}"))),
-	}
+	let seeds = match std::fs::read_to_string(path.as_ref()) {
+		Ok(s) => parse_seeds(&s).map_err(ServerFnError::new)?,
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => parse_seeds(DEFAULT_LAYOUT).expect("committed seeds parse"),
+		Err(e) => return Err(ServerFnError::new(format!("read layout: {e}"))),
+	};
+	Ok(seeds.get(&breakpoint.to_string()).or_else(|| seeds.get("default")).map(|v| v.to_string()))
 }
+
 #[server]
 pub async fn maps_api_key() -> Result<String, ServerFnError> {
 	use secrecy::ExposeSecret as _;
 
 	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
+}
+/// `BTreeMap` so the file's bytes are deterministic — it participates in the sync
+/// snapshot's content hash. A `version` top-level key marks the pre-seeds format
+/// (one bare arrangement): adopt it as `default`.
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_seeds(s: &str) -> Result<BTreeMap<String, serde_json::Value>, String> {
+	let serde_json::Value::Object(m) = serde_json::from_str(s).map_err(|e| format!("layout file: {e}"))? else {
+		return Err("layout file: expected an object".into());
+	};
+	if m.contains_key("version") {
+		return Ok([("default".to_string(), serde_json::Value::Object(m))].into());
+	}
+	const KEYS: [&str; 6] = ["default", "xs", "sm", "md", "lg", "xl"];
+	if let Some(k) = m.keys().find(|k| !KEYS.contains(&k.as_str())) {
+		return Err(format!("layout file: unknown seed key `{k}`"));
+	}
+	Ok(m.into_iter().collect())
 }
 /// `store.get` + the per-lot `price_series` synthesis (the basis for
 /// `appreciation_yoy`). No coord resolution — callers that need a map pin add it
@@ -347,6 +380,29 @@ async fn fetch_place(place_id: &str, key: &str) -> Result<crate::domain::Coords,
 		lat: body.location.latitude,
 		lng: body.location.longitude,
 	})
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+	use super::*;
+
+	// The seed-resolution invariant: a pre-seeds file (one bare arrangement) is adopted
+	// as `default`, a seeds map resolves per-band falling back to `default`, and any
+	// other shape is rejected loudly.
+	#[test]
+	fn seed_resolution() {
+		let resolve = |file: &str, bp: &str| {
+			let seeds = parse_seeds(file).unwrap();
+			seeds.get(bp).or_else(|| seeds.get("default")).cloned()
+		};
+		assert_eq!(resolve(r#"{"version":1,"grid":{}}"#, "md"), Some(serde_json::json!({"version":1,"grid":{}})));
+		assert_eq!(resolve(r#"{"default":1,"md":2}"#, "md"), Some(serde_json::json!(2)));
+		assert_eq!(resolve(r#"{"default":1,"md":2}"#, "xl"), Some(serde_json::json!(1)));
+		assert_eq!(resolve(r#"{"md":2}"#, "xl"), None);
+		assert!(parse_seeds(r#"{"bogus":1}"#).is_err());
+		assert!(parse_seeds("[]").is_err());
+		assert!(parse_seeds(DEFAULT_LAYOUT).unwrap().contains_key("default"), "committed seeds must carry a default");
+	}
 }
 
 #[cfg(not(target_arch = "wasm32"))]

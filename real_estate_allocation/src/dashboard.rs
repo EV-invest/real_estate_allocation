@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dockview_dioxus::{Config, DockPanel, Group, GroupId, Keybind, MinSize, PackedApi, PackedArea, PanelId, Step};
+use dockview_dioxus::{Breakpoint, Config, DockPanel, Group, GroupId, Keybind, MinSize, PackedApi, PackedArea, PanelId, Step};
 
 use crate::{
 	api::load_default_layout,
@@ -49,67 +49,71 @@ pub fn Dashboard() -> Element {
 	let mut api_handle = use_signal(|| None::<PackedApi>);
 	let on_ready = Callback::new(move |api: PackedApi| api_handle.set(Some(api)));
 
-	let layout = use_resource(|| async move { load_default_layout().await });
-
-	// First time both the grid handle and the layout fetch are ready: restore the saved global
-	// default, else fall back to the built-in arrangement (map+media tabbed, the rest packed beside).
+	// Once the grid handle arrives (post first measure, so the band is classified): fetch this
+	// breakpoint's saved seed and restore it, else fall back to the built-in arrangement
+	// (map+media tabbed, the rest packed beside).
 	let mut applied = use_signal(|| false);
 	let min = MinSize::Steps { w: Step(2), h: Step(2) };
 	use_effect(move || {
 		if applied() {
 			return;
 		}
-		let Some(mut api) = api_handle() else { return };
-		let resolved = layout.read();
-		let Some(result) = resolved.as_ref() else { return };
+		let Some(api) = api_handle() else { return };
+		applied.set(true);
 
-		let seed = |api: &mut PackedApi| {
-			let map_group = {
-				let id = api.grid.write().mint_group_id();
-				Group {
-					id,
-					tabs: vec![PanelId("map".into()), PanelId("media".into())],
-					active: 0,
+		let bp = *api.breakpoint.peek();
+		spawn(async move {
+			let mut api = api;
+			let seed = |api: &mut PackedApi| {
+				let map_group = {
+					let id = api.grid.write().mint_group_id();
+					Group {
+						id,
+						tabs: vec![PanelId("map".into()), PanelId("media".into())],
+						active: 0,
+					}
+				};
+				api.place(map_group, 4, 3, min);
+				for panel in ["chart", "heatmap", "lots", "details"] {
+					let group = Group::new(api.grid.write().mint_group_id(), PanelId(panel.into()));
+					api.place(group, 4, 3, min);
 				}
 			};
-			api.place(map_group, 4, 3, min);
-			for panel in ["chart", "heatmap", "lots", "details"] {
-				let group = Group::new(api.grid.write().mint_group_id(), PanelId(panel.into()));
-				api.place(group, 4, 3, min);
-			}
-		};
 
-		match result {
-			Ok(Some(json)) => {
-				if let Err(e) = api.load(json) {
-					// A corrupt saved layout must not blank the dashboard; log it and seed the default.
-					dioxus::logger::tracing::error!(?e, "saved layout corrupt — using built-in seed");
+			match load_default_layout(bp).await {
+				Ok(Some(json)) => {
+					if let Err(e) = api.load(&json) {
+						// A corrupt saved layout must not blank the dashboard; log it and seed the default.
+						dioxus::logger::tracing::error!(?e, "saved layout corrupt — using built-in seed");
+						seed(&mut api);
+					}
+				}
+				Ok(None) => seed(&mut api),
+				Err(e) => {
+					// A fetch failure for the optional default likewise degrades to the built-in seed.
+					dioxus::logger::tracing::error!(%e, "load_default_layout failed — using built-in seed");
 					seed(&mut api);
 				}
 			}
-			Ok(None) => seed(&mut api),
-			Err(e) => {
-				// A fetch failure for the optional default likewise degrades to the built-in seed.
-				dioxus::logger::tracing::error!(%e, "load_default_layout failed — using built-in seed");
-				seed(&mut api);
-			}
-		}
-		applied.set(true);
+		});
 	});
 
-	// `s` → save the live arrangement as the global default, registered as a `PackedArea` host
-	// action. The closure gets the same `PackedApi` `on_ready` handed us and POSTs its serialized
-	// grid; only fires browser-side (the listener is wasm-only) but compiles everywhere. The toast
-	// gives the user feedback that the save landed (or didn't), auto-clearing after a beat.
-	let mut toast = use_signal(|| None::<&'static str>);
+	// `s` → save the live arrangement as this breakpoint's global seed (an `xl` save doubles as
+	// the `default`), registered as a `PackedArea` host action. The closure gets the same
+	// `PackedApi` `on_ready` handed us and POSTs its serialized grid; only fires browser-side
+	// (the listener is wasm-only) but compiles everywhere. The toast gives the user feedback
+	// that the save landed (or didn't), auto-clearing after a beat.
+	let mut toast = use_signal(|| None::<String>);
 	let save_layout = Callback::new(move |api: PackedApi| {
 		let json = api.save();
+		let bp = *api.breakpoint.peek();
 		spawn(async move {
-			let msg = match crate::api::save_default_layout(json).await {
-				Ok(()) => "Layout saved",
+			let msg = match crate::api::save_default_layout(json, bp).await {
+				Ok(()) if bp == Breakpoint::Xl => "Layout saved (xl + default)".to_string(),
+				Ok(()) => format!("Layout saved ({bp})"),
 				Err(e) => {
 					dioxus::logger::tracing::error!(%e, "save default layout failed");
-					"Save failed"
+					"Save failed".to_string()
 				}
 			};
 			toast.set(Some(msg));
