@@ -148,7 +148,10 @@ pub fn Dashboard() -> Element {
 	use_context_provider(|| Callback::new(|_group: GroupId| {}));
 
 	rsx! {
-		div { class: "flex h-screen flex-col bg-background text-foreground",
+		// 100vh minus the brand header's pt-20 clearance (see `Home`): header +
+		// dock fill exactly one viewport, and the page scrolls only as far as the
+		// footer below — panels never get clipped by an off-screen overflow.
+		div { class: "flex h-[calc(100vh-5rem)] flex-col bg-background text-foreground",
 			TopBar {}
 			div { class: "relative min-h-0 flex-1",
 				PackedArea { panels, on_ready: Some(on_ready), config: Some(config) }

@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod app;
+pub mod chrome;
 pub mod dashboard;
 // The domain layer lives in a fullstack-free crate so the wasm embed bundle can
 // share it; re-exported here so every `crate::domain::*` / `factors` / `error`
