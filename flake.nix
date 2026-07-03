@@ -45,7 +45,9 @@
         });
         manifest = (pkgs.lib.importTOML ./real_estate_allocation/Cargo.toml).package;
         pname = manifest.name;
-        stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
+        # mold is Linux-only (the adapter *throws* on Darwin at eval time, which
+        # used to break even `nix build .#embeds` on macOS dev machines).
+        stdenv = if pkgs.stdenv.isDarwin then pkgs.stdenv else pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
 
         # Landing's dev page port. Baked into the REA build (`option_env!("PORT")`)
         # so the CORS allowlist default tracks it: config `cors_allowed_origins`
@@ -209,7 +211,7 @@
             openssl.dev
             sqlite
           ];
-          nativeBuildInputs = with pkgs; [ pkg-config cmake perl mold pkgs.rustPlatform.bindgenHook tailwindcss_4 ];
+          nativeBuildInputs = with pkgs; [ pkg-config cmake perl pkgs.rustPlatform.bindgenHook tailwindcss_4 ] ++ pkgs.lib.optionals (!pkgs.stdenv.isDarwin) [ pkgs.mold ];
 
           cargoLock.lockFile = ./Cargo.lock;
           src = pureSrc;
