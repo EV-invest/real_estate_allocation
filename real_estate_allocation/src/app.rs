@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
+	chrome::{BrandFooter, BrandHeader},
 	dashboard::Dashboard,
 	domain::{Building, BuildingId, PropertyStateKind},
 };
@@ -163,40 +164,45 @@ fn Home() -> Element {
 	use_effect(move || ready.set(true));
 
 	rsx! {
-		if ready() {
-			if let Some(src) = maps_src {
-				document::Script { src, defer: true }
-			}
-			document::Script { src: "https://cdn.plot.ly/plotly-basic-2.35.2.min.js", defer: true }
-			Dashboard {}
-			BuildTag {}
-			// Discord-style prev/next, only while viewing an apartment; wraps around.
-			if appt().is_some() {
-				button {
-					class: "fixed left-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
-					"aria-label": "Previous apartment",
-					onclick: move |_| cycle_appt(building, appt, -1),
-					"‹"
+		BrandHeader {}
+		// pt-20 clears the fixed brand header (the conductor's clearance); the
+		// dashboard gives the same 5rem back (see `Dashboard`) so header + dock
+		// fill exactly one viewport and the only page scroll is the footer reveal.
+		main { class: "pt-20",
+			if ready() {
+				if let Some(src) = maps_src {
+					document::Script { src, defer: true }
 				}
-				button {
-					class: "fixed right-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
-					"aria-label": "Next apartment",
-					onclick: move |_| cycle_appt(building, appt, 1),
-					"›"
+				document::Script { src: "https://cdn.plot.ly/plotly-basic-2.35.2.min.js", defer: true }
+				Dashboard {}
+				BuildTag {}
+				// Discord-style prev/next, only while viewing an apartment; wraps around.
+				if appt().is_some() {
+					button {
+						class: "fixed left-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
+						"aria-label": "Previous apartment",
+						onclick: move |_| cycle_appt(building, appt, -1),
+						"‹"
+					}
+					button {
+						class: "fixed right-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
+						"aria-label": "Next apartment",
+						onclick: move |_| cycle_appt(building, appt, 1),
+						"›"
+					}
 				}
 			}
 		}
+		BrandFooter {}
 	}
 }
 
 /// Inconspicuous deployed-version tag pinned to the bottom-right (plus the seed group
 /// the dock is on), linking to the exact commit on GitHub so we can tell what's live
-/// at a glance. The hermetic Nix build has no `.git`, so it passes the flake rev as
-/// `REA_BUILD_REV`; local `dx` builds leave that unset and fall back to build.rs's
-/// `git rev-parse` `GIT_HASH`.
+/// at a glance. Rev resolution lives in [`crate::chrome::build_rev`].
 #[component]
 fn BuildTag() -> Element {
-	let hash = option_env!("REA_BUILD_REV").filter(|s| !s.is_empty()).unwrap_or(env!("GIT_HASH"));
+	let hash = crate::chrome::build_rev();
 	let seed_group = use_context::<SeedGroup>();
 	rsx! {
 		a {

@@ -1,0 +1,61 @@
+# ev_lib::uikit chrome class inventory (Header / Footer / Logo / the kit-internal
+# Container use), vendored verbatim from ev_lib 0.4.0. Scanned via `@source` from
+# input.css: the crate comes from crates.io, whose unpacked sources sit at no
+# path a committed `@source` could reach, so Tailwind can't see these literals
+# otherwise. When bumping ev_lib, re-copy any changed chrome literals from
+# rust/src/uikit/{header,footer,logo}.rs (+ CONTAINER_BASE) of the matching tag.
+# Note: animate-in / fade-in / slide-in-from-top-4 come from tw-animate-css,
+# which this node-free build doesn't ship — the mobile overlay renders
+# un-animated by design.
+
+# header.rs
+fixed top-0 left-0 w-full z-[60] transition-all duration-500 border-b
+bg-main-black/90 backdrop-blur-md border-main-mist/10 py-4
+bg-transparent border-transparent py-6
+flex items-center justify-between gap-4
+flex items-center gap-3
+w-10 h-10 text-white
+flex flex-col
+font-serif-display font-bold text-lg tracking-wider text-white
+text-[9px] font-mono-tech tracking-[0.3em] text-main-accent-t1 uppercase
+hidden lg:flex items-center gap-6 font-mono-tech text-xs tracking-widest uppercase
+text-main-mist/80 hover:text-main-accent-t1 transition-colors
+lg:hidden
+flex size-10 items-center justify-center text-white
+size-6
+fixed inset-0 z-[70] flex flex-col bg-main-black px-6 pb-10 duration-200 animate-in fade-in lg:hidden
+flex h-20 shrink-0 items-center justify-end
+flex flex-col font-mono-tech text-sm uppercase tracking-widest duration-300 ease-out animate-in fade-in slide-in-from-top-4
+border-b border-main-mist/10 py-4 text-main-mist/80 transition-colors hover:text-main-accent-t1
+mt-8 w-full block
+
+# footer.rs
+font-mono-tech text-xs text-white uppercase tracking-widest mb-6
+bg-main-black border-t border-main-mist/10 py-16
+grid grid-cols-2 gap-x-8 gap-y-8 lg:grid-cols-12 mb-12
+col-span-2 lg:col-span-3
+flex items-center gap-3 mb-6
+w-8 h-8 text-white
+font-serif-display font-bold text-base tracking-wider text-white
+text-[8px] font-mono-tech tracking-[0.3em] text-main-accent-t1 uppercase
+text-main-mist/40 text-xs font-light max-w-sm leading-relaxed mb-6
+flex gap-4 text-xs font-mono-tech text-main-accent-t1
+text-main-mist/20
+hover:underline
+lg:col-span-2
+space-y-3
+text-xs font-light text-main-mist/70 hover:text-main-accent-t1 transition-colors
+space-y-4 text-xs text-main-mist/70 font-light leading-relaxed
+text-white block font-mono-tech text-[10px] uppercase tracking-wider mb-1
+col-span-2 lg:col-span-2
+text-sm sm:text-xs font-light leading-relaxed text-main-mist/70 mb-4
+border-t border-main-mist/10 pt-8 text-[10px] font-mono-tech text-main-mist/40
+text-main-mist/30
+
+# logo.rs
+inline-block
+w-3/5 h-3/5
+inline-flex items-center justify-center
+
+# ev_lib_classes CONTAINER_BASE (Header/Footer wrap their rows in Container)
+mx-auto w-full max-w-[var(--page-max,90rem)] px-[var(--page-px,1rem)]

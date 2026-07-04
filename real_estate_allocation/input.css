@@ -3,6 +3,10 @@
 
 /* Scan Dioxus RSX source for class names */
 @source "./src/**/*.rs";
+/* The ev_lib::uikit chrome's classes live in the crate's own sources, which a
+ * crates.io dep exposes at no stable path — so its inventory is vendored (see
+ * that file's header for regeneration on an ev_lib bump). */
+@source "./uikit_classes.txt";
 
 @layer base {
   *, *::before, *::after {
@@ -27,5 +31,15 @@
   a {
     color: inherit;
     text-decoration: none;
+  }
+  /* Chrome typography, mirrored from site_conductor's globals.css — hand-written
+   * classes there (not token utilities), so no @source scan can generate them. */
+  .font-serif-display {
+    font-family: var(--font-serif);
+    letter-spacing: -0.02em;
+  }
+  .font-mono-tech {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }
