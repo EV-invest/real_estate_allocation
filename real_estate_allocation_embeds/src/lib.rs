@@ -39,6 +39,12 @@ const A_MIN: f64 = 0.0;
 const A_MAX: f64 = 100.0;
 const A_STEP: f64 = 1.0;
 
+// Factor-exposure bounds/step, in percent — the one source for the bar clamps, the
+// aria range, and the stepper props (they'd contradict each other if they drifted).
+const EXPO_MIN: f64 = 0.0;
+const EXPO_MAX: f64 = 100.0;
+const EXPO_STEP: f64 = 1.0;
+
 #[component]
 pub fn Overview() -> Element {
 	let mut tab = use_signal(|| "all".to_string());
@@ -418,7 +424,7 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 	let mut track = use_signal(|| Option::<std::rc::Rc<MountedData>>::None);
 	let mut bounds = use_signal(|| (0.0_f64, 1.0_f64));
 	let mut dragging = use_signal(|| false);
-	let pct = value().clamp(0.0, 100.0);
+	let pct = (value() - EXPO_MIN) / (EXPO_MAX - EXPO_MIN) * 100.0;
 
 	rsx! {
 		div { class: "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 md:grid-cols-[11.25rem_2.5rem_minmax(0,1fr)_auto]",
@@ -433,8 +439,8 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 				tabindex: "0",
 				"aria-label": "{label} exposure",
 				"aria-valuenow": value(),
-				"aria-valuemin": 0.0,
-				"aria-valuemax": 100.0,
+				"aria-valuemin": EXPO_MIN,
+				"aria-valuemax": EXPO_MAX,
 				onpointerdown: move |e: PointerEvent| async move {
 					let Some(t) = track() else { return };
 					capture_pointer(&e);
@@ -442,26 +448,26 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 					bounds.set((rect.origin.x, rect.size.width));
 					dragging.set(true);
 					let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
-					value.set((ratio * 100.0).round().clamp(0.0, 100.0));
+					value.set((EXPO_MIN + ratio * (EXPO_MAX - EXPO_MIN)).round().clamp(EXPO_MIN, EXPO_MAX));
 				},
 				onpointermove: move |e: PointerEvent| {
 					if !dragging() { return; }
 					let (ox, w) = bounds();
 					let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
-					value.set((ratio * 100.0).round().clamp(0.0, 100.0));
+					value.set((EXPO_MIN + ratio * (EXPO_MAX - EXPO_MIN)).round().clamp(EXPO_MIN, EXPO_MAX));
 				},
 				onpointerup: move |_| dragging.set(false),
 				onpointercancel: move |_| dragging.set(false),
 				onkeydown: move |e: KeyboardEvent| {
 					let next = match e.key() {
-						Key::ArrowRight | Key::ArrowUp => value() + 1.0,
-						Key::ArrowLeft | Key::ArrowDown => value() - 1.0,
-						Key::Home => 0.0,
-						Key::End => 100.0,
+						Key::ArrowRight | Key::ArrowUp => value() + EXPO_STEP,
+						Key::ArrowLeft | Key::ArrowDown => value() - EXPO_STEP,
+						Key::Home => EXPO_MIN,
+						Key::End => EXPO_MAX,
 						_ => return,
 					};
 					e.prevent_default();
-					value.set(next.clamp(0.0, 100.0));
+					value.set(next.clamp(EXPO_MIN, EXPO_MAX));
 				},
 				span {
 					class: "relative h-1.5 w-full overflow-hidden rounded-full bg-main-black/55",
@@ -476,7 +482,7 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 					style: "left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
 				}
 			}
-			ValueStepper { value, step: 1.0, big_step: 10.0, min: 0.0, max: 100.0, suffix: "%" }
+			ValueStepper { value, step: EXPO_STEP, big_step: 10.0, min: EXPO_MIN, max: EXPO_MAX, suffix: "%" }
 		}
 	}
 }
@@ -494,10 +500,18 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 	let mut editing = use_signal(|| Option::<String>::None);
 	let display = editing().unwrap_or_else(|| format!("{:.1}{suffix}", value()));
 	let width_ch = display.chars().count().max(4) + 1;
+	let parse_raw = move |raw: &str| raw.trim().trim_end_matches(suffix).trim().parse::<f64>().ok();
 	let mut commit = move |raw: String| {
-		if let Ok(v) = raw.trim().trim_end_matches(suffix).trim().parse::<f64>() {
+		if let Some(v) = parse_raw(&raw) {
 			value.set(v.clamp(min, max));
 		}
+		editing.set(None);
+	};
+	// Step from what's on screen: an uncommitted typed buffer wins over the last
+	// committed value, so ↑ after typing "8" gives 9 — not committed+step.
+	let mut nudge = move |delta: f64| {
+		let base = editing().as_deref().and_then(parse_raw).unwrap_or_else(|| value());
+		value.set((base + delta).clamp(min, max));
 		editing.set(None);
 	};
 
@@ -507,14 +521,14 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 			button {
 				r#type: "button",
 				class: "px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors hover:bg-main-mist/5 hover:text-white",
-				onclick: move |_| { value.set((value() + big_step).clamp(min, max)); editing.set(None); },
+				onclick: move |_| nudge(big_step),
 				"+{big_step:.0}"
 			}
 			span { class: "w-px shrink-0 bg-main-mist/20" }
 			button {
 				r#type: "button",
 				class: "px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors hover:bg-main-mist/5 hover:text-white",
-				onclick: move |_| { value.set((value() - big_step).clamp(min, max)); editing.set(None); },
+				onclick: move |_| nudge(-big_step),
 				"−{big_step:.0}"
 			}
 			span { class: "w-px shrink-0 bg-main-mist/20" }
@@ -525,7 +539,9 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 				style: "width: {width_ch}ch;",
 				value: display,
 				oninput: move |e: FormEvent| editing.set(Some(e.value())),
-				onfocus: move |_| editing.set(Some(format!("{:.1}", value()))),
+				// Seed with the shortest round-trip repr, not the .1-rounded display —
+				// a bare focus+blur must never mutate a value typed at finer precision.
+				onfocus: move |_| editing.set(Some(value().to_string())),
 				onblur: move |_| {
 					if let Some(raw) = editing() { commit(raw); }
 				},
@@ -533,8 +549,8 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 					match e.key() {
 						Key::Enter => { if let Some(raw) = editing() { commit(raw); } },
 						Key::Escape => { editing.set(None); e.prevent_default(); },
-						Key::ArrowUp => { value.set((value() + step).clamp(min, max)); editing.set(None); e.prevent_default(); },
-						Key::ArrowDown => { value.set((value() - step).clamp(min, max)); editing.set(None); e.prevent_default(); },
+						Key::ArrowUp => { nudge(step); e.prevent_default(); },
+						Key::ArrowDown => { nudge(-step); e.prevent_default(); },
 						_ => {},
 					}
 				},
