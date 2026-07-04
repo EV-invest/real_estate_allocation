@@ -515,21 +515,29 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 		editing.set(None);
 	};
 
+	// Host preflight (unlayered or in a layer above `reamfe`) sets `color`/`font:
+	// inherit` on button/input, beating our layered utilities on those elements.
+	// So: color/size live on the container and inner spans (preflight never touches
+	// those), and the form controls just inherit them.
 	rsx! {
 		div {
-			class: if accent { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-accent-t1/40 bg-main-black/40 font-mono" } else { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-mist/20 bg-main-black/40 font-mono" },
+			class: if accent { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-accent-t1/40 bg-main-black/40 font-mono text-xs text-white" } else { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-mist/20 bg-main-black/40 font-mono text-xs text-white" },
 			button {
 				r#type: "button",
-				class: "px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors hover:bg-main-mist/5 hover:text-white",
+				class: "group/btn flex",
 				onclick: move |_| nudge(big_step),
-				"+{big_step:.0}"
+				span { class: "flex h-full items-center px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors group-hover/btn:bg-main-mist/5 group-hover/btn:text-white",
+					"+{big_step:.0}"
+				}
 			}
 			span { class: "w-px shrink-0 bg-main-mist/20" }
 			button {
 				r#type: "button",
-				class: "px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors hover:bg-main-mist/5 hover:text-white",
+				class: "group/btn flex",
 				onclick: move |_| nudge(-big_step),
-				"−{big_step:.0}"
+				span { class: "flex h-full items-center px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors group-hover/btn:bg-main-mist/5 group-hover/btn:text-white",
+					"−{big_step:.0}"
+				}
 			}
 			span { class: "w-px shrink-0 bg-main-mist/20" }
 			input {
