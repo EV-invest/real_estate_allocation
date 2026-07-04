@@ -47,8 +47,6 @@ const EXPO_STEP: f64 = 1.0;
 
 #[component]
 pub fn Overview() -> Element {
-	let mut tab = use_signal(|| "all".to_string());
-
 	rsx! {
 		section { id: "portfolio", class: "relative border-t border-main-mist/10 py-24",
 			Container {
@@ -68,17 +66,9 @@ pub fn Overview() -> Element {
 					}
 				}
 
-				// Filter tabs — visual parity with the source; cosmetic only.
-				div { class: "mb-12 flex flex-wrap gap-2 border-b border-main-mist/10 pb-4 font-mono text-xs tracking-wider",
-					for t in ["all", "villas", "commercial", "land"] {
-						button {
-							key: "{t}",
-							class: if tab() == t { "bg-main-accent-t1 px-5 py-2.5 font-bold uppercase text-main-black transition-all duration-300" } else { "px-5 py-2.5 uppercase text-main-mist/60 transition-all duration-300 hover:bg-main-mist/5 hover:text-white" },
-							onclick: move |_| tab.set(t.to_string()),
-							"{t}"
-						}
-					}
-				}
+				// The old filter tabs were cosmetic-only (never wired to data) — dropped in
+				// PR #18: dead controls read as broken, and the taller calculator rebalanced
+				// the section without them. Deep filtering lives on the dashboard.
 
 				// Bento grid
 				div { class: "grid grid-cols-1 gap-6 md:grid-cols-3",
@@ -152,7 +142,9 @@ fn FeaturedCard() -> Element {
 	rsx! {
 		a {
 			href: "{rea}/?building={Q1_PROPERTY}",
-			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 md:col-span-2",
+			// no-underline: UA link styling propagates from the wrapping <a> to every
+			// descendant on preflight-less hosts (and children can't undo it).
+			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 no-underline md:col-span-2",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
 				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({origin}/mfe/{Q1_BANNER}?v={ASSET_V})",
@@ -187,7 +179,7 @@ fn SideCard() -> Element {
 	rsx! {
 		a {
 			href: "{rea}/?building={TMS_PROPERTY}",
-			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40",
+			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 no-underline",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
 				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 20%, rgba(7,13,24,0.4)), url({origin}/mfe/{TMS_BANNER}?v={ASSET_V})",
@@ -288,6 +280,10 @@ fn Calculator() -> Element {
 	let exp: Vec<f64> = exposures.iter().map(|s| s() / 100.0).collect();
 	let out = p.evaluate(&exp, yoy() / 100.0, swap() / 100.0);
 	let total: f64 = exposures.iter().map(|s| s()).sum();
+	// Σ checksum state: exposures are meant to describe a whole book, so drifting
+	// off 100% gets a loud gold chip (t3 = the warning-adjacent tier we have).
+	let off_by = total - 100.0;
+	let balanced = off_by.abs() < 0.5;
 
 	rsx! {
 		div { id: "calculator", class: "flex flex-col gap-6 border border-main-mist/10 bg-main-card p-6 md:col-span-2",
@@ -387,11 +383,15 @@ fn Calculator() -> Element {
 
 			// Factor mixer — one row per factor: label · ρ · draggable exposure bar · stepper.
 			div { class: "flex flex-col gap-3 font-mono",
-				div { class: "flex items-baseline justify-between",
+				div { class: "flex items-center justify-between",
 					span { class: "text-[0.625rem] font-semibold uppercase tracking-[0.15em] text-main-mist/40", "Factor Exposures" }
-					span { class: "text-[0.5625rem] uppercase tracking-wider text-main-mist/30",
-						span { class: "text-main-mist/55", "Σ {total:.0}%" }
-						" · drag bars · type · ↑↓"
+					div { class: "flex items-center gap-2",
+						span {
+							class: if balanced { "text-[0.5625rem] uppercase tracking-wider text-main-mist/55" } else { "rounded border border-main-accent-t3/50 bg-main-accent-t3/10 px-1.5 py-0.5 text-[0.6875rem] font-bold uppercase tracking-wider text-main-accent-t3" },
+							title: "{off_by:+.0}% vs 100%",
+							"Σ {total:.0}%"
+						}
+						span { class: "text-[0.5625rem] uppercase tracking-wider text-main-mist/30", "drag bars · type · ↑↓" }
 					}
 				}
 				div { class: "flex flex-col gap-2",
@@ -524,7 +524,7 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 			class: if accent { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-accent-t1/40 bg-main-black/40 font-mono text-xs text-white" } else { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-mist/20 bg-main-black/40 font-mono text-xs text-white" },
 			button {
 				r#type: "button",
-				class: "group/btn flex",
+				class: "group/btn flex cursor-pointer appearance-none border-0 bg-transparent p-0",
 				onclick: move |_| nudge(big_step),
 				span { class: "flex h-full items-center px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors group-hover/btn:bg-main-mist/5 group-hover/btn:text-white",
 					"+{big_step:.0}"
@@ -533,7 +533,7 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 			span { class: "w-px shrink-0 bg-main-mist/20" }
 			button {
 				r#type: "button",
-				class: "group/btn flex",
+				class: "group/btn flex cursor-pointer appearance-none border-0 bg-transparent p-0",
 				onclick: move |_| nudge(-big_step),
 				span { class: "flex h-full items-center px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors group-hover/btn:bg-main-mist/5 group-hover/btn:text-white",
 					"−{big_step:.0}"
@@ -543,7 +543,7 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 			input {
 				r#type: "text",
 				inputmode: "decimal",
-				class: "bg-transparent pl-1.5 pr-2 text-right text-xs text-white outline-none",
+				class: "appearance-none border-0 bg-transparent pl-1.5 pr-2 text-right text-xs text-white outline-none",
 				style: "width: {width_ch}ch;",
 				value: display,
 				oninput: move |e: FormEvent| editing.set(Some(e.value())),
