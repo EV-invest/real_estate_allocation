@@ -243,10 +243,26 @@ fn snap(v: f64) -> f64 {
 	(((v - A_MIN) / A_STEP).round() * A_STEP + A_MIN).clamp(A_MIN, A_MAX)
 }
 
+/// Capture the pointer on the event's real target so a drag keeps tracking after the
+/// pointer leaves the element — the browser routes every subsequent move to the captor
+/// until pointerup/pointercancel. Without it, leaving the track aborted the drag (#16).
+fn capture_pointer(e: &PointerEvent) {
+	use dioxus::web::WebEventExt;
+	use wasm_bindgen::JsCast;
+	let raw = e.data().as_web_event();
+	if let Some(el) = raw.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) {
+		let _ = el.set_pointer_capture(raw.pointer_id());
+	}
+}
+
 /// Correlation / risk-premia terminal (spans two columns). Shows our instrument's
 /// correlation profile vs the popular alpha factors and, under probabilistic-Kelly
 /// sizing (γ=1), what swapping `w%` of a host book into us does to its effective risk
 /// premia (risk cost = σ²/2) and compound performance. See `crate::factors`.
+///
+/// Layout per the issue-16 Figma (Main → real_estate page): intro + swap slider
+/// beside the output panel, then the factor mixer — one row per factor with the
+/// exposure drawn as a draggable bar, so the book's composition reads at a glance.
 #[component]
 fn Calculator() -> Element {
 	let p = profile();
@@ -265,199 +281,263 @@ fn Calculator() -> Element {
 
 	let exp: Vec<f64> = exposures.iter().map(|s| s() / 100.0).collect();
 	let out = p.evaluate(&exp, yoy() / 100.0, swap() / 100.0);
+	let total: f64 = exposures.iter().map(|s| s()).sum();
 
 	rsx! {
-		div { id: "calculator", class: "grid grid-cols-1 gap-3 border border-main-mist/10 bg-main-card p-4 md:col-span-2 md:grid-cols-2",
-			// Heading + swap slider
-			div { class: "flex flex-col",
-				div { class: "flex items-center gap-2",
-					span { class: "font-mono text-xs uppercase tracking-widest text-main-accent-t1", "Risk Terminal" }
-					h3 { class: "font-serif text-lg text-white", "Correlation Profile" }
-				}
-				p { class: "mb-2 font-light text-xs text-main-mist/70",
-					"We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
-				}
-				div { class: "mt-auto font-mono text-[0.6875rem]",
-					label { class: "mb-1.5 block uppercase text-main-mist/40", "Allocation swapped into Vietnam (%)" }
-					span {
-						class: "relative flex w-full touch-none select-none items-center",
-						onpointerdown: move |e: PointerEvent| async move {
-							let Some(t) = track() else { return };
-							let Ok(rect) = t.get_client_rect().await else { return };
-							bounds.set((rect.origin.x, rect.size.width));
-							dragging.set(true);
-							let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
-							swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
-						},
-						onpointermove: move |e: PointerEvent| {
-							if !dragging() { return; }
-							let (ox, w) = bounds();
-							let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
-							swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
-						},
-						onpointerup: move |_| dragging.set(false),
-						onpointerleave: move |_| dragging.set(false),
-						span {
-							class: "relative h-1.5 w-full grow overflow-hidden rounded-full bg-main-black/50",
-							onmounted: move |e: MountedEvent| track.set(Some(e.data())),
-							span {
-								class: "absolute h-full bg-main-accent-t1",
-								style: "width: {pct}%;",
-							}
+		div { id: "calculator", class: "flex flex-col gap-6 border border-main-mist/10 bg-main-card p-6 md:col-span-2",
+			// Intro + swap slider | output panel
+			div { class: "grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_20rem]",
+				div { class: "flex flex-col gap-5",
+					div { class: "flex flex-col gap-2",
+						span { class: "font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.22em] text-main-accent-t1", "Risk Terminal" }
+						h3 { class: "font-serif text-[1.375rem] text-white", "Correlation Profile" }
+						p { class: "font-light text-[0.8125rem] leading-relaxed text-main-mist/70",
+							"We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
+						}
+					}
+					div { class: "mt-auto flex flex-col gap-2 font-mono",
+						div { class: "flex items-center justify-between",
+							label { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "Allocation swapped into Vietnam" }
+							span { class: "text-[0.8125rem] font-bold text-main-accent-t1", "{swap():.0}%" }
 						}
 						span {
-							class: "block size-3 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
-							style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
-							role: "slider",
-							tabindex: "0",
-							"aria-valuenow": swap(),
-							"aria-valuemin": A_MIN,
-							"aria-valuemax": A_MAX,
-							onkeydown: move |e: KeyboardEvent| {
-								let next = match e.key() {
-									Key::ArrowRight | Key::ArrowUp => swap() + A_STEP,
-									Key::ArrowLeft | Key::ArrowDown => swap() - A_STEP,
-									Key::Home => A_MIN,
-									Key::End => A_MAX,
-									_ => return,
-								};
-								e.prevent_default();
-								swap.set(snap(next));
+							class: "relative flex h-6 w-full touch-none select-none items-center",
+							onpointerdown: move |e: PointerEvent| async move {
+								let Some(t) = track() else { return };
+								capture_pointer(&e);
+								let Ok(rect) = t.get_client_rect().await else { return };
+								bounds.set((rect.origin.x, rect.size.width));
+								dragging.set(true);
+								let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
+								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
 							},
-						}
-					}
-					div { class: "mt-1 flex justify-between font-bold text-main-accent-t1",
-						span { "0%" }
-						span { "{swap():.0}%" }
-						span { "100%" }
-					}
-				}
-			}
-
-			// Output panel
-			div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-black/40 p-3",
-				div {
-					span { class: "mb-0.5 block font-mono text-[0.5rem] uppercase text-main-mist/40", "Δ Effective Risk Premia" }
-					span { class: "font-serif text-2xl font-bold text-main-accent-t3", "{out.delta_risk_premia * 10_000.0:+.1} bps" }
-					div { class: "mt-2 flex gap-4 border-t border-main-mist/10 pt-2",
-						div {
-							span { class: "block font-mono text-[0.4375rem] uppercase text-main-mist/40", "Δ Expected Perf" }
-							span { class: "font-mono text-[0.6875rem] font-bold text-main-accent-t2", "{out.delta_performance * 100.0:+.2}%" }
-						}
-						div {
-							span { class: "block font-mono text-[0.4375rem] uppercase text-main-mist/40", "ρ (S, P)" }
-							span { class: "font-mono text-[0.6875rem] font-bold text-white", "{out.rho_sp:+.2}" }
-						}
-					}
-				}
-				p { class: "mt-2 text-[0.4375rem] font-light leading-tight text-main-mist/30",
-					"*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary."
-				}
-			}
-
-			// Factor exposure grid — spans both columns.
-			div { class: "font-mono text-[0.6875rem] md:col-span-2",
-				div { class: "grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4",
-					for (f, w) in p.factors.iter().zip(exposures.iter().copied()) {
-						StepperCell { label: f.label.to_string(), value: w, step: 1.0, min: 0.0, max: 100.0, suffix: "%", rho: f.rho }
-					}
-					StepperCell { label: "Host YoY return".to_string(), value: yoy, step: 0.5, min: -50.0, max: 100.0, suffix: "%" }
-				}
-			}
-		}
-	}
-}
-
-/// TradingView-style numeric cell: label left, bordered value box right with hover-only
-/// up/down chevrons, vertical pointer-drag to scrub, and ↑/↓ keyboard nudge. Reused for
-/// every factor exposure and the host YoY input. An optional `rho` renders our read-only
-/// correlation to that factor beside the box (the "profile vs factors" picture).
-#[component]
-fn StepperCell(label: String, value: Signal<f64>, step: f64, min: f64, max: f64, #[props(default)] suffix: &'static str, #[props(default)] rho: Option<f64>) -> Element {
-	let mut value = value;
-	let mut text = use_signal(|| format!("{:.1}", value()));
-	let mut drag = use_signal(|| Option::<(f64, f64)>::None);
-
-	rsx! {
-		div { class: "group flex items-center justify-between gap-1 rounded border border-main-mist/20 bg-main-black/60 px-1.5 py-0 font-mono text-[0.625rem]",
-			span { class: "truncate uppercase text-main-mist/50", "{label}" }
-			div { class: "flex items-center gap-1",
-				if let Some(r) = rho {
-					span {
-						class: if r >= 0.0 { "text-[0.5625rem] text-main-accent-t2" } else { "text-[0.5625rem] text-main-accent-t3" },
-						"{r:+.2}"
-					}
-				}
-				div {
-					class: "group/inner flex touch-none select-none items-center rounded border border-main-mist/20 bg-main-black/40",
-					onpointerdown: move |e: PointerEvent| drag.set(Some((e.client_coordinates().y, value()))),
-					onpointermove: move |e: PointerEvent| {
-						let Some((y0, v0)) = drag() else { return };
-						let n = v0 + ((y0 - e.client_coordinates().y) / 8.0).round() * step;
-						value.set(n.clamp(min, max));
-						text.set(format!("{value:.1}"));
-					},
-					onpointerup: move |_| drag.set(None),
-					onpointerleave: move |_| drag.set(None),
-					input {
-						r#type: "text",
-						inputmode: "decimal",
-						class: "w-[4ch] bg-transparent px-0.5 py-0 text-right text-white outline-none",
-						value: "{text}{suffix}",
-						oninput: move |e: FormEvent| text.set(e.value()),
-						onblur: move |_| {
-							if let Ok(v) = text().parse::<f64>() {
-								value.set(v.clamp(min, max));
-								text.set(format!("{value:.1}"));
-							} else {
-								text.set(format!("{value:.1}"));
+							onpointermove: move |e: PointerEvent| {
+								if !dragging() { return; }
+								let (ox, w) = bounds();
+								let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
+								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
+							},
+							onpointerup: move |_| dragging.set(false),
+							onpointercancel: move |_| dragging.set(false),
+							span {
+								class: "relative h-1.5 w-full grow overflow-hidden rounded-full bg-main-black/55",
+								onmounted: move |e: MountedEvent| track.set(Some(e.data())),
+								span {
+									class: "absolute h-full bg-main-accent-t1",
+									style: "width: {pct}%;",
+								}
 							}
-						},
-						onkeydown: move |e: KeyboardEvent| {
-							match e.key() {
-								Key::Enter => {
-									if let Ok(v) = text().parse::<f64>() {
-										value.set(v.clamp(min, max));
-										text.set(format!("{value:.1}"));
-									} else {
-										text.set(format!("{value:.1}"));
-									}
+							span {
+								class: "block size-4 shrink-0 rounded-full border border-main-accent-t1 bg-white shadow-sm",
+								style: "position: absolute; left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
+								role: "slider",
+								tabindex: "0",
+								"aria-valuenow": swap(),
+								"aria-valuemin": A_MIN,
+								"aria-valuemax": A_MAX,
+								onkeydown: move |e: KeyboardEvent| {
+									let next = match e.key() {
+										Key::ArrowRight | Key::ArrowUp => swap() + A_STEP,
+										Key::ArrowLeft | Key::ArrowDown => swap() - A_STEP,
+										Key::Home => A_MIN,
+										Key::End => A_MAX,
+										_ => return,
+									};
+									e.prevent_default();
+									swap.set(snap(next));
 								},
-								Key::ArrowUp => { value.set((value() + step).clamp(min, max)); text.set(format!("{value:.1}")); e.prevent_default(); },
-								Key::ArrowDown => { value.set((value() - step).clamp(min, max)); text.set(format!("{value:.1}")); e.prevent_default(); },
-								Key::Escape => { text.set(format!("{value:.1}")); e.prevent_default(); },
-								_ => {},
 							}
-						},
-					}
-					div { class: "flex flex-col opacity-0 transition-opacity group-hover/inner:opacity-100",
-						button {
-							r#type: "button",
-							class: "leading-none text-main-mist/50 hover:text-white",
-							onclick: move |_| { value.set((value() + step).clamp(min, max)); text.set(format!("{value:.1}")); },
-							IconChevron { up: true }
 						}
-						button {
-							r#type: "button",
-							class: "leading-none text-main-mist/50 hover:text-white",
-							onclick: move |_| { value.set((value() - step).clamp(min, max)); text.set(format!("{value:.1}")); },
-							IconChevron { up: false }
+						div { class: "flex justify-between text-[0.625rem] text-main-mist/30",
+							span { "0%" }
+							span { "25%" }
+							span { "50%" }
+							span { "75%" }
+							span { "100%" }
 						}
 					}
+				}
+
+				// Output panel
+				div { class: "flex flex-col gap-3 border border-main-mist/10 bg-main-surface p-5",
+					span { class: "font-mono text-[0.625rem] uppercase tracking-wider text-main-mist/40", "Δ Effective Risk Premia" }
+					span { class: "font-serif text-3xl font-bold text-main-accent-t3", "{out.delta_risk_premia * 10_000.0:+.1} bps" }
+					div { class: "border-t border-main-mist/10" }
+					div { class: "flex gap-7 font-mono",
+						div { class: "flex flex-col gap-1",
+							span { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "Δ Expected Perf" }
+							span { class: "text-[0.8125rem] font-bold text-main-accent-t2", "{out.delta_performance * 100.0:+.2}%" }
+						}
+						div { class: "flex flex-col gap-1",
+							span { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "ρ (S, P)" }
+							span { class: "text-[0.8125rem] font-bold text-white", "{out.rho_sp:+.2}" }
+						}
+					}
+					p { class: "mt-auto font-light text-[0.625rem] leading-snug text-main-mist/30",
+						"*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary."
+					}
+				}
+			}
+
+			// Factor mixer — one row per factor: label · ρ · draggable exposure bar · stepper.
+			div { class: "flex flex-col gap-3 font-mono",
+				div { class: "flex items-baseline justify-between",
+					span { class: "text-[0.625rem] font-semibold uppercase tracking-[0.15em] text-main-mist/40", "Factor Exposures" }
+					span { class: "text-[0.5625rem] uppercase tracking-wider text-main-mist/30",
+						span { class: "text-main-mist/55", "Σ {total:.0}%" }
+						" · drag bars · type · ↑↓"
+					}
+				}
+				div { class: "flex flex-col gap-2",
+					for (f, w) in p.factors.iter().zip(exposures.iter().copied()) {
+						FactorRow { label: f.label, rho: f.rho, value: w }
+					}
+				}
+				div { class: "border-t border-main-mist/10" }
+				// Host book input — teal-marked: it's the user's own number, not a factor weight.
+				div { class: "flex items-center gap-3",
+					span { class: "h-3.5 w-[3px] shrink-0 rounded-sm bg-main-accent-t1" }
+					span { class: "flex-1 text-[0.625rem] uppercase tracking-wide text-main-mist/70 sm:flex-none", "Host YoY return" }
+					span { class: "hidden text-[0.5625rem] uppercase tracking-wider text-main-mist/30 sm:block sm:flex-1",
+						"your book's current return — not a factor weight"
+					}
+					ValueStepper { value: yoy, step: 0.5, big_step: 10.0, min: -50.0, max: 100.0, suffix: "%", accent: true }
 				}
 			}
 		}
 	}
 }
 
+/// One mixer row: factor label, read-only ρ badge (our correlation to that factor),
+/// and the exposure drawn as a draggable bar — length = weight, same interaction
+/// contract as the swap slider — plus the standardized `ValueStepper`. On mobile the
+/// bar wraps to its own line below the label/ρ/stepper meta line.
 #[component]
-fn IconChevron(up: bool) -> Element {
+fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
+	let mut value = value;
+	let mut track = use_signal(|| Option::<std::rc::Rc<MountedData>>::None);
+	let mut bounds = use_signal(|| (0.0_f64, 1.0_f64));
+	let mut dragging = use_signal(|| false);
+	let pct = value().clamp(0.0, 100.0);
+
 	rsx! {
-		svg { xmlns: "http://www.w3.org/2000/svg", width: "24", height: "24", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", stroke_linejoin: "round", class: "h-3 w-3",
-			if up {
-				path { d: "m18 15-6-6-6 6" }
-			} else {
-				path { d: "m6 9 6 6 6-6" }
+		div { class: "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 md:grid-cols-[11.25rem_2.5rem_minmax(0,1fr)_auto]",
+			span { class: "truncate text-[0.625rem] uppercase tracking-wide text-main-mist/70", {label} }
+			span {
+				class: if rho >= 0.0 { "text-right text-[0.625rem] text-main-accent-t2" } else { "text-right text-[0.625rem] text-main-accent-t3" },
+				"{rho:+.2}"
+			}
+			span {
+				class: "relative order-last col-span-full flex h-4 cursor-ew-resize touch-none select-none items-center md:order-none md:col-span-1",
+				role: "slider",
+				tabindex: "0",
+				"aria-label": "{label} exposure",
+				"aria-valuenow": value(),
+				"aria-valuemin": 0.0,
+				"aria-valuemax": 100.0,
+				onpointerdown: move |e: PointerEvent| async move {
+					let Some(t) = track() else { return };
+					capture_pointer(&e);
+					let Ok(rect) = t.get_client_rect().await else { return };
+					bounds.set((rect.origin.x, rect.size.width));
+					dragging.set(true);
+					let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
+					value.set((ratio * 100.0).round().clamp(0.0, 100.0));
+				},
+				onpointermove: move |e: PointerEvent| {
+					if !dragging() { return; }
+					let (ox, w) = bounds();
+					let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
+					value.set((ratio * 100.0).round().clamp(0.0, 100.0));
+				},
+				onpointerup: move |_| dragging.set(false),
+				onpointercancel: move |_| dragging.set(false),
+				onkeydown: move |e: KeyboardEvent| {
+					let next = match e.key() {
+						Key::ArrowRight | Key::ArrowUp => value() + 1.0,
+						Key::ArrowLeft | Key::ArrowDown => value() - 1.0,
+						Key::Home => 0.0,
+						Key::End => 100.0,
+						_ => return,
+					};
+					e.prevent_default();
+					value.set(next.clamp(0.0, 100.0));
+				},
+				span {
+					class: "relative h-1.5 w-full overflow-hidden rounded-full bg-main-black/55",
+					onmounted: move |e: MountedEvent| track.set(Some(e.data())),
+					span {
+						class: "absolute h-full rounded-full bg-main-accent-t1",
+						style: "width: {pct}%;",
+					}
+				}
+				span {
+					class: "pointer-events-none absolute block size-2.5 rounded-full border border-main-accent-t1 bg-white shadow-sm",
+					style: "left: {pct}%; top: 50%; transform: translate(-50%, -50%);",
+				}
+			}
+			ValueStepper { value, step: 1.0, big_step: 10.0, min: 0.0, max: 100.0, suffix: "%" }
+		}
+	}
+}
+
+/// Standardized numeric input (the uikit primitive #16 asks for — upstream to
+/// `ev_lib::uikit` once 0.5 opens): a segmented `[ +10 | −10 | input ]` box.
+/// Buttons step by `big_step` clamped to `[min, max]`; the input auto-resizes to
+/// its content (ch-based), ↑/↓ nudge by `step`, Enter commits, Esc reverts, blur
+/// commits-or-restores. `accent` marks user-owned inputs with the teal border.
+#[component]
+fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64, #[props(default)] suffix: &'static str, #[props(default)] accent: bool) -> Element {
+	let mut value = value;
+	// `Some` holds the raw buffer while the user types; `None` shows the formatted
+	// value — so external writers (bars, buttons) reflect instantly unless mid-edit.
+	let mut editing = use_signal(|| Option::<String>::None);
+	let display = editing().unwrap_or_else(|| format!("{:.1}{suffix}", value()));
+	let width_ch = display.chars().count().max(4) + 1;
+	let mut commit = move |raw: String| {
+		if let Ok(v) = raw.trim().trim_end_matches(suffix).trim().parse::<f64>() {
+			value.set(v.clamp(min, max));
+		}
+		editing.set(None);
+	};
+
+	rsx! {
+		div {
+			class: if accent { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-accent-t1/40 bg-main-black/40 font-mono" } else { "flex h-[1.375rem] shrink-0 items-stretch overflow-hidden rounded border border-main-mist/20 bg-main-black/40 font-mono" },
+			button {
+				r#type: "button",
+				class: "px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors hover:bg-main-mist/5 hover:text-white",
+				onclick: move |_| { value.set((value() + big_step).clamp(min, max)); editing.set(None); },
+				"+{big_step:.0}"
+			}
+			span { class: "w-px shrink-0 bg-main-mist/20" }
+			button {
+				r#type: "button",
+				class: "px-2 text-[0.625rem] font-semibold text-main-mist/55 transition-colors hover:bg-main-mist/5 hover:text-white",
+				onclick: move |_| { value.set((value() - big_step).clamp(min, max)); editing.set(None); },
+				"−{big_step:.0}"
+			}
+			span { class: "w-px shrink-0 bg-main-mist/20" }
+			input {
+				r#type: "text",
+				inputmode: "decimal",
+				class: "bg-transparent pl-1.5 pr-2 text-right text-xs text-white outline-none",
+				style: "width: {width_ch}ch;",
+				value: display,
+				oninput: move |e: FormEvent| editing.set(Some(e.value())),
+				onfocus: move |_| editing.set(Some(format!("{:.1}", value()))),
+				onblur: move |_| {
+					if let Some(raw) = editing() { commit(raw); }
+				},
+				onkeydown: move |e: KeyboardEvent| {
+					match e.key() {
+						Key::Enter => { if let Some(raw) = editing() { commit(raw); } },
+						Key::Escape => { editing.set(None); e.prevent_default(); },
+						Key::ArrowUp => { value.set((value() + step).clamp(min, max)); editing.set(None); e.prevent_default(); },
+						Key::ArrowDown => { value.set((value() - step).clamp(min, max)); editing.set(None); e.prevent_default(); },
+						_ => {},
+					}
+				},
 			}
 		}
 	}
