@@ -28,7 +28,7 @@ ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm", "mfe"]
 gloo-net.workspace = true
 real_estate_allocation_core.workspace = true
 wasm-bindgen.workspace = true
-web-sys = { workspace = true, features = ["Window", "Document", "Element"] }
+web-sys = { workspace = true, features = ["Window", "Document", "Element", "Event", "EventTarget", "MouseEvent", "PointerEvent", "UiEvent"] }
 
 [lints]
 workspace = true
