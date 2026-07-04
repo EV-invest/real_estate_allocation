@@ -19,8 +19,4 @@
   # auto-pulls the latest snapshot on first boot (see `main`).
   sync_bucket = "ev-invest-state";
   sync_endpoint = "https://1dbedc392b294bdef442b64e9030ba96.r2.cloudflarestorage.com";
-  # The landing host (apex + www) fetches /api/embed cross-origin from this
-  # server; without these it falls back to the localhost-only build default and
-  # the browser blocks the embed's data fetch.
-  cors_allowed_origins = [ "https://evinvest.ltd" "https://www.evinvest.ltd" ];
 }

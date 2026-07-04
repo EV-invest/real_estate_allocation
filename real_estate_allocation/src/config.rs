@@ -19,13 +19,6 @@ pub struct AppConfig {
 	/// Address the fullstack server binds to. Overrides dioxus' `127.0.0.1:8080` default.
 	#[default(SocketAddr::from(([127, 0, 0, 1], 59079)))]
 	pub socket_addr: SocketAddr,
-	/// Origins allowed to call this server cross-origin. The landing host serves the
-	/// microfrontend bundle from its own origin, so only the bundle's server-fn POSTs
-	/// and the `/api/embed` GET reach this server cross-origin and need CORS. Dev
-	/// default derives from the build-time `PORT` (see [`default_cors_origins`]); add
-	/// prod origins via config.
-	#[default(default_cors_origins())]
-	pub cors_allowed_origins: Vec<String>,
 	/// R2 (S3-compatible) bucket for `db push`/`pull` snapshots; empty disables sync.
 	#[serde(default)]
 	pub sync_bucket: String,
@@ -43,16 +36,4 @@ pub struct AppConfig {
 /// `deploy/config.nix`; real content arrives through `db pull`, not the repo.
 fn app_data(file: &str) -> ExpandedPath {
 	ExpandedPath::from(format!("{}/{}/{file}", v_utils::io::xdg::xdg_data_fallback(), env!("CARGO_PKG_NAME")))
-}
-
-/// Build-time-derived dev CORS allowlist: the landing page (`PORT`) and its API
-/// origin (`PORT + 1`). `PORT` is baked by the flake; absent it (a bare `cargo
-/// build`), we fall back to landing's `next dev` port. A *set* but unparseable
-/// `PORT` is a build misconfig — panic rather than silently pick the fallback.
-fn default_cors_origins() -> Vec<String> {
-	let port: u16 = match option_env!("PORT") {
-		Some(p) => p.parse().expect("PORT (build-time env) must be a valid u16"),
-		None => 58843,
-	};
-	vec![format!("http://localhost:{port}"), format!("http://localhost:{}", port + 1)]
 }

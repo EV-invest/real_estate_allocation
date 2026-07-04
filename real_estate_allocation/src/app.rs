@@ -1,7 +1,6 @@
 use dioxus::prelude::*;
 
 use crate::{
-	chrome::{BrandFooter, BrandHeader},
 	dashboard::Dashboard,
 	domain::{Building, BuildingId, PropertyStateKind},
 };
@@ -164,11 +163,9 @@ fn Home() -> Element {
 	use_effect(move || ready.set(true));
 
 	rsx! {
-		BrandHeader {}
-		// pt-20 clears the fixed brand header (the conductor's clearance); the
-		// dashboard gives the same 5rem back (see `Dashboard`) so header + dock
-		// fill exactly one viewport and the only page scroll is the footer reveal.
-		main { class: "pt-20",
+		// Chromeless: whoever hosts REA frames it and owns the surrounding nav —
+		// we render only our own dashboard, filling the viewport we're given.
+		main {
 			if ready() {
 				if let Some(src) = maps_src {
 					document::Script { src, defer: true }
@@ -193,7 +190,6 @@ fn Home() -> Element {
 				}
 			}
 		}
-		BrandFooter {}
 	}
 }
 

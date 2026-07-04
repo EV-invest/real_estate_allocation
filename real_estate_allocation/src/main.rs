@@ -141,25 +141,19 @@ fn main() {
 	// every server-fn POST; `crate::api` reads it via `FullstackContext`.
 	use dioxus::server::{
 		axum::{Extension, Router},
-		http::{HeaderValue, Method, header},
+		http::{Method, header},
 	};
-	use tower_http::cors::CorsLayer;
+	use tower_http::cors::{Any, CorsLayer};
 	let app_state = real_estate_allocation::api::AppState { store, config };
 	dioxus::server::serve(move || {
 		let app_state = app_state.clone();
 		async move {
-			// The bundle runs on the landing page, so its server-fn POSTs and the
-			// `/api/embed` GET are cross-origin from landing — one CORS layer over
-			// the whole router covers them. (The bundle's own static assets are
-			// served by the landing host, not here.)
-			let origins = app_state
-				.config
-				.cors_allowed_origins
-				.iter()
-				.map(|o| o.parse::<HeaderValue>().expect("cors_allowed_origins entry is a valid Origin header value"))
-				.collect::<Vec<_>>();
+			// Any origin may embed us: the `/api/embed` GET is public read-only and the
+			// server-fn POSTs are token-authed (no ambient cookies), so `*` grants a
+			// browser nothing a server-side client couldn't already fetch — and we stay
+			// agnostic to whoever hosts the bundle. No `allow_credentials`, so `*` holds.
 			let cors = CorsLayer::new()
-				.allow_origin(origins)
+				.allow_origin(Any)
 				.allow_methods([Method::GET, Method::POST])
 				.allow_headers([header::CONTENT_TYPE]);
 			let router = Router::new()

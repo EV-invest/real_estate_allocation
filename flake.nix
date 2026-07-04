@@ -49,19 +49,16 @@
         # used to break even `nix build .#embeds` on macOS dev machines).
         stdenv = if pkgs.stdenv.isDarwin then pkgs.stdenv else pkgs.stdenvAdapters.useMoldLinker pkgs.stdenv;
 
-        # Landing's dev page port. Baked into the REA build (`option_env!("PORT")`)
-        # so the CORS allowlist default tracks it: config `cors_allowed_origins`
-        # defaults to `{PORT}` (the page) + `{PORT}+1` (its API origin). Single
-        # source for the build paths below; non-flake `cargo build` falls back to
-        # this same value in `config.rs`. It collides in name with dioxus' runtime
-        # bind `PORT`, but that's overridden at run time (dx owns the address in
-        # dev; main.rs forces 59079 in prod), so a build-time value never binds.
-        port = "58843";
-
         # REA's own dev/prod serving port (the bundle origin landing fetches from).
         # Single source for the `dx serve` bind, the healthcheck default, the
         # container's exposed port, and the devShell `REA_PORT` env below.
         reaPort = "59079";
+
+        # `nix run .#dev-embeds` static-server port. Numbered in REA's own range
+        # (reaPort+2), NOT any embedder's — the embed bundle is host-agnostic (it
+        # reads its backend from `<meta rea-url>`, assets from `bundle_origin()`).
+        # This is purely which local port the dev harness listens on.
+        portEmbeds = toString (pkgs.lib.toInt reaPort + 2);
 
         # Pinned to match the workspace's `wasm-bindgen` (`=0.2.125`) — nixpkgs
         # ships a different minor, and a CLI/crate schema skew is a hard error at
@@ -138,10 +135,6 @@
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo/real_estate_allocation"
 
-            # Build-time only (REA CORS default, see `port`); dx overrides the
-            # server's runtime bind PORT, so this doesn't affect the served address.
-            export PORT=${port}
-
             cp -f ${logoSrc} ./assets/logo.svg
 
             tailwindcss -i ./input.css -o ./assets/tailwind.css
@@ -172,6 +165,51 @@
             # Plain `cargo b`/`cargo r`/`nix build` still read the config and keep both.
             export RUSTFLAGS='--cfg tokio_unstable --cfg web_sys_unstable_apis'
             nix develop "$repo" --command dx serve --package real_estate_allocation --port ${reaPort} #--interactive false
+          '';
+        };
+
+        # `nix run .#dev-embeds` → build the MFE bundle (debug, fast) and serve it
+        # standalone on `portEmbeds` (reaPort+2) with a bare harness page that drops
+        # the self-registering `<mfe-real-estate-overview>` tag. Mirrors the `embeds`
+        # package's packaging steps minus the release/nix sandbox. The cargo+bindgen
+        # step delegates to `nix develop` for the same reason runDev/runTest do — the
+        # `.cargo/config.toml` accelerators (sccache/cranelift/mold) a bare app PATH
+        # lacks. Property cards fetch REA at `reaPort` via the injected `<meta
+        # rea-url>` (run `.#dev` alongside for live figures); the Calculator tile is
+        # self-contained. Banners resolve as `/mfe/seed/...`, so seed lands there.
+        runDevEmbeds = pkgs.writeShellApplication {
+          name = "run-dev-embeds";
+          runtimeInputs = [ pkgs.git pkgs.python3 pkgs.xdg-utils ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+            name=real_estate_allocation_embeds
+            out="$repo/tmp/mfe-dev"
+            mkdir -p "$out/mfe"
+
+            export RUSTFLAGS='--cfg=web_sys_unstable_apis --cfg=getrandom_backend="wasm_js"'
+            nix develop "$repo" --command bash -euc "
+              cargo build -p $name --target wasm32-unknown-unknown
+              wasm-bindgen --target web --out-dir '$out' --out-name $name \
+                target/wasm32-unknown-unknown/debug/$name.wasm
+              tailwindcss -i ./real_estate_allocation/mfe.css -o '$out/mfe.css'
+            "
+            cp -rf real_estate_allocation/assets/seed "$out/mfe/seed"
+
+            printf '%s\n' \
+              '<!doctype html>' \
+              '<meta charset="utf-8" />' \
+              '<meta name="rea-url" content="http://localhost:${reaPort}" />' \
+              '<link rel="stylesheet" href="./mfe.css" />' \
+              '<body style="background:#070d18">' \
+              "<script type=\"module\">import init from \"./$name.js\"; await init();</script>" \
+              '<mfe-real-estate-overview></mfe-real-estate-overview>' \
+              > "$out/index.html"
+
+            url="http://127.0.0.1:${portEmbeds}"
+            echo "  ▶ serving embed on $url"
+            ( sleep 1 && xdg-open "$url" >/dev/null 2>&1 || true ) &
+            exec python3 -m http.server ${portEmbeds} --directory "$out"
           '';
         };
 
@@ -340,7 +378,6 @@
           buildPhase = ''
             runHook preBuild
             ${dyldFallback}
-            export PORT=${port}
             export NO_DOWNLOADS=1
             export RUSTFLAGS="--cfg tokio_unstable --cfg web_sys_unstable_apis -C strip=debuginfo"
             ( cd real_estate_allocation && dx build --release --package real_estate_allocation )
@@ -396,10 +433,12 @@
         };
       in
       {
-        # `nix run .#dev`  → Tailwind watch + fullstack `dx serve`
-        # `nix run .#test` → cargo test (insta snapshots)
+        # `nix run .#dev`         → Tailwind watch + fullstack `dx serve`
+        # `nix run .#dev-embeds`  → build + serve the MFE bundle standalone (reaPort+2)
+        # `nix run .#test`        → cargo test (insta snapshots)
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
+          dev-embeds = { type = "app"; program = "${runDevEmbeds}/bin/run-dev-embeds"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
           test = { type = "app"; program = "${runTest}/bin/run-test"; };
         };
@@ -447,11 +486,10 @@
 
             env.RUST_BACKTRACE = 1;
             env.RUST_LIB_BACKTRACE = 0;
-            # Baked into the REA build → CORS allowlist default (see the `port`
-            # let-binding). `nix build .#embeds` inherits this via the sandbox.
-            env.PORT = port;
             # REA's serving port, for a manual `dx serve --port $REA_PORT` in the shell.
             env.REA_PORT = reaPort;
+            # `nix run .#dev-embeds` static-server port (reaPort+2).
+            env.PORT_EMBEDS = portEmbeds;
           };
       }
     );
