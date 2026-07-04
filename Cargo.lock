@@ -1933,9 +1933,9 @@ dependencies = [
 
 [[package]]
 name = "ev_lib"
-version = "0.3.7"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2314cd6b208dc05af5a18fd86a3c1ed5d667a1f605b260c0ccd35f172ca05c14"
+checksum = "993db66f5e0523cb51e5dec010b4843f9c35a3673ece66d68f7812f96bc88193"
 dependencies = [
  "async-trait",
  "dioxus",
@@ -1943,7 +1943,7 @@ dependencies = [
  "jiff",
  "js-sys",
  "serde",
- "strum 0.27.2",
+ "strum 0.28.0",
  "tailwind_fuse",
  "uuid",
  "wasm-bindgen",
@@ -1952,9 +1952,9 @@ dependencies = [
 
 [[package]]
 name = "ev_lib_classes"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "894116fba82198e6cdf68b90db171b933fe5437e1f4a78d1ced4fa98395a4be2"
+checksum = "bed909452c57107f60066aa522de809780a195f6f656e72ad88e5f82bf3213e4"
 dependencies = [
  "strum 0.27.2",
  "tailwind_fuse",
