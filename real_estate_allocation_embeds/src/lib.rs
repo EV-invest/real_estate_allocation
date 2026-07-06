@@ -434,7 +434,7 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 				"{rho:+.2}"
 			}
 			span {
-				class: "relative order-last col-span-full flex h-4 cursor-ew-resize touch-none select-none items-center md:order-none md:col-span-1",
+				class: "relative max-md:order-last max-md:col-span-full flex h-4 cursor-ew-resize touch-none select-none items-center",
 				role: "slider",
 				tabindex: "0",
 				"aria-label": "{label} exposure",
@@ -499,7 +499,9 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 	// value — so external writers (bars, buttons) reflect instantly unless mid-edit.
 	let mut editing = use_signal(|| Option::<String>::None);
 	let display = editing().unwrap_or_else(|| format!("{:.1}{suffix}", value()));
-	let width_ch = display.chars().count().max(4) + 1;
+	// +3, not +1: the box is border-box, so its `ch` width must also swallow the
+		// pl-3/pr-2 padding — a tighter buffer clips the value against the left divider.
+		let width_ch = display.chars().count().max(4) + 3;
 	let parse_raw = move |raw: &str| raw.trim().trim_end_matches(suffix).trim().parse::<f64>().ok();
 	let mut commit = move |raw: String| {
 		if let Some(v) = parse_raw(&raw) {
@@ -543,7 +545,7 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 			input {
 				r#type: "text",
 				inputmode: "decimal",
-				class: "appearance-none border-0 bg-transparent pl-1.5 pr-2 text-right text-xs text-white outline-none",
+				class: "appearance-none border-0 bg-transparent pl-3 pr-2 text-right text-xs text-white outline-none",
 				style: "width: {width_ch}ch;",
 				value: display,
 				oninput: move |e: FormEvent| editing.set(Some(e.value())),
