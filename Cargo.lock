@@ -4122,6 +4122,7 @@ dependencies = [
  "uuid",
  "v_utils",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
