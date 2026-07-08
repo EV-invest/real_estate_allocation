@@ -149,8 +149,9 @@ pub fn Dashboard() -> Element {
 
 	rsx! {
 		// The dock fills exactly one viewport so panels never get clipped by an
-		// off-screen overflow. Chromeless (see `Home`) — the whole height is ours.
-		div { class: "flex h-screen flex-col bg-background text-foreground",
+		// off-screen overflow. Chromeless (see `Home`) — whatever the hosting shell
+		// leaves us of it (--ev-shell-offset: 0 standalone, 4rem under the conductor).
+		div { class: "flex h-[calc(100dvh-var(--ev-shell-offset,0px))] flex-col bg-background text-foreground",
 			TopBar {}
 			div { class: "relative min-h-0 flex-1",
 				PackedArea { panels, on_ready: Some(on_ready), config: Some(config) }

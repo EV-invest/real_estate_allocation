@@ -169,5 +169,13 @@ fn main() {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-	dioxus::launch(real_estate_allocation::App);
+	// dioxus 0.7.9's `launch` wires the server-fn root as `"" + "/" + base_path` —
+	// a relative URL whose parse panics inside the first server-fn call
+	// (RelativeUrlWithoutBase), killing hydration. Compose the absolute root
+	// ourselves and go straight to the web launcher, skipping that block; the
+	// wasm transport only ever sends `url.path()`, so the origin is parse ballast.
+	let origin = web_sys::window().expect("wasm runs in a browser").location().origin().expect("origin is always readable");
+	let base = dioxus::cli_config::base_path().map(|b| format!("/{}", b.trim_matches('/'))).unwrap_or_default();
+	dioxus::fullstack::set_server_url(format!("{origin}{base}").leak());
+	dioxus::web::launch::launch(real_estate_allocation::App, Vec::new(), Vec::new());
 }
