@@ -81,10 +81,10 @@ pub fn Overview() -> Element {
 		}
 	}
 }
-/// REA backend origin for the data fetch + dashboard breakout links. The host page
-/// advertises it via `<meta name="rea-url">` (its `NEXT_PUBLIC_REA_URL`); absent it,
-/// fall back to the bundle's own origin (REA serving the bundle itself). A plain DOM
-/// read — `web-sys` is already linked by dioxus-web, so this costs the bundle nothing.
+/// REA backend origin for the data fetch. The host page advertises it via
+/// `<meta name="rea-url">` (its `NEXT_PUBLIC_REA_URL`); absent it, fall back to the
+/// bundle's own origin (REA serving the bundle itself). A plain DOM read —
+/// `web-sys` is already linked by dioxus-web, so this costs the bundle nothing.
 fn rea_origin() -> String {
 	web_sys::window()
 		.and_then(|w| w.document())
@@ -137,11 +137,12 @@ fn FeaturedCard() -> Element {
 		}
 	};
 	let origin = bundle_origin();
-	let rea = rea_origin();
 
 	rsx! {
 		a {
-			href: "{rea}/?building={Q1_PROPERTY}",
+			// The dashboard breakout stays on the HOST origin: the embed renders on the
+			// conductor's pages, where the dashboard is mounted as the /rea zone.
+			href: "/rea/?building={Q1_PROPERTY}",
 			// no-underline: UA link styling propagates from the wrapping <a> to every
 			// descendant on preflight-less hosts (and children can't undo it).
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 no-underline md:col-span-2",
@@ -175,10 +176,9 @@ fn FeaturedCard() -> Element {
 #[component]
 fn SideCard() -> Element {
 	let origin = bundle_origin();
-	let rea = rea_origin();
 	rsx! {
 		a {
-			href: "{rea}/?building={TMS_PROPERTY}",
+			href: "/rea/?building={TMS_PROPERTY}",
 			class: "group relative flex min-h-[450px] flex-col justify-end overflow-hidden border border-main-mist/10 bg-main-black/40 no-underline",
 			div {
 				class: "absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105",
@@ -500,8 +500,8 @@ fn ValueStepper(value: Signal<f64>, step: f64, big_step: f64, min: f64, max: f64
 	let mut editing = use_signal(|| Option::<String>::None);
 	let display = editing().unwrap_or_else(|| format!("{:.1}{suffix}", value()));
 	// +3, not +1: the box is border-box, so its `ch` width must also swallow the
-		// pl-3/pr-2 padding — a tighter buffer clips the value against the left divider.
-		let width_ch = display.chars().count().max(4) + 3;
+	// pl-3/pr-2 padding — a tighter buffer clips the value against the left divider.
+	let width_ch = display.chars().count().max(4) + 3;
 	let parse_raw = move |raw: &str| raw.trim().trim_end_matches(suffix).trim().parse::<f64>().ok();
 	let mut commit = move |raw: String| {
 		if let Some(v) = parse_raw(&raw) {
