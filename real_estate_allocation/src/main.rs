@@ -26,7 +26,7 @@ fn main() {
 			#[command(subcommand)]
 			cmd: SettingsCommand,
 		},
-		/// Manage the database: apply migrations, seed the test fixture, and sync to/from R2.
+		/// Manage the database: apply migrations, seed the test fixture.
 		Db {
 			#[command(subcommand)]
 			cmd: DbCommand,
@@ -39,22 +39,8 @@ fn main() {
 		Migrate,
 		/// Insert the sample portfolio (test fixture; no-op if the DB is non-empty).
 		Seed,
-		/// Delete the local DB + files, re-migrate, and reseed. Dev only.
+		/// Delete the local DB, re-migrate, and reseed. Dev only.
 		Reset,
-		/// Snapshot the local DB + files to R2 as a new version.
-		Push {
-			/// Overwrite even if the remote advanced past your last sync.
-			#[arg(long)]
-			force: bool,
-		},
-		/// Replace the local DB + files with the latest R2 version.
-		Pull {
-			/// Discard local changes that were never pushed.
-			#[arg(long)]
-			force: bool,
-		},
-		/// Show local vs remote versions and whether they diverged.
-		Status,
 	}
 
 	v_utils::clientside!();
@@ -76,9 +62,8 @@ fn main() {
 	let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
 
 	if let Some(cmd) = db_command {
-		use real_estate_allocation::sync;
 		rt.block_on(async {
-			let open = || SqliteStore::open(config.db_path.as_ref(), config.data_dir.clone().inner());
+			let open = || SqliteStore::open(config.db_path.as_ref());
 			let res = match cmd {
 				// `open` applies migrations; a bare open is the migrate step.
 				DbCommand::Migrate => open().await.map(|_| ()),
@@ -92,34 +77,28 @@ fn main() {
 						// remove-if-present: a clean reset need not have prior files.
 						let _ = std::fs::remove_file(format!("{}{suffix}", db.display()));
 					}
-					let _ = std::fs::remove_dir_all(config.data_dir.clone().inner());
-					let _ = std::fs::remove_file(config.layout_path.as_ref());
 					match open().await {
 						Ok(store) => seed(&store).await,
 						Err(e) => Err(e),
 					}
 				}
-				DbCommand::Push { force } => sync::push(&config, force).await,
-				DbCommand::Pull { force } => sync::pull(&config, force).await,
-				DbCommand::Status => sync::status(&config).await,
 			};
 			exit_on_error(res);
 		});
 		return;
 	}
 
-	// First-boot bootstrap: a volume that has never synced (no marker — a fresh PVC,
-	// or one predating R2 sync) adopts the latest remote snapshot before serving. A
-	// volume that has synced is left to the operator (`db push`/`pull`). Fatal on
-	// failure: booting on absent/stale data would silently serve the wrong thing.
-	{
-		use real_estate_allocation::sync;
-		exit_on_error(rt.block_on(sync::bootstrap(&config)));
-	}
-
-	// Content otherwise arrives via `db pull`, never fabricated on boot — the server
-	// only ensures the schema is current (via `open`) and serves what's there.
-	let store = rt.block_on(async { SqliteStore::open(config.db_path.as_ref(), config.data_dir.clone().inner()).await.expect("open sqlite store") });
+	// Content arrives via litestream (fresh volumes are restored by the deploy's
+	// init container; dev pulls via `nix run .#pull-prod-db`), never fabricated on
+	// boot — the server only ensures the schema is current (via `open`) and serves
+	// what's there.
+	let store = rt.block_on(async {
+		let store = SqliteStore::open(config.db_path.as_ref()).await.expect("open sqlite store");
+		// Self-extinguishing (see `import_legacy`): fatal on failure — serving with
+		// bytes still on disk instead of in blobs would silently lose them later.
+		exit_on_error(real_estate_allocation::store::import_legacy(&store, config.db_path.as_ref()).await);
+		store
+	});
 
 	//HACK: dioxus-server 0.7.9 does not forward `LaunchBuilder::with_context`
 	// to server functions — those contexts only reach the SSR vdom, so a

@@ -6,7 +6,7 @@ use real_estate_allocation::store::{BuildingRepository, SqliteStore, seed};
 async fn main() {
 	let dir = std::env::temp_dir().join("rea_seed_smoke");
 	let _ = std::fs::remove_dir_all(&dir);
-	let store = SqliteStore::open(&dir.join("app.db"), dir.join("properties")).await.expect("open store");
+	let store = SqliteStore::open(&dir.join("app.db")).await.expect("open store");
 	seed(&store).await.expect("seed");
 
 	let all = store.list(None).await.expect("list");
@@ -17,14 +17,19 @@ async fn main() {
 		let files = store.list_files(b.id).await.expect("list files");
 		assert!(!files.is_empty(), "{} has no pics", b.name);
 		for f in &files {
-			let path = store.file_path(b.id, f.apt, f.id, &f.filename);
-			let bytes = std::fs::read(&path).expect("pic on disk");
+			let bytes = store.file_content(f.id).await.expect("pic blob in db");
 			assert!(bytes.len() > 1000, "{} pic suspiciously small", f.filename);
 		}
 		let dev = b.developer.as_ref().expect("seed sets a developer on every building");
 		assert!(store.get_developer(dev).await.expect("get developer").is_some(), "{} references unknown developer {dev}", b.name);
 		let price = b.avg_price().map(|m| m.to_string()).unwrap_or_else(|| "?".into());
-		println!("{:<42} {price:>9}  {:<18} {} lots  {} pics  dev={dev}", b.name, b.construction.as_ref(), b.apartments.len(), files.len());
+		println!(
+			"{:<42} {price:>9}  {:<18} {} lots  {} pics  dev={dev}",
+			b.name,
+			b.construction.as_ref(),
+			b.apartments.len(),
+			files.len()
+		);
 	}
 	println!("OK");
 }

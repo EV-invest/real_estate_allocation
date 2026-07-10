@@ -1,7 +1,4 @@
-use std::{
-	path::{Path, PathBuf},
-	str::FromStr as _,
-};
+use std::{path::Path, str::FromStr as _};
 
 use async_trait::async_trait;
 use ev_lib::architecture::{Reader, Repository, Specification};
@@ -25,7 +22,8 @@ pub trait BuildingRepository: Repository<Aggregate = Building> + Reader<Aggregat
 	/// validated against the developers table here — a dangling one is a `Validation`
 	/// error, never silently written.
 	async fn put(&self, b: &Building) -> Result<(), DomainError>;
-	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError>;
+	async fn add_file(&self, f: PropertyFile, content: &[u8]) -> Result<(), DomainError>;
+	async fn file_content(&self, id: FileId) -> Result<Vec<u8>, DomainError>;
 	async fn list_files(&self, id: BuildingId) -> Result<Vec<PropertyFile>, DomainError>;
 	async fn get_developer(&self, name: &str) -> Result<Option<Developer>, DomainError>;
 }
@@ -33,15 +31,13 @@ pub trait BuildingRepository: Repository<Aggregate = Building> + Reader<Aggregat
 #[derive(Clone)]
 pub struct SqliteStore {
 	pool: SqlitePool,
-	data_dir: PathBuf,
 }
 
 impl SqliteStore {
-	pub async fn open(db_path: &Path, data_dir: PathBuf) -> Result<Self, DomainError> {
+	pub async fn open(db_path: &Path) -> Result<Self, DomainError> {
 		if let Some(parent) = db_path.parent() {
 			std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create db dir: {e}")))?;
 		}
-		std::fs::create_dir_all(&data_dir).map_err(|e| DomainError::Repository(format!("create data dir: {e}")))?;
 
 		// `foreign_keys(true)` per connection so `property_files.property_id` →
 		// properties(id) is enforced by the DB, not just by discipline.
@@ -54,17 +50,55 @@ impl SqliteStore {
 		// the DB current, and via `db migrate` for explicit/CI use. The `Building` doc
 		// shape stays owned by the Rust struct — migrations only touch table structure.
 		sqlx::migrate!().run(&pool).await.map_err(|e| DomainError::Repository(format!("migrate: {e}")))?;
-		Ok(Self { pool, data_dir })
+		Ok(Self { pool })
 	}
 
-	/// Building files at `./data/properties/<building_id>/<file_id>__<filename>`;
-	/// per-lot files nested under `…/<building_id>/apt/<number>/…`.
-	pub fn file_path(&self, building_id: BuildingId, apt: Option<u32>, file_id: FileId, filename: &str) -> PathBuf {
-		let mut dir = self.data_dir.join(building_id.raw().to_string());
-		if let Some(n) = apt {
-			dir = dir.join("apt").join(n.to_string());
-		}
-		dir.join(format!("{}__{filename}", file_id.raw()))
+	/// The saved dock arrangement for (user, band group); `""` user = the global
+	/// layout until per-user arrives.
+	pub async fn load_layout(&self, user: &str, breakpoint: &str) -> Result<Option<String>, DomainError> {
+		let row = sqlx::query("SELECT doc FROM layouts WHERE user = ? AND breakpoint = ?")
+			.bind(user)
+			.bind(breakpoint)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		Ok(row.map(|r| r.get("doc")))
+	}
+
+	pub async fn save_layout(&self, user: &str, breakpoint: &str, doc: &str) -> Result<(), DomainError> {
+		sqlx::query("INSERT INTO layouts (user, breakpoint, doc) VALUES (?, ?, ?) ON CONFLICT (user, breakpoint) DO UPDATE SET doc = excluded.doc")
+			.bind(user)
+			.bind(breakpoint)
+			.bind(doc)
+			.execute(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		Ok(())
+	}
+
+	pub async fn place_cache_get(&self, building: BuildingId) -> Result<Option<(String, jiff::Timestamp)>, DomainError> {
+		let row = sqlx::query("SELECT doc, fetched_at FROM place_cache WHERE building = ?")
+			.bind(building.raw().to_string())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		row.map(|r| {
+			let fetched_at: String = r.get("fetched_at");
+			let fetched_at = fetched_at.parse().map_err(|e| corrupt_row(DomainError::Repository(format!("place_cache fetched_at: {e}"))))?;
+			Ok((r.get("doc"), fetched_at))
+		})
+		.transpose()
+	}
+
+	pub async fn place_cache_put(&self, building: BuildingId, doc: &str, fetched_at: jiff::Timestamp) -> Result<(), DomainError> {
+		sqlx::query("INSERT INTO place_cache (building, doc, fetched_at) VALUES (?, ?, ?) ON CONFLICT (building) DO UPDATE SET doc = excluded.doc, fetched_at = excluded.fetched_at")
+			.bind(building.raw().to_string())
+			.bind(doc)
+			.bind(fetched_at.to_string())
+			.execute(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		Ok(())
 	}
 }
 
@@ -292,25 +326,85 @@ pub async fn seed(store: &SqliteStore) -> Result<(), DomainError> {
 			.await?;
 
 		for (filename, content_type, bytes) in s.pics {
-			let fid = FileId::new();
-			let path = store.file_path(id, None, fid, filename);
-			if let Some(parent) = path.parent() {
-				std::fs::create_dir_all(parent).map_err(|e| DomainError::Repository(format!("create file dir: {e}")))?;
-			}
-			std::fs::write(&path, bytes).map_err(|e| DomainError::Repository(format!("write seed pic: {e}")))?;
 			store
-				.add_file(PropertyFile {
-					id: fid,
-					building_id: id,
-					apt: None,
-					kind: FileKind::Pic,
-					filename: (*filename).into(),
-					content_type: (*content_type).into(),
-				})
+				.add_file(
+					PropertyFile {
+						id: FileId::new(),
+						building_id: id,
+						apt: None,
+						kind: FileKind::Pic,
+						filename: (*filename).into(),
+						content_type: (*content_type).into(),
+					},
+					bytes,
+				)
 				.await?;
 		}
 	}
 
+	Ok(())
+}
+
+/// Self-extinguishing bridge from the files-on-disk era: fill the blob rows the
+/// 0002 migration left as `x''` from `<db dir>/properties/…`, adopt the layout
+/// json into `layouts`, then rename both to `*.imported`. Any missing/unreadable
+/// source file is a hard error — no partial imports. `place.json` caches are
+/// dropped, not imported (the cache regenerates). Delete this fn (and its `main`
+/// call) once prod has run it.
+pub async fn import_legacy(store: &SqliteStore, db_path: &Path) -> Result<(), DomainError> {
+	let dir = db_path.parent().expect("open() created the db dir");
+	let data_dir = dir.join("properties");
+	let layout_path = dir.join("dashboard_layout.json");
+
+	let pending = sqlx::query_as::<_, FileRow>("SELECT id, property_id, apt, kind, filename, content_type FROM property_files WHERE content = x''")
+		.fetch_all(&store.pool)
+		.await
+		.map_err(map_sqlx_error)?;
+	if !data_dir.exists() && !layout_path.exists() {
+		// A blob-era DB next to no legacy dir is the normal end state — but rows
+		// still carrying the migration placeholder mean their bytes are GONE.
+		if !pending.is_empty() {
+			return Err(DomainError::Repository(format!(
+				"{} property_files rows have no content and the legacy data dir {} is gone — restore it and reboot",
+				pending.len(),
+				data_dir.display()
+			)));
+		}
+		return Ok(());
+	}
+
+	for row in pending {
+		let f = PropertyFile::try_from(row)?;
+		let mut d = data_dir.join(f.building_id.raw().to_string());
+		if let Some(n) = f.apt {
+			d = d.join("apt").join(n.to_string());
+		}
+		let path = d.join(format!("{}__{}", f.id.raw(), f.filename));
+		let bytes = std::fs::read(&path).map_err(|e| DomainError::Repository(format!("legacy import: read {}: {e}", path.display())))?;
+		sqlx::query("UPDATE property_files SET content = ? WHERE id = ?")
+			.bind(&bytes)
+			.bind(f.id.raw().to_string())
+			.execute(&store.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+	}
+
+	match std::fs::read_to_string(&layout_path) {
+		Ok(s) =>
+			for (k, v) in crate::api::parse_seeds(&s).map_err(DomainError::Repository)? {
+				store.save_layout("", &k, &v.to_string()).await?;
+			},
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => {} // layout is only written after a save; absent is a valid legacy state
+		Err(e) => return Err(DomainError::Repository(format!("legacy import: read {}: {e}", layout_path.display()))),
+	}
+
+	for p in [&data_dir, &layout_path] {
+		if p.exists() {
+			let to = std::path::PathBuf::from(format!("{}.imported", p.display()));
+			std::fs::rename(p, &to).map_err(|e| DomainError::Repository(format!("legacy import: rename {} → {}: {e}", p.display(), to.display())))?;
+		}
+	}
+	dioxus::logger::tracing::info!("legacy data imported into sqlite; originals renamed to *.imported");
 	Ok(())
 }
 
@@ -457,18 +551,34 @@ impl BuildingRepository for SqliteStore {
 		}))
 	}
 
-	async fn add_file(&self, f: PropertyFile) -> Result<(), DomainError> {
-		sqlx::query("INSERT INTO property_files (id, property_id, apt, kind, filename, content_type) VALUES (?, ?, ?, ?, ?, ?)")
+	async fn add_file(&self, f: PropertyFile, content: &[u8]) -> Result<(), DomainError> {
+		sqlx::query("INSERT INTO property_files (id, property_id, apt, kind, filename, content_type, content) VALUES (?, ?, ?, ?, ?, ?, ?)")
 			.bind(f.id.raw().to_string())
 			.bind(f.building_id.raw().to_string())
 			.bind(f.apt.map(|n| n as i64))
 			.bind(f.kind.as_ref())
 			.bind(&f.filename)
 			.bind(&f.content_type)
+			.bind(content)
 			.execute(&self.pool)
 			.await
 			.map_err(map_sqlx_error)?;
 		Ok(())
+	}
+
+	async fn file_content(&self, id: FileId) -> Result<Vec<u8>, DomainError> {
+		let row = sqlx::query("SELECT content FROM property_files WHERE id = ?")
+			.bind(id.raw().to_string())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(map_sqlx_error)?;
+		match row {
+			Some(r) => Ok(r.get("content")),
+			None => Err(DomainError::NotFound {
+				entity: "file",
+				id: id.raw().to_string(),
+			}),
+		}
 	}
 
 	/// All files for a building, lot-level and building-level alike; the caller

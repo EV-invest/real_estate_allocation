@@ -9,10 +9,10 @@ use crate::domain::{Building, BuildingId, FileKind, PropertyFile, PropertyStateK
 
 #[cfg(not(target_arch = "wasm32"))]
 const CACHE_TTL_SECS: i64 = 30 * 24 * 3600;
-/// The committed seeds (breakpoint → arrangement, keyed like `layout_path`), baked
-/// into the binary so a fresh prod volume (no saved `layout_path` yet) still opens
-/// onto the curated layout instead of the bare built-in seed. Pressing `s` writes
-/// `layout_path`, which overrides this.
+/// The committed seeds (breakpoint → arrangement, keyed like the `layouts` table),
+/// baked into the binary so a fresh DB (no saved layout yet) still opens onto the
+/// curated layout instead of the bare built-in seed. Pressing `s` writes a
+/// `layouts` row, which overrides this.
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_LAYOUT: &str = include_str!("../assets/dashboard_layout.json");
 /// The only client↔server seam. Each `#[server]` fn runs on the host, pulling the
@@ -41,7 +41,7 @@ pub async fn list_buildings(filter: Option<Vec<PropertyStateKind>>) -> Result<Ve
 	let spec = move |b: &Building| states.iter().any(|s| InState(*s).holds(b));
 	let mut buildings = state.store.list(Some(&spec)).await.map_err(to_server_err)?;
 	for b in buildings.iter_mut() {
-		b.coords = resolve_coords(b.id, &b.place, &state.config).await;
+		b.coords = resolve_coords(b.id, &b.place, &state).await;
 	}
 	Ok(buildings)
 }
@@ -50,7 +50,7 @@ pub async fn get_building(id: BuildingId) -> Result<Option<Building>, ServerFnEr
 	let state = app_state().await?;
 	let mut building = enrich_building(&state, id).await.map_err(to_server_err)?;
 	if let Some(b) = building.as_mut() {
-		b.coords = resolve_coords(id, &b.place, &state.config).await;
+		b.coords = resolve_coords(id, &b.place, &state).await;
 	}
 	Ok(building)
 }
@@ -110,29 +110,23 @@ pub async fn upload_file(
 		return Err(ServerFnError::new("not authorized to upload"));
 	}
 
-	let file_id = crate::domain::FileId::new();
-	let path = store.file_path(building_id, appt, file_id, &filename);
-	if let Some(parent) = path.parent() {
-		std::fs::create_dir_all(parent).map_err(|e| ServerFnError::new(format!("create dir: {e}")))?;
-	}
-	std::fs::write(&path, &bytes).map_err(|e| ServerFnError::new(format!("write file: {e}")))?;
-
 	let file = PropertyFile {
-		id: file_id,
+		id: crate::domain::FileId::new(),
 		building_id,
 		apt: appt,
 		kind,
 		filename,
 		content_type,
 	};
-	store.add_file(file.clone()).await.map_err(to_server_err)?;
+	store.add_file(file.clone(), &bytes).await.map_err(to_server_err)?;
 	Ok(file)
 }
 #[server]
-pub async fn file_bytes(id: BuildingId, appt: Option<u32>, file_id: crate::domain::FileId, filename: String) -> Result<Vec<u8>, ServerFnError> {
+pub async fn file_bytes(file_id: crate::domain::FileId) -> Result<Vec<u8>, ServerFnError> {
+	use crate::store::BuildingRepository;
+
 	let store = app_state().await?.store;
-	let path = store.file_path(id, appt, file_id, &filename);
-	std::fs::read(&path).map_err(|e| ServerFnError::new(format!("read file: {e}")))
+	store.file_content(file_id).await.map_err(to_server_err)
 }
 #[server]
 pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
@@ -141,43 +135,35 @@ pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
-/// Persist the current dock arrangement as its band group's global seed (in the map
-/// at `config.layout_path`). An `xl`-group save also becomes the `default` seed, the
-/// one groups without their own save open onto.
+/// Persist the current dock arrangement as its band group's global seed (a
+/// `layouts` row under the `""` user). An `xl`-group save also becomes the
+/// `default` seed, the one groups without their own save open onto.
 #[server]
 pub async fn save_default_layout(json: String, breakpoint: dockview_dioxus::Breakpoint) -> Result<(), ServerFnError> {
 	let layout: serde_json::Value = serde_json::from_str(&json).map_err(|e| ServerFnError::new(format!("layout not json: {e}")))?;
-	let path = app_state().await?.config.layout_path;
-	let path = path.as_ref();
-	let mut seeds = match std::fs::read_to_string(path) {
-		Ok(s) => parse_seeds(&s).map_err(ServerFnError::new)?,
-		Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
-		Err(e) => return Err(ServerFnError::new(format!("read layout: {e}"))),
-	};
+	let store = app_state().await?.store;
 	let key = seed_key(breakpoint);
 	if key == "xl" {
-		seeds.insert("default".into(), layout.clone());
+		store.save_layout("", "default", &layout.to_string()).await.map_err(to_server_err)?;
 	}
-	seeds.insert(key.into(), layout);
-	if let Some(parent) = path.parent() {
-		std::fs::create_dir_all(parent).map_err(|e| ServerFnError::new(format!("create layout dir: {e}")))?;
-	}
-	std::fs::write(path, serde_json::to_string(&seeds).expect("seeds map serializes")).map_err(|e| ServerFnError::new(format!("write layout: {e}")))?;
+	store.save_layout("", key, &layout.to_string()).await.map_err(to_server_err)?;
 	Ok(())
 }
 
-/// This band group's saved seed, falling back to the `default` one, from the saved
-/// map (or the committed `DEFAULT_LAYOUT` when none has been saved on this volume
-/// yet). A genuine read failure surfaces as an error.
+/// This band group's saved seed, falling back to the `default` one, then to the
+/// committed `DEFAULT_LAYOUT` when nothing has been saved in this DB yet.
 #[server]
 pub async fn load_default_layout(breakpoint: dockview_dioxus::Breakpoint) -> Result<Option<String>, ServerFnError> {
-	let path = app_state().await?.config.layout_path;
-	let seeds = match std::fs::read_to_string(path.as_ref()) {
-		Ok(s) => parse_seeds(&s).map_err(ServerFnError::new)?,
-		Err(e) if e.kind() == std::io::ErrorKind::NotFound => parse_seeds(DEFAULT_LAYOUT).expect("committed seeds parse"),
-		Err(e) => return Err(ServerFnError::new(format!("read layout: {e}"))),
-	};
-	Ok(seeds.get(seed_key(breakpoint)).or_else(|| seeds.get("default")).map(|v| v.to_string()))
+	let store = app_state().await?.store;
+	let key = seed_key(breakpoint);
+	if let Some(doc) = store.load_layout("", key).await.map_err(to_server_err)? {
+		return Ok(Some(doc));
+	}
+	if let Some(doc) = store.load_layout("", "default").await.map_err(to_server_err)? {
+		return Ok(Some(doc));
+	}
+	let seeds = parse_seeds(DEFAULT_LAYOUT).expect("committed seeds parse");
+	Ok(seeds.get(key).or_else(|| seeds.get("default")).map(|v| v.to_string()))
 }
 
 #[server]
@@ -198,11 +184,11 @@ pub(crate) fn seed_key(breakpoint: dockview_dioxus::Breakpoint) -> &'static str 
 	}
 }
 
-/// `BTreeMap` so the file's bytes are deterministic — it participates in the sync
-/// snapshot's content hash. A `version` top-level key marks the pre-seeds format
-/// (one bare arrangement): adopt it as `default`.
+/// Seeds-map parser for the committed `DEFAULT_LAYOUT` (and the legacy layout
+/// file during `store::import_legacy`). A `version` top-level key marks the
+/// pre-seeds format (one bare arrangement): adopt it as `default`.
 #[cfg(not(target_arch = "wasm32"))]
-fn parse_seeds(s: &str) -> Result<BTreeMap<String, serde_json::Value>, String> {
+pub(crate) fn parse_seeds(s: &str) -> Result<BTreeMap<String, serde_json::Value>, String> {
 	let serde_json::Value::Object(m) = serde_json::from_str(s).map_err(|e| format!("layout file: {e}"))? else {
 		return Err("layout file: expected an object".into());
 	};
@@ -284,34 +270,36 @@ fn mock_series(seed: u64, purchased_at: Option<jiff::Timestamp>) -> Vec<(jiff::T
 		.map(|(t, v)| (jiff::Timestamp::from_second(t).expect("week within range"), v))
 		.collect()
 }
-/// On-disk pin cache at `<data_dir>/<id>/place.json`. `place_id` is stored so a
-/// changed place invalidates the entry; `fetched_at` drives the monthly refresh.
+/// Pin cache row (`place_cache.doc`). `place_id` is stored so a changed place
+/// invalidates the entry; the row's `fetched_at` drives the monthly refresh.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(serde::Deserialize, serde::Serialize)]
 struct CachedPlace {
 	place_id: String,
 	coords: crate::domain::Coords,
-	fetched_at: jiff::Timestamp,
 }
 
-/// Resolve a property's pin, reading the disk cache and only hitting Google's
-/// Places API when the entry is missing, stale (>1 month), or points at a
-/// different place. A failed resolve yields `None` (no pin) rather than failing
+/// Resolve a property's pin, reading the `place_cache` table and only hitting
+/// Google's Places API when the entry is missing, stale (>1 month), or points at
+/// a different place. A failed resolve yields `None` (no pin) rather than failing
 /// the whole listing — one unresolvable place must not blank the map.
 #[cfg(not(target_arch = "wasm32"))]
-async fn resolve_coords(id: BuildingId, place: &crate::domain::GooglePlace, cfg: &crate::config::AppConfig) -> Option<crate::domain::Coords> {
+async fn resolve_coords(id: BuildingId, place: &crate::domain::GooglePlace, state: &AppState) -> Option<crate::domain::Coords> {
 	use secrecy::ExposeSecret as _;
 
-	let path = cfg.data_dir.as_ref().join(id.raw().to_string()).join("place.json");
-
-	if let Ok(bytes) = std::fs::read(&path) {
-		// A corrupt/old-schema cache file is simply ignored and re-fetched below.
-		if let Ok(c) = serde_json::from_slice::<CachedPlace>(&bytes) {
-			let age = jiff::Timestamp::now().as_second() - c.fetched_at.as_second();
-			if c.place_id == place.as_str() && age < CACHE_TTL_SECS {
-				return Some(c.coords);
+	match state.store.place_cache_get(id).await {
+		Ok(Some((doc, fetched_at))) => {
+			// A corrupt/old-schema cache doc is simply ignored and re-fetched below.
+			if let Ok(c) = serde_json::from_str::<CachedPlace>(&doc) {
+				let age = jiff::Timestamp::now().as_second() - fetched_at.as_second();
+				if c.place_id == place.as_str() && age < CACHE_TTL_SECS {
+					return Some(c.coords);
+				}
 			}
 		}
+		Ok(None) => {}
+		// A cache-read failure only costs a re-fetch; the pin can still resolve.
+		Err(e) => dioxus::logger::tracing::warn!(%e, "place cache read failed"),
 	}
 
 	use std::sync::atomic::Ordering::Relaxed;
@@ -322,7 +310,7 @@ async fn resolve_coords(id: BuildingId, place: &crate::domain::GooglePlace, cfg:
 		return None;
 	}
 
-	let coords = match fetch_place(place.as_str(), cfg.maps_api_key.expose_secret()).await {
+	let coords = match fetch_place(place.as_str(), state.config.maps_api_key.expose_secret()).await {
 		Ok(c) => c,
 		Err(PlaceError::RateLimited { retry_after_secs }) => {
 			PLACES_BLOCKED_UNTIL.store(now + retry_after_secs, Relaxed);
@@ -339,16 +327,10 @@ async fn resolve_coords(id: BuildingId, place: &crate::domain::GooglePlace, cfg:
 	let cached = CachedPlace {
 		place_id: place.as_str().to_owned(),
 		coords,
-		fetched_at: jiff::Timestamp::now(),
 	};
-	let write = (|| -> std::io::Result<()> {
-		if let Some(parent) = path.parent() {
-			std::fs::create_dir_all(parent)?;
-		}
-		std::fs::write(&path, serde_json::to_vec_pretty(&cached).expect("CachedPlace serialises"))
-	})();
+	let doc = serde_json::to_string(&cached).expect("CachedPlace serialises");
 	// A cache-write failure only costs us next request's fetch; the coords are still good.
-	if let Err(e) = write {
+	if let Err(e) = state.store.place_cache_put(id, &doc, jiff::Timestamp::now()).await {
 		dioxus::logger::tracing::warn!(%e, "cache place coords failed");
 	}
 	Some(coords)

@@ -13,15 +13,10 @@ server = ["dioxus/server"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
 ev_lib = { workspace = true, features = ["architecture", "uikit"] }
-flate2 = "1"
-# `db push`/`pull`: R2 (S3) client + content-hashed tarball snapshots.
-object_store = { version = "0.11", features = ["aws"] }
 # `config` (with its SmartDefault'd AppConfig) is server-only.
 reqwest.workspace = true
-sha2 = "0.10"
 smart-default.workspace = true
 sqlx.workspace = true
-tar = "0.4"
 tokio.workspace = true
 # Serves the built MFE bundle at `/mfe` (`fs`) under a cross-origin allowlist (`cors`).
 tower-http = { version = "0.6", features = ["fs", "cors"] }
@@ -63,6 +58,11 @@ insta.workspace = true
 [[example]]
 name = "seed_smoke"
 path = "../examples/seed_smoke.rs"
+
+# Dies together with `store::import_legacy` (self-extinguishing prod bridge).
+[[example]]
+name = "legacy_import_smoke"
+path = "../examples/legacy_import_smoke.rs"
 
 [[example]]
 name = "uikit_compare"

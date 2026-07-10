@@ -42,9 +42,9 @@ pub fn MediaPanel() -> Element {
 									TabsTrigger { value: "deck", "Deck" }
 									TabsTrigger { value: "docs", "Docs" }
 								}
-								TabsContent { value: "pics", PicGrid { building_id: bid, appt, files: files.clone() } }
-								TabsContent { value: "deck", FileList { building_id: bid, appt, files: files.clone(), kind: FileKind::PitchDeck } }
-								TabsContent { value: "docs", FileList { building_id: bid, appt, files: files.clone(), kind: FileKind::Document } }
+								TabsContent { value: "pics", PicGrid { files: files.clone() } }
+								TabsContent { value: "deck", FileList { files: files.clone(), kind: FileKind::PitchDeck } }
+								TabsContent { value: "docs", FileList { files: files.clone(), kind: FileKind::Document } }
 							}
 							if is_admin {
 								DropZone { building_id: bid, appt, on_uploaded: move |_| reload += 1 }
@@ -58,7 +58,7 @@ pub fn MediaPanel() -> Element {
 }
 
 #[component]
-fn PicGrid(building_id: BuildingId, appt: Option<u32>, files: Vec<PropertyFile>) -> Element {
+fn PicGrid(files: Vec<PropertyFile>) -> Element {
 	let pics: Vec<_> = files.into_iter().filter(|f| f.kind == FileKind::Pic).collect();
 	if pics.is_empty() {
 		return rsx! { p { class: "text-muted-foreground text-sm", "No pictures yet." } };
@@ -66,21 +66,17 @@ fn PicGrid(building_id: BuildingId, appt: Option<u32>, files: Vec<PropertyFile>)
 	rsx! {
 		div { class: "grid grid-cols-2 gap-2 pt-2",
 			for f in pics {
-				Pic { building_id, appt, file: f }
+				Pic { file: f }
 			}
 		}
 	}
 }
 
 #[component]
-fn Pic(building_id: BuildingId, appt: Option<u32>, file: PropertyFile) -> Element {
+fn Pic(file: PropertyFile) -> Element {
 	let fid = file.id;
-	let fname = file.filename.clone();
 	let content_type = file.content_type.clone();
-	let bytes = use_resource(move || {
-		let fname = fname.clone();
-		async move { crate::api::file_bytes(building_id, appt, fid, fname).await.ok() }
-	});
+	let bytes = use_resource(move || async move { crate::api::file_bytes(fid).await.ok() });
 	let src = bytes.read().as_ref().and_then(|o| o.as_ref()).map(|b| data_url(&content_type, b));
 
 	rsx! {
@@ -94,7 +90,7 @@ fn Pic(building_id: BuildingId, appt: Option<u32>, file: PropertyFile) -> Elemen
 }
 
 #[component]
-fn FileList(building_id: BuildingId, appt: Option<u32>, files: Vec<PropertyFile>, kind: FileKind) -> Element {
+fn FileList(files: Vec<PropertyFile>, kind: FileKind) -> Element {
 	let items: Vec<_> = files.into_iter().filter(|f| f.kind == kind).collect();
 	if items.is_empty() {
 		return rsx! { p { class: "text-muted-foreground text-sm", "Nothing here yet." } };
@@ -102,21 +98,17 @@ fn FileList(building_id: BuildingId, appt: Option<u32>, files: Vec<PropertyFile>
 	rsx! {
 		div { class: "flex flex-col gap-2 pt-2",
 			for f in items {
-				Download { building_id, appt, file: f }
+				Download { file: f }
 			}
 		}
 	}
 }
 
 #[component]
-fn Download(building_id: BuildingId, appt: Option<u32>, file: PropertyFile) -> Element {
+fn Download(file: PropertyFile) -> Element {
 	let fid = file.id;
-	let fname = file.filename.clone();
 	let content_type = file.content_type.clone();
-	let bytes = use_resource(move || {
-		let fname = fname.clone();
-		async move { crate::api::file_bytes(building_id, appt, fid, fname).await.ok() }
-	});
+	let bytes = use_resource(move || async move { crate::api::file_bytes(fid).await.ok() });
 	let href = bytes.read().as_ref().and_then(|o| o.as_ref()).map(|b| data_url(&content_type, b));
 
 	rsx! {

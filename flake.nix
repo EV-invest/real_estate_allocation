@@ -213,6 +213,43 @@
           '';
         };
 
+        # ── dev refresh from prod ───────────────────────────────────────────
+        # `nix run .#pull-prod-db` → replace the local dev DB with prod's,
+        # restored from the litestream R2 replica — the same replica that backs
+        # prod up and bootstraps fresh PVCs, so a successful pull doubles as the
+        # backup-restore drill. Prod is authoritative; dev only ever pulls
+        # (per-user layouts make a dev push actively destructive). Creds:
+        # R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY in the environment.
+        runPullProdDb =
+          let
+            # Mirrors the prod sidecar's replica block (gitops owns that copy);
+            # the `/data/app.db` key is just the replica's index name here.
+            litestreamCfg = pkgs.writeText "litestream-pull.yml" ''
+              dbs:
+                - path: /data/app.db
+                  replicas:
+                    - type: s3
+                      endpoint: https://1dbedc392b294bdef442b64e9030ba96.r2.cloudflarestorage.com
+                      bucket: ev-invest-state
+                      path: real-estate-allocation/litestream
+            '';
+          in
+          pkgs.writeShellApplication {
+            name = "pull-prod-db";
+            runtimeInputs = with pkgs; [ litestream coreutils ];
+            text = ''
+              : "''${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID not set}"
+              : "''${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY not set}"
+              export LITESTREAM_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+              export LITESTREAM_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+              out="''${XDG_DATA_HOME:-$HOME/.local/share}/real_estate_allocation/app.db"
+              mkdir -p "$(dirname "$out")"
+              rm -f "$out" "$out-wal" "$out-shm"
+              litestream restore -config ${litestreamCfg} -o "$out" /data/app.db
+              echo "restored prod DB → $out"
+            '';
+          };
+
         # ── test suite: cargo test (runs the insta snapshots) ──────────────
         # Delegates to `nix develop` so cargo gets the devShell toolchain (the
         # `.cargo` sccache/cranelift/mold accelerators a bare app PATH lacks),
@@ -436,11 +473,13 @@
         # `nix run .#dev`         → Tailwind watch + fullstack `dx serve`
         # `nix run .#dev-embeds`  → build + serve the MFE bundle standalone (reaPort+2)
         # `nix run .#test`        → cargo test (insta snapshots)
+        # `nix run .#pull-prod-db`→ replace the local dev DB with prod's (litestream R2 restore)
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           dev-embeds = { type = "app"; program = "${runDevEmbeds}/bin/run-dev-embeds"; };
           default = { type = "app"; program = "${runDev}/bin/run-dev"; };
           test = { type = "app"; program = "${runTest}/bin/run-test"; };
+          pull-prod-db = { type = "app"; program = "${runPullProdDb}/bin/pull-prod-db"; };
         };
 
         packages = {
@@ -482,6 +521,7 @@
               dioxus-cli # `dx serve` (fullstack dev server)
               tailwindcss_4 # standalone Tailwind v4 CLI (input.css + mfe.css)
               wasm-bindgen-cli # manual embed builds — must match wasm-bindgen =0.2.125
+              litestream # manual restores/inspection; `.#pull-prod-db` wraps it
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
             env.RUST_BACKTRACE = 1;
