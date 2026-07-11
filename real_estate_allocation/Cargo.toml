@@ -64,9 +64,5 @@ path = "../examples/seed_smoke.rs"
 name = "legacy_import_smoke"
 path = "../examples/legacy_import_smoke.rs"
 
-[[example]]
-name = "uikit_compare"
-path = "../examples/uikit_compare.rs"
-
 [lints]
 workspace = true

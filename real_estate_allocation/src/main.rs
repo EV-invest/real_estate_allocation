@@ -48,10 +48,8 @@ fn main() {
 	// `Config` runs before the config file is loaded (it may write a fresh one) and
 	// never returns; only a `Db` command survives to be handled after config load.
 	let db_command = match command {
-		Some(Command::Config { cmd }) => {
-			AppConfig::handle_settings_command(cmd, settings);
-			return;
-		}
+		// `handle_settings_command` is `-> !` (it `process::exit`s), so this arm never yields.
+		Some(Command::Config { cmd }) => AppConfig::handle_settings_command(cmd, settings),
 		Some(Command::Db { cmd }) => Some(cmd),
 		None => None,
 	};
