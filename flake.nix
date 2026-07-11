@@ -365,6 +365,19 @@
             # from a build script). One remote, hand-kept; a multi-remote setup
             # would emit it from a tiny print step into landing's registry.
             printf '%s\n' '{"name":"real-estate.overview","tag":"mfe-real-estate-overview","kind":"component"}' > "$out/mfe.json"
+
+            # Component-MFE snapshot contract (frontend/PATTERNS.md § microfrontends):
+            # render the SAME `view` components the live bundle mounts to static HTML, so
+            # the conductor's fallback can't drift. Native host-target compile — deps are
+            # pure Rust in the vendored lock, so it stays offline/hermetic. Emptying
+            # RUSTFLAGS drops the wasm-only cfgs the buildPhase exported (the
+            # getrandom_backend=wasm_js one breaks a native build). id="portfolio" is the
+            # conductor's scroll anchor — a build-time invariant, not a runtime hope.
+            RUSTFLAGS= SNAPSHOT_CSS="$out/mfe.css" \
+              cargo run -p real_estate_allocation_embeds --example portfolio_snapshot --release --offline \
+              > "$out/portfolio.html"
+            test -s "$out/portfolio.html"
+            grep -q 'id="portfolio"' "$out/portfolio.html"
             runHook postInstall
           '';
           doCheck = false;

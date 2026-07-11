@@ -1,4 +1,7 @@
-use std::{path::Path, str::FromStr as _};
+use std::{
+	path::{Path, PathBuf},
+	str::FromStr as _,
+};
 
 use async_trait::async_trait;
 use ev_lib::architecture::{Reader, Repository, Specification};
@@ -400,7 +403,7 @@ pub async fn import_legacy(store: &SqliteStore, db_path: &Path) -> Result<(), Do
 
 	for p in [&data_dir, &layout_path] {
 		if p.exists() {
-			let to = std::path::PathBuf::from(format!("{}.imported", p.display()));
+			let to = PathBuf::from(format!("{}.imported", p.display()));
 			std::fs::rename(p, &to).map_err(|e| DomainError::Repository(format!("legacy import: rename {} → {}: {e}", p.display(), to.display())))?;
 		}
 	}
