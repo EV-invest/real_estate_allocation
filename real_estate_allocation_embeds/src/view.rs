@@ -78,8 +78,11 @@ pub fn Overview(building: Featured) -> Element {
 	rsx! {
 		section { id: "portfolio", class: "relative border-t border-main-mist/10 py-24",
 			Container {
-				// Section header
-				div { class: "mb-16 flex flex-col justify-between md:flex-row md:items-end",
+				// Section header. `max-md:flex-col` not `flex-col md:flex-row`: mfe.css lives in
+				// the lowest-priority `reamfe` layer, so the host's unlayered `.flex-col` outranks
+				// our `.md:flex-row` and would pin the header to a column. Defaulting to row and
+				// only overriding below md gives the host no `.flex-col` on this node to grab.
+				div { class: "mb-16 flex max-md:flex-col justify-between md:items-end",
 					div {
 						span { class: "mb-3 block font-mono text-xs uppercase tracking-[0.3em] text-main-accent-t1",
 							"Investment Scope"
