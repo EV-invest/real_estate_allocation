@@ -43,7 +43,21 @@ fn main() {
 		Reset,
 	}
 
-	v_utils::clientside!();
+	// stdout JSON logs + OTLP logs/traces via ev::otel (HTTP; inert when
+	// OTEL_EXPORTER_OTLP_ENDPOINT is unset). Held for the process lifetime.
+	let _ = color_eyre::install();
+	let _otel_guard = {
+		use tracing_subscriber::prelude::*;
+		let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,real_estate_allocation=debug"));
+		let environment = std::env::var("APP_ENV").unwrap_or_else(|_| "production".to_string());
+		let (guard, layers) = ev_lib::otel::telemetry(&ev_lib::otel::Config {
+			traces_sample_rate: ev_lib::otel::Config::traces_sample_rate_for(&environment),
+			environment,
+		})
+		.unzip();
+		tracing_subscriber::registry().with(filter).with(tracing_subscriber::fmt::layer().json()).with(layers).init();
+		guard
+	};
 	let Cli { settings, command } = Cli::parse();
 	// `Config` runs before the config file is loaded (it may write a fresh one) and
 	// never returns; only a `Db` command survives to be handled after config load.
