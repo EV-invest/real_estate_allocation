@@ -8,6 +8,9 @@ use dioxus::prelude::*;
 use ev_lib::uikit::Container;
 use real_estate_allocation_core::{MISSING, domain::Building, factors::profile};
 
+#[cfg(target_arch = "wasm32")]
+use dioxus::web::WebEventExt;
+
 // Banners are static assets served alongside the bundle; they resolve against the
 // asset origin (wherever the `.js` loaded from, or root-relative under the conductor).
 // Provided once above `Overview` so the leaf cards read it from context rather than
@@ -219,24 +222,6 @@ fn snap(v: f64) -> f64 {
 	(((v - A_MIN) / A_STEP).round() * A_STEP + A_MIN).clamp(A_MIN, A_MAX)
 }
 
-/// Capture the pointer on the event's real target so a drag keeps tracking after the
-/// pointer leaves the element — the browser routes every subsequent move to the captor
-/// until pointerup/pointercancel. Without it, leaving the track aborted the drag (#16).
-/// SSR never fires the `onpointerdown` closures, so the native build gets a no-op that
-/// keeps this module compiling off `wasm32` (no `dioxus/web` / `web-sys` pointer APIs).
-#[cfg(target_arch = "wasm32")]
-fn capture_pointer(e: &PointerEvent) {
-	use dioxus::web::WebEventExt;
-	use wasm_bindgen::JsCast;
-	let raw = e.data().as_web_event();
-	if let Some(el) = raw.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()) {
-		let _ = el.set_pointer_capture(raw.pointer_id());
-	}
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn capture_pointer(_e: &PointerEvent) {}
-
 /// Correlation / risk-premia terminal (spans two columns). Shows our instrument's
 /// correlation profile vs the popular alpha factors and, under probabilistic-Kelly
 /// sizing (γ=1), what swapping `w%` of a host book into us does to its effective risk
@@ -288,13 +273,23 @@ fn Calculator() -> Element {
 						}
 						span {
 							class: "relative flex h-6 w-full touch-none select-none items-center",
-							onpointerdown: move |e: PointerEvent| async move {
+							onpointerdown: move |e: PointerEvent| {
 								let Some(t) = track() else { return };
-								capture_pointer(&e);
-								let Ok(rect) = t.get_client_rect().await else { return };
-								bounds.set((rect.origin.x, rect.size.width));
+								let (ox, w) = {
+									#[cfg(target_arch = "wasm32")]
+									{
+										let raw = e.data().as_web_event();
+										let track_el = t.as_web_event();
+										let _ = track_el.set_pointer_capture(raw.pointer_id());
+										let rect = track_el.get_bounding_client_rect();
+										(rect.x(), rect.width())
+									}
+									#[cfg(not(target_arch = "wasm32"))]
+									{ (0.0, 1.0) }
+								};
+								bounds.set((ox, w));
 								dragging.set(true);
-								let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
+								let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
 								swap.set(snap(A_MIN + ratio * (A_MAX - A_MIN)));
 							},
 							onpointermove: move |e: PointerEvent| {
@@ -425,13 +420,23 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 				"aria-valuenow": value(),
 				"aria-valuemin": EXPO_MIN,
 				"aria-valuemax": EXPO_MAX,
-				onpointerdown: move |e: PointerEvent| async move {
+				onpointerdown: move |e: PointerEvent| {
 					let Some(t) = track() else { return };
-					capture_pointer(&e);
-					let Ok(rect) = t.get_client_rect().await else { return };
-					bounds.set((rect.origin.x, rect.size.width));
+					let (ox, w) = {
+						#[cfg(target_arch = "wasm32")]
+						{
+							let raw = e.data().as_web_event();
+							let track_el = t.as_web_event();
+							let _ = track_el.set_pointer_capture(raw.pointer_id());
+							let rect = track_el.get_bounding_client_rect();
+							(rect.x(), rect.width())
+						}
+						#[cfg(not(target_arch = "wasm32"))]
+						{ (0.0, 1.0) }
+					};
+					bounds.set((ox, w));
 					dragging.set(true);
-					let ratio = (e.client_coordinates().x - rect.origin.x) / rect.size.width.max(f64::EPSILON);
+					let ratio = (e.client_coordinates().x - ox) / w.max(f64::EPSILON);
 					value.set((EXPO_MIN + ratio * (EXPO_MAX - EXPO_MIN)).round().clamp(EXPO_MIN, EXPO_MAX));
 				},
 				onpointermove: move |e: PointerEvent| {
