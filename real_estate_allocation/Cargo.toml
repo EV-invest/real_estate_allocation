@@ -40,7 +40,7 @@ clap.workspace = true
 color-eyre.workspace = true
 derive-new.workspace = true
 dioxus = { workspace = true, features = ["fullstack", "router"] }
-dockview_dioxus.workspace = true
+dockviewers.workspace = true
 jiff.workspace = true
 miette.workspace = true
 real_estate_allocation_core.workspace = true

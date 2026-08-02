@@ -1,11 +1,16 @@
+use std::rc::Rc;
+
 use dioxus::prelude::*;
-use dockview_dioxus::{Config, DockPanel, Group, GroupId, Keybind, MinSize, PackedApi, PackedArea, PanelId, Step};
+use dockviewers::dioxus::{Config, DockPanel, Group, GroupId, MinSize, PackedApi, PackedArea, PanelId, Saved, Step};
 
 use crate::{
 	api::load_default_layout,
 	map::MapPanel,
 	panels::{ChartPanel, DetailsPanel, LotsPanel, MediaPanel, PortfolioHeatmap, TopBar},
 };
+
+/// Every panel is at least a 2×2 tile; the dock scales the step with the viewport.
+const MIN: MinSize = MinSize::Steps { w: Step(2), h: Step(2) };
 
 #[component]
 pub fn Dashboard() -> Element {
@@ -44,61 +49,31 @@ pub fn Dashboard() -> Element {
 		]
 	});
 
-	// `PackedArea` hands us its imperative handle once, after the first measure. Stash it so the
-	// load-or-seed effect and the save shortcut can both drive the grid from outside that callback.
-	let mut api_handle = use_signal(|| None::<PackedApi>);
-	let on_ready = Callback::new(move |api: PackedApi| api_handle.set(Some(api)));
-
-	// Fetch and restore the band group's saved seed: once the grid handle arrives (post first
-	// measure, so the band is classified), and again whenever a resize crosses into another
-	// group — each group points at its own arrangement. Falls back to the built-in one
-	// (map+media tabbed, the rest packed beside). Unsaved tweaks are dropped on a group
-	// switch; `s` is what persists them. The group lands in the shared `SeedGroup` so the
+	// One invocation per band entry (first measure, then every crossing), after the dock has already
+	// tried this browser's own cached arrangement. Only the fallbacks are ours: the server's saved
+	// seed for that band, then the built-in one. The band lands in the shared `SeedGroup` so the
 	// build tag can show which seed is live.
-	let mut loaded_group = use_context::<crate::app::SeedGroup>();
-	let min = MinSize::Steps { w: Step(2), h: Step(2) };
-	use_effect(move || {
-		let Some(api) = api_handle() else { return };
-		let bp = *api.breakpoint.read();
-		let group = crate::api::seed_key(bp);
-		if *loaded_group.peek() == Some(group) {
+	let mut seed_group = use_context::<crate::app::SeedGroup>();
+	let on_band = Callback::new(move |mut api: PackedApi| {
+		let band = api.band();
+		seed_group.set(Some(band));
+		if api.restored() {
 			return;
 		}
-		loaded_group.set(Some(group));
-
 		spawn(async move {
-			let mut api = api;
-			let seed = |api: &mut PackedApi| {
-				// A group switch lands on a populated grid; the built-in seed replaces it wholesale.
-				*api.grid.write() = Default::default();
-				let map_group = {
-					let id = api.grid.write().mint_group_id();
-					Group {
-						id,
-						tabs: vec![PanelId("map".into()), PanelId("media".into())],
-						active: 0,
-					}
-				};
-				api.place(map_group, 4, 3, min);
-				for panel in ["chart", "heatmap", "lots", "details"] {
-					let group = Group::new(api.grid.write().mint_group_id(), PanelId(panel.into()));
-					api.place(group, 4, 3, min);
-				}
-			};
-
-			let result = load_default_layout(bp).await;
-			// A later group switch superseded this fetch while it was in flight.
-			if *loaded_group.peek() != Some(group) {
+			let loaded = load_default_layout(band).await;
+			// A resize crossed into another band while this was in flight; that crossing ran its own
+			// load-or-seed and applying this one over it would fight the newer arrangement.
+			if api.band() != band {
 				return;
 			}
-			match result {
-				Ok(Some(json)) => {
+			match loaded {
+				Ok(Some(json)) =>
 					if let Err(e) = api.load(&json) {
 						// A corrupt saved layout must not blank the dashboard; log it and seed the default.
 						dioxus::logger::tracing::error!(?e, "saved layout corrupt — using built-in seed");
 						seed(&mut api);
-					}
-				}
+					},
 				Ok(None) => seed(&mut api),
 				Err(e) => {
 					// A fetch failure for the optional default likewise degrades to the built-in seed.
@@ -109,36 +84,31 @@ pub fn Dashboard() -> Element {
 		});
 	});
 
-	// `s` → save the live arrangement as its band group's global seed (an xl/lg save doubles as
-	// the `default`), registered as a `PackedArea` host action. The closure gets the same
-	// `PackedApi` `on_ready` handed us and POSTs its serialized grid; only fires browser-side
-	// (the listener is wasm-only) but compiles everywhere. The toast gives the user feedback
-	// that the save landed (or didn't), auto-clearing after a beat.
-	let mut toast = use_signal(|| None::<String>);
-	let save_layout = Callback::new(move |api: PackedApi| {
-		let json = api.save();
-		let bp = *api.breakpoint.peek();
-		spawn(async move {
-			let msg = match crate::api::save_default_layout(json, bp).await {
-				Ok(()) => match crate::api::seed_key(bp) {
-					"xl" => "Layout saved (xl/lg + default)".to_string(),
-					key => format!("Layout saved ({key})"),
-				},
-				Err(e) => {
-					dioxus::logger::tracing::error!(%e, "save default layout failed");
-					"Save failed".to_string()
-				}
-			};
-			toast.set(Some(msg));
-			#[cfg(target_arch = "wasm32")]
-			{
-				gloo_timers::future::TimeoutFuture::new(2500).await;
-				toast.set(None);
-			}
-		});
-	});
+	// `Alt+S` is the dock's own per-band localStorage cache — this browser only, no server. `Alt+Shift+S`
+	// publishes the arrangement as *everyone's* seed, which the server accepts only from an admin. The
+	// toast reports either, auto-clearing after a beat.
+	let toast = use_signal(|| None::<String>);
 	let config = Config {
-		actions: vec![(Keybind { key: "s", alt: false, ctrl: false }, save_layout)],
+		storage_key: Some("rea-dashboard".into()),
+		on_save: Some(Rc::new(move |saved| match saved {
+			Saved::Cached { band } => show_toast(toast, format!("Layout cached in this browser ({band})")),
+			Saved::Published { band, json } => {
+				spawn(async move {
+					let msg = match crate::api::save_default_layout(json, band, crate::api::admin_token()).await {
+						// An xl publish doubles as the `default` seed (see `save_default_layout`).
+						Ok(()) => match band {
+							dockviewers::core::Band::Xl => "Layout published (xl + default)".to_string(),
+							band => format!("Layout published ({band})"),
+						},
+						Err(e) => {
+							dioxus::logger::tracing::error!(%e, "publish default layout failed");
+							"Publish failed".to_string()
+						}
+					};
+					show_toast(toast, msg);
+				});
+			}
+		})),
 		..Default::default()
 	};
 
@@ -154,7 +124,7 @@ pub fn Dashboard() -> Element {
 		div { class: "flex h-[calc(100dvh-var(--ev-shell-offset,0px))] flex-col bg-background text-foreground",
 			TopBar {}
 			div { class: "relative min-h-0 flex-1",
-				PackedArea { panels, on_ready: Some(on_ready), config: Some(config) }
+				PackedArea { panels, on_band: Some(on_band), config: Some(config) }
 			}
 			if let Some(msg) = toast() {
 				div {
@@ -166,4 +136,28 @@ pub fn Dashboard() -> Element {
 			}
 		}
 	}
+}
+
+/// The built-in arrangement: map+media tabbed, the rest packed beside them.
+fn seed(api: &mut PackedApi) {
+	api.reset();
+	let map_group = Group {
+		id: api.mint_group_id(),
+		tabs: vec![PanelId("map".into()), PanelId("media".into())],
+		active: 0,
+	};
+	api.place(map_group, 4, 3, MIN);
+	for panel in ["chart", "heatmap", "lots", "details"] {
+		let group = Group::new(api.mint_group_id(), PanelId(panel.into()));
+		api.place(group, 4, 3, MIN);
+	}
+}
+
+fn show_toast(mut toast: Signal<Option<String>>, msg: String) {
+	toast.set(Some(msg));
+	#[cfg(target_arch = "wasm32")]
+	spawn(async move {
+		gloo_timers::future::TimeoutFuture::new(2500).await;
+		toast.set(None);
+	});
 }

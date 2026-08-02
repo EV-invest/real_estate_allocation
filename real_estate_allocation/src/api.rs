@@ -135,35 +135,41 @@ pub async fn am_i_admin(token: String) -> Result<bool, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(!token.is_empty() && token == cfg.admin_token.expose_secret())
 }
-/// Persist the current dock arrangement as its band group's global seed (a
-/// `layouts` row under the `""` user). An `xl`-group save also becomes the
-/// `default` seed, the one groups without their own save open onto.
+/// Publish the current dock arrangement as everyone's seed for that band (a `layouts`
+/// row under the `""` user). An `xl` publish also becomes the `default` seed, the one
+/// bands without their own row open onto. Admin-only — this is the layout every visitor
+/// who hasn't cached their own lands on.
 #[server]
-pub async fn save_default_layout(json: String, breakpoint: dockview_dioxus::Breakpoint) -> Result<(), ServerFnError> {
+pub async fn save_default_layout(json: String, band: dockviewers::core::Band, token: String) -> Result<(), ServerFnError> {
+	use secrecy::ExposeSecret as _;
+
 	let layout: serde_json::Value = serde_json::from_str(&json).map_err(|e| ServerFnError::new(format!("layout not json: {e}")))?;
-	let store = app_state().await?.store;
-	let key = seed_key(breakpoint);
-	if key == "xl" {
+	let AppState { store, config: cfg } = app_state().await?;
+	if token.is_empty() || token != cfg.admin_token.expose_secret() {
+		return Err(ServerFnError::new("not authorized to publish a layout"));
+	}
+	let key = band.to_string();
+	if band == dockviewers::core::Band::Xl {
 		store.save_layout("", "default", &layout.to_string()).await.map_err(to_server_err)?;
 	}
-	store.save_layout("", key, &layout.to_string()).await.map_err(to_server_err)?;
+	store.save_layout("", &key, &layout.to_string()).await.map_err(to_server_err)?;
 	Ok(())
 }
 
-/// This band group's saved seed, falling back to the `default` one, then to the
-/// committed `DEFAULT_LAYOUT` when nothing has been saved in this DB yet.
+/// This band's published seed, falling back to the `default` one, then to the
+/// committed `DEFAULT_LAYOUT` when nothing has been published in this DB yet.
 #[server]
-pub async fn load_default_layout(breakpoint: dockview_dioxus::Breakpoint) -> Result<Option<String>, ServerFnError> {
+pub async fn load_default_layout(band: dockviewers::core::Band) -> Result<Option<String>, ServerFnError> {
 	let store = app_state().await?.store;
-	let key = seed_key(breakpoint);
-	if let Some(doc) = store.load_layout("", key).await.map_err(to_server_err)? {
+	let key = band.to_string();
+	if let Some(doc) = store.load_layout("", &key).await.map_err(to_server_err)? {
 		return Ok(Some(doc));
 	}
 	if let Some(doc) = store.load_layout("", "default").await.map_err(to_server_err)? {
 		return Ok(Some(doc));
 	}
 	let seeds = parse_seeds(DEFAULT_LAYOUT).expect("committed seeds parse");
-	Ok(seeds.get(key).or_else(|| seeds.get("default")).map(|v| v.to_string()))
+	Ok(seeds.get(&key).or_else(|| seeds.get("default")).map(|v| v.to_string()))
 }
 
 #[server]
@@ -173,15 +179,25 @@ pub async fn maps_api_key() -> Result<String, ServerFnError> {
 	let cfg = app_state().await?.config;
 	Ok(cfg.maps_api_key.expose_secret().to_string())
 }
-/// Seeds are kept coarser than the measured band: xl/lg share one arrangement, so do
-/// sm/xs. Not gated server-side — the client keys its save toast off the same grouping.
-pub(crate) fn seed_key(breakpoint: dockview_dioxus::Breakpoint) -> &'static str {
-	use dockview_dioxus::Breakpoint::*;
-	match breakpoint {
-		Xl | Lg => "xl",
-		Md => "md",
-		Sm | Xs => "sm",
+/// Admin token from the embedding system. The larger system hands us an OAuth
+/// token + admin list, so there is no login here; we read the token the host put
+/// on `window.__reaAdminToken` (empty string when absent → non-admin).
+pub(crate) fn admin_token() -> String {
+	#[cfg(target_arch = "wasm32")]
+	{
+		read_admin_token()
 	}
+	#[cfg(not(target_arch = "wasm32"))]
+	{
+		String::new()
+	}
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function rea_admin_token() { return (typeof window !== 'undefined' && window.__reaAdminToken) ? window.__reaAdminToken : ''; }")]
+extern "C" {
+	#[wasm_bindgen(js_name = rea_admin_token)]
+	fn read_admin_token() -> String;
 }
 
 /// Seeds-map parser for the committed `DEFAULT_LAYOUT` (and the legacy layout
@@ -390,24 +406,23 @@ mod tests {
 	use super::*;
 
 	// The seed-resolution invariant: a pre-seeds file (one bare arrangement) is adopted
-	// as `default`, a seeds map resolves per band group (xl/lg, md, sm/xs) falling back
-	// to `default`, legacy per-band keys fold into their group, and any other shape is
+	// as `default`, a seeds map resolves per band falling back to `default`, legacy
+	// per-breakpoint keys fold into the band that subsumed them, and any other shape is
 	// rejected loudly.
 	#[test]
 	fn seed_resolution() {
-		use dockview_dioxus::Breakpoint::*;
-		let resolve = |file: &str, bp: dockview_dioxus::Breakpoint| {
+		use dockviewers::core::Band::*;
+		let resolve = |file: &str, band: dockviewers::core::Band| {
 			let seeds = parse_seeds(file).unwrap();
-			seeds.get(seed_key(bp)).or_else(|| seeds.get("default")).cloned()
+			seeds.get(&band.to_string()).or_else(|| seeds.get("default")).cloned()
 		};
 		assert_eq!(resolve(r#"{"version":1,"grid":{}}"#, Md), Some(serde_json::json!({"version":1,"grid":{}})));
 		assert_eq!(resolve(r#"{"default":1,"md":2}"#, Md), Some(serde_json::json!(2)));
 		assert_eq!(resolve(r#"{"default":1,"md":2}"#, Xl), Some(serde_json::json!(1)));
 		assert_eq!(resolve(r#"{"md":2}"#, Xl), None);
-		assert_eq!(resolve(r#"{"xl":1}"#, Lg), Some(serde_json::json!(1)));
-		assert_eq!(resolve(r#"{"sm":1}"#, Xs), Some(serde_json::json!(1)));
+		assert_eq!(resolve(r#"{"sm":1}"#, Sm), Some(serde_json::json!(1)));
 		assert_eq!(resolve(r#"{"lg":2}"#, Xl), Some(serde_json::json!(2)));
-		assert_eq!(resolve(r#"{"xl":1,"lg":2,"xs":3}"#, Lg), Some(serde_json::json!(1)));
+		assert_eq!(resolve(r#"{"xl":1,"lg":2,"xs":3}"#, Xl), Some(serde_json::json!(1)));
 		assert!(parse_seeds(r#"{"bogus":1}"#).is_err());
 		assert!(parse_seeds("[]").is_err());
 		assert!(parse_seeds(DEFAULT_LAYOUT).unwrap().contains_key("default"), "committed seeds must carry a default");

@@ -11,7 +11,7 @@ pub fn MediaPanel() -> Element {
 	let selected = use_context::<SelectedBuilding>();
 	let appt = use_context::<SelectedAppt>();
 	let admin = use_resource(move || async move {
-		let token = admin_token();
+		let token = crate::api::admin_token();
 		crate::api::am_i_admin(token).await.unwrap_or(false)
 	});
 
@@ -135,7 +135,7 @@ fn DropZone(building_id: BuildingId, appt: Option<u32>, on_uploaded: EventHandle
 			let content_type = file.content_type().unwrap_or_else(|| "application/octet-stream".to_string());
 			let kind = kind_for(&content_type, &filename);
 			if let Ok(bytes) = file.read_bytes().await {
-				let token = admin_token();
+				let token = crate::api::admin_token();
 				if crate::api::upload_file(building_id, appt, kind, filename, content_type, bytes.to_vec(), token).await.is_ok() {
 					on_uploaded.call(());
 				}
@@ -195,25 +195,4 @@ fn b64(input: &[u8]) -> String {
 		out.push(if chunk.len() > 2 { A[(n & 63) as usize] as char } else { '=' });
 	}
 	out
-}
-
-/// Admin token from the embedding system. The larger system hands us an OAuth
-/// token + admin list, so there is no login here; we read the token the host put
-/// on `window.__reaAdminToken` (empty string when absent → non-admin).
-fn admin_token() -> String {
-	#[cfg(target_arch = "wasm32")]
-	{
-		read_admin_token()
-	}
-	#[cfg(not(target_arch = "wasm32"))]
-	{
-		String::new()
-	}
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function rea_admin_token() { return (typeof window !== 'undefined' && window.__reaAdminToken) ? window.__reaAdminToken : ''; }")]
-extern "C" {
-	#[wasm_bindgen(js_name = rea_admin_token)]
-	fn read_admin_token() -> String;
 }

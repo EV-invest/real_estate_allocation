@@ -23,10 +23,9 @@ pub type Filter = Signal<Vec<PropertyStateKind>>;
 /// Outer `None` = still loading; `Some(None)` = nothing selected.
 pub type BuildingResource = Resource<Option<Building>>;
 
-/// Seed group the dashboard currently has applied (`seed_key`: "xl"/"md"/"sm"),
-/// written by the dashboard's load-or-seed effect and surfaced in [`BuildTag`].
-/// `None` until the first load.
-pub type SeedGroup = Signal<Option<&'static str>>;
+/// Band the dashboard currently has a layout for, written on every band entry and
+/// surfaced in [`BuildTag`]. `None` until the first measure.
+pub type SeedGroup = Signal<Option<dockviewers::core::Band>>;
 
 #[component]
 pub fn App() -> Element {
