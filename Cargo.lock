@@ -1799,14 +1799,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "dockview_dioxus"
-version = "0.1.8"
+name = "dockviewers"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83e53e817d76af6e8a372c2688e8ec152a926ace04889fa70c7f85bd3a0a6ed3"
+checksum = "d85ac8f9793482a46532cfe1814793ed57b46f52625888bff8df9fa2dca44a3c"
 dependencies = [
- "dioxus",
+ "dockviewers_core",
+ "dockviewers_dioxus",
+]
+
+[[package]]
+name = "dockviewers_core"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fac6c814cb2f7d83c16f96303d7017ddab3ebb0dc43ef40368568fcc815293c3"
+dependencies = [
  "serde",
  "serde_json",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "dockviewers_dioxus"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9f5b13eb1b4df1714a54de230df1548156ec70746d2f214642329b3acc06966"
+dependencies = [
+ "dioxus",
+ "dockviewers_core",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -4118,7 +4139,7 @@ dependencies = [
  "derive-new",
  "dioxus",
  "dioxus-ssr",
- "dockview_dioxus",
+ "dockviewers",
  "ev_lib",
  "getrandom 0.3.4",
  "getrandom 0.4.3",
