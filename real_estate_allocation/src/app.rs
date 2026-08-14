@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use crate::{
 	dashboard::Dashboard,
 	domain::{Building, BuildingId, PropertyStateKind},
+	i18n::use_provide_i18n,
 };
 
 /// The selected building, shared from the root so all panels read/write the same
@@ -33,6 +34,9 @@ pub fn App() -> Element {
 	// dropping any query it doesn't model (`?building`, `?appt`, `?selection`). App
 	// renders before the router, so snapshot the deep link here and hand it down.
 	use_context_provider(DeepLink::capture);
+	// One translator for the whole zone, installed before anything renders. A
+	// panel that built its own would be a second place the locale could be wrong.
+	use_provide_i18n();
 	rsx! {
 		document::Stylesheet { href: asset!("/assets/tailwind.css") }
 		// Self-hosted brand webfonts, bundled and `@font-face`d by the uikit — no

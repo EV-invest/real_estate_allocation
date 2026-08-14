@@ -4,12 +4,14 @@ use ev_lib::uikit::{Card, CardContent, Skeleton};
 use crate::{
 	app::{BuildingResource, SelectedAppt},
 	domain::Building,
+	i18n::use_t,
 };
 
 /// Building-level lot breakdown: TOTAL / SOLD / AVAILABLE tiles over a donut split
 /// into Sold (others) / Your Selection / Available, centred on the building's share.
 #[component]
 pub fn LotsPanel() -> Element {
+	let tr = use_t();
 	let building = use_context::<BuildingResource>();
 	let appt = use_context::<SelectedAppt>();
 
@@ -19,7 +21,7 @@ pub fn LotsPanel() -> Element {
 				match &*building.read() {
 					Some(Some(b)) if appt().is_none() => rsx! { Lots { building: b.clone() } },
 					Some(Some(_)) => rsx! { p { class: "text-sm text-muted-foreground", "Lot breakdown is shown at building level." } },
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a building to see its lots." } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"lots.empty\")}" } },
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
 			}
@@ -29,6 +31,7 @@ pub fn LotsPanel() -> Element {
 
 #[component]
 fn Lots(building: Building) -> Element {
+	let tr = use_t();
 	let total = building.lots_total();
 	let sold = building.lots_sold();
 	let available = building.lots_available();
@@ -52,9 +55,9 @@ fn Lots(building: Building) -> Element {
 		div { id: "rea-lots-fit", class: "flex h-full w-full items-center justify-center overflow-hidden",
 			div { class: "flex w-80 flex-col gap-7",
 				div { class: "grid grid-cols-3 gap-3",
-					Tile { label: "Total lots", value: total, value_class: "text-white" }
-					Tile { label: "Sold", value: sold, value_class: "text-main-accent-t3" }
-					Tile { label: "Available", value: available, value_class: "text-main-accent-t2" }
+					Tile { label: tr.t("lots.total"), value: total, value_class: "text-white" }
+					Tile { label: tr.t("status.sold"), value: sold, value_class: "text-main-accent-t3" }
+					Tile { label: tr.t("status.available"), value: available, value_class: "text-main-accent-t2" }
 				}
 				div { class: "flex flex-col items-center gap-6",
 					div { class: "relative h-48 w-48 rounded-full", style: "background:{gradient}",
@@ -64,9 +67,9 @@ fn Lots(building: Building) -> Element {
 						}
 					}
 					div { class: "flex items-center gap-5 text-xs text-muted-foreground",
-						Legend { color: "#f2c94c", label: "Sold" }
+						Legend { color: "#f2c94c", label: tr.t("status.sold") }
 						Legend { color: "#f6dd86", label: "Your Selection" }
-						Legend { color: "#2c3342", label: "Available" }
+						Legend { color: "#2c3342", label: tr.t("status.available") }
 					}
 				}
 			}

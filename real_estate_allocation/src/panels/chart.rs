@@ -4,10 +4,12 @@ use ev_lib::uikit::{Card, CardContent, Skeleton};
 use crate::{
 	app::{BuildingResource, SelectedAppt},
 	domain::{Apartment, Building},
+	i18n::use_t,
 };
 
 #[component]
 pub fn ChartPanel() -> Element {
+	let tr = use_t();
 	let building = use_context::<BuildingResource>();
 	let appt = use_context::<SelectedAppt>();
 
@@ -19,7 +21,7 @@ pub fn ChartPanel() -> Element {
 						let apt = appt().and_then(|n| b.apartments.iter().find(|a| a.number == n).cloned());
 						rsx! { ChartBody { building: b.clone(), apt } }
 					}
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "Select a building on the map." } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"chart.empty\")}" } },
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
 			}
@@ -29,10 +31,11 @@ pub fn ChartPanel() -> Element {
 
 #[component]
 fn ChartBody(building: Building, apt: Option<Apartment>) -> Element {
+	let tr = use_t();
 	// Apartment view shows the lot's own price; building view the mean across lots.
 	let (label, price) = match &apt {
-		Some(a) => ("Price", a.price),
-		None => ("Avg apt. price", building.avg_price()),
+		Some(a) => (tr.t("details.price"), a.price),
+		None => (tr.t("details.avgApartmentPrice"), building.avg_price()),
 	};
 	rsx! {
 		div { class: "flex flex-col gap-0.5",

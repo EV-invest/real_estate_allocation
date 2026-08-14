@@ -5,6 +5,7 @@ use dockviewers::dioxus::{Config, DockPanel, Group, GroupId, MinSize, PackedApi,
 
 use crate::{
 	api::load_default_layout,
+	i18n::use_t,
 	map::MapPanel,
 	panels::{ChartPanel, DetailsPanel, LotsPanel, MediaPanel, PortfolioHeatmap, TopBar},
 };
@@ -14,36 +15,38 @@ const MIN: MinSize = MinSize::Steps { w: Step(2), h: Step(2) };
 
 #[component]
 pub fn Dashboard() -> Element {
-	let panels = use_signal(|| {
+	let tr = use_t();
+	let panel_tr = tr.clone();
+	let panels = use_signal(move || {
 		vec![
 			DockPanel {
 				id: PanelId("map".into()),
-				title: "Map".into(),
+				title: panel_tr.t("panel.map"),
 				content: rsx! { MapPanel {} },
 			},
 			DockPanel {
 				id: PanelId("media".into()),
-				title: "Media".into(),
+				title: panel_tr.t("panel.media"),
 				content: rsx! { MediaPanel {} },
 			},
 			DockPanel {
 				id: PanelId("chart".into()),
-				title: "Chart".into(),
+				title: panel_tr.t("panel.chart"),
 				content: rsx! { ChartPanel {} },
 			},
 			DockPanel {
 				id: PanelId("heatmap".into()),
-				title: "Portfolio".into(),
+				title: panel_tr.t("panel.portfolio"),
 				content: rsx! { PortfolioHeatmap {} },
 			},
 			DockPanel {
 				id: PanelId("lots".into()),
-				title: "Lots".into(),
+				title: panel_tr.t("panel.lots"),
 				content: rsx! { LotsPanel {} },
 			},
 			DockPanel {
 				id: PanelId("details".into()),
-				title: "Details".into(),
+				title: panel_tr.t("panel.details"),
 				content: rsx! { DetailsPanel {} },
 			},
 		]
@@ -88,25 +91,32 @@ pub fn Dashboard() -> Element {
 	// publishes the arrangement as *everyone's* seed, which the server accepts only from an admin. The
 	// toast reports either, auto-clearing after a beat.
 	let toast = use_signal(|| None::<String>);
+	// The band name is interpolated, not concatenated: `{band}` is a placeholder
+	// the policy checks for, so a translation that drops it is refused rather
+	// than silently rendering a toast that never says which band was saved.
+	let toast_tr = tr.clone();
 	let config = Config {
 		storage_key: Some("rea-dashboard".into()),
-		on_save: Some(Rc::new(move |saved| match saved {
-			Saved::Cached { band } => show_toast(toast, format!("Layout cached in this browser ({band})")),
-			Saved::Published { band, json } => {
-				spawn(async move {
-					let msg = match crate::api::save_default_layout(json, band, crate::api::admin_token()).await {
-						// An xl publish doubles as the `default` seed (see `save_default_layout`).
-						Ok(()) => match band {
-							dockviewers::core::Band::Xl => "Layout published (xl + default)".to_string(),
-							band => format!("Layout published ({band})"),
-						},
-						Err(e) => {
-							dioxus::logger::tracing::error!(%e, "publish default layout failed");
-							"Publish failed".to_string()
-						}
-					};
-					show_toast(toast, msg);
-				});
+		on_save: Some(Rc::new(move |saved| {
+			let tr = toast_tr.clone();
+			match saved {
+				Saved::Cached { band } => show_toast(toast, tr.tv("dashboard.layoutCached", &[("band".to_owned(), band.to_string().into())].into_iter().collect())),
+				Saved::Published { band, json } => {
+					spawn(async move {
+						let msg = match crate::api::save_default_layout(json, band, crate::api::admin_token()).await {
+							// An xl publish doubles as the `default` seed (see `save_default_layout`).
+							Ok(()) => match band {
+								dockviewers::core::Band::Xl => tr.t("dashboard.layoutPublishedDefault"),
+								band => tr.tv("dashboard.layoutPublished", &[("band".to_owned(), band.to_string().into())].into_iter().collect()),
+							},
+							Err(e) => {
+								dioxus::logger::tracing::error!(%e, "publish default layout failed");
+								tr.t("dashboard.publishFailed")
+							}
+						};
+						show_toast(toast, msg);
+					});
+				}
 			}
 		})),
 		..Default::default()

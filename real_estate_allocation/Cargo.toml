@@ -12,7 +12,7 @@ server = ["dioxus/server"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "server"] }
-ev_lib = { workspace = true, features = ["architecture", "uikit", "otel"] }
+ev_lib = { workspace = true, features = ["architecture", "uikit", "otel", "i18n"] }
 # `config` (with its SmartDefault'd AppConfig) is server-only.
 reqwest.workspace = true
 smart-default.workspace = true
@@ -25,14 +25,16 @@ v_utils = { workspace = true, features = ["distributions", "io", "macros", "cli"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["fullstack", "web"] }
-ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm"] }
+ev_lib = { workspace = true, features = ["architecture", "uikit", "wasm", "i18n"] }
 getrandom.workspace = true
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 uuid = { workspace = true, features = ["js"] }
 v_utils = { version = "^2.15.53", default-features = false, features = ["trades"] }
 wasm-bindgen.workspace = true
-web-sys = { workspace = true, features = ["Window", "Location"] }
+# `HtmlDocument` is what exposes `document.cookie` — that is how the zone reads
+# the locale the conductor negotiated (see src/i18n.rs).
+web-sys = { workspace = true, features = ["Window", "Location", "Document", "HtmlDocument"] }
 
 [dependencies]
 async-trait.workspace = true

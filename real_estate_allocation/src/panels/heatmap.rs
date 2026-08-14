@@ -4,6 +4,7 @@ use ev_lib::uikit::{Card, CardContent, Skeleton};
 use crate::{
 	app::{Filter, SelectedAppt, SelectedBuilding},
 	domain::{Apartment, ApartmentStatus, Building, BuildingId, PropertyStateKind},
+	i18n::use_t,
 };
 
 /// Portfolio heatmap + drill-down: a treemap of buildings (area ∝ the summed price of
@@ -12,6 +13,7 @@ use crate::{
 /// sub-tile descends into that apartment.
 #[component]
 pub fn PortfolioHeatmap() -> Element {
+	let tr = use_t();
 	let filter = use_context::<Filter>();
 	// The heatmap is a portfolio view: `Interesting` is never a holding, so it stays out
 	// even when the user has it selected.
@@ -30,7 +32,7 @@ pub fn PortfolioHeatmap() -> Element {
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 					Some(list) if list.is_empty() => rsx! {
 						div { class: "flex h-full items-center justify-center text-sm text-muted-foreground",
-							"No holdings to display."
+							"{tr.t(\"heatmap.empty\")}"
 						}
 					},
 					Some(list) => rsx! { Treemap { buildings: list.clone(), states: states() } },

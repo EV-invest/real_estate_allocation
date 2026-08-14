@@ -1,0 +1,190 @@
+{
+  "panel.map": {
+    "en": "Map",
+    "t": "Bản đồ"
+  },
+  "panel.media": {
+    "en": "Media",
+    "t": "Hình ảnh"
+  },
+  "panel.chart": {
+    "en": "Chart",
+    "t": "Biểu đồ"
+  },
+  "panel.portfolio": {
+    "en": "Portfolio",
+    "t": "Danh mục"
+  },
+  "panel.lots": {
+    "en": "Lots",
+    "t": "Lô"
+  },
+  "panel.details": {
+    "en": "Details",
+    "t": "Chi tiết"
+  },
+  "status.available": {
+    "en": "Available",
+    "t": "Còn trống"
+  },
+  "status.sold": {
+    "en": "Sold",
+    "t": "Đã bán"
+  },
+  "status.purchased": {
+    "en": "Purchased",
+    "t": "Đã mua"
+  },
+  "status.purchasing": {
+    "en": "Purchasing",
+    "t": "Đang mua"
+  },
+  "status.interesting": {
+    "en": "Interesting",
+    "t": "Đáng chú ý"
+  },
+  "header.buildings": {
+    "en": "Buildings",
+    "t": "Tòa nhà"
+  },
+  "details.empty": {
+    "en": "Select a building to see its terms.",
+    "t": "Chọn một tòa nhà để xem điều khoản."
+  },
+  "details.developer": {
+    "en": "Developer",
+    "t": "Chủ đầu tư"
+  },
+  "details.status": {
+    "en": "Status",
+    "t": "Trạng thái"
+  },
+  "details.price": {
+    "en": "Price",
+    "t": "Giá"
+  },
+  "details.avgApartmentPrice": {
+    "en": "Avg apt. price",
+    "t": "Giá căn hộ TB"
+  },
+  "details.construction": {
+    "en": "Construction",
+    "t": "Xây dựng"
+  },
+  "details.lots": {
+    "en": "Lots",
+    "t": "Lô"
+  },
+  "details.apartment": {
+    "en": "Apartment",
+    "t": "Căn hộ"
+  },
+  "details.terms": {
+    "en": "Terms",
+    "t": "Điều khoản"
+  },
+  "details.term": {
+    "en": "Term",
+    "t": "Kỳ hạn"
+  },
+  "details.lender": {
+    "en": "Lender",
+    "t": "Bên cho vay"
+  },
+  "details.loanRate": {
+    "en": "Loan rate",
+    "t": "Lãi suất vay"
+  },
+  "details.equityDebt": {
+    "en": "Equity / Debt",
+    "t": "Vốn / Nợ"
+  },
+  "details.targetAppreciation": {
+    "en": "Target appreciation",
+    "t": "Mức tăng giá mục tiêu"
+  },
+  "details.dealNotes": {
+    "en": "Deal notes",
+    "t": "Ghi chú giao dịch"
+  },
+  "details.reasoning": {
+    "en": "Reasoning",
+    "t": "Lý do"
+  },
+  "chart.empty": {
+    "en": "Select a building on the map.",
+    "t": "Chọn một tòa nhà trên bản đồ."
+  },
+  "lots.empty": {
+    "en": "Select a building to see its lots.",
+    "t": "Chọn một tòa nhà để xem các lô."
+  },
+  "lots.buildingLevel": {
+    "en": "Lot breakdown is shown at building level.",
+    "t": "Phân tích lô được hiển thị ở cấp tòa nhà."
+  },
+  "lots.total": {
+    "en": "Total lots",
+    "t": "Tổng số lô"
+  },
+  "lots.yourSelection": {
+    "en": "Your Selection",
+    "t": "Lựa chọn của bạn"
+  },
+  "lots.yourShare": {
+    "en": "Your share",
+    "t": "Phần của bạn"
+  },
+  "media.empty": {
+    "en": "Select a building to view its media.",
+    "t": "Chọn một tòa nhà để xem hình ảnh."
+  },
+  "media.pics": {
+    "en": "Pics",
+    "t": "Ảnh"
+  },
+  "media.deck": {
+    "en": "Deck",
+    "t": "Hồ sơ"
+  },
+  "media.docs": {
+    "en": "Docs",
+    "t": "Tài liệu"
+  },
+  "media.noPictures": {
+    "en": "No pictures yet.",
+    "t": "Chưa có ảnh."
+  },
+  "media.nothingHere": {
+    "en": "Nothing here yet.",
+    "t": "Chưa có gì ở đây."
+  },
+  "heatmap.empty": {
+    "en": "No holdings to display.",
+    "t": "Không có tài sản để hiển thị."
+  },
+  "header.empty": {
+    "en": "Select a building on the map, to populate the dashboard",
+    "t": "Chọn một tòa nhà trên bản đồ để hiển thị bảng điều khiển"
+  },
+  "header.apt": {
+    "en": "Apt {n}",
+    "t": "Căn {n}"
+  },
+  "dashboard.layoutCached": {
+    "en": "Layout cached in this browser ({band})",
+    "t": "Đã lưu bố cục trong trình duyệt này ({band})"
+  },
+  "dashboard.layoutPublishedDefault": {
+    "en": "Layout published (xl + default)",
+    "t": "Đã công bố bố cục (xl + mặc định)"
+  },
+  "dashboard.layoutPublished": {
+    "en": "Layout published ({band})",
+    "t": "Đã công bố bố cục ({band})"
+  },
+  "dashboard.publishFailed": {
+    "en": "Publish failed",
+    "t": "Công bố thất bại"
+  }
+}
