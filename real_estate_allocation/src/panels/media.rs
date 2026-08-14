@@ -4,10 +4,12 @@ use ev_lib::uikit::{Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, Ta
 use crate::{
 	app::{SelectedAppt, SelectedBuilding},
 	domain::{BuildingId, FileKind, PropertyFile},
+	i18n::use_t,
 };
 
 #[component]
 pub fn MediaPanel() -> Element {
+	let tr = use_t();
 	let selected = use_context::<SelectedBuilding>();
 	let appt = use_context::<SelectedAppt>();
 	let admin = use_resource(move || async move {
@@ -31,16 +33,16 @@ pub fn MediaPanel() -> Element {
 		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex-1 overflow-y-auto",
 				match selected() {
-					None => rsx! { p { class: "text-muted-foreground text-sm", "Select a building to view its media." } },
+					None => rsx! { p { class: "text-muted-foreground text-sm", "{tr.t(\"media.empty\")}" } },
 					Some(bid) => {
 						let appt = appt();
 						let files = files.read().clone().unwrap_or_default();
 						rsx! {
 							Tabs { default_value: "pics".to_string(),
 								TabsList {
-									TabsTrigger { value: "pics", "Pics" }
-									TabsTrigger { value: "deck", "Deck" }
-									TabsTrigger { value: "docs", "Docs" }
+									TabsTrigger { value: "pics", "{tr.t(\"media.pics\")}" }
+									TabsTrigger { value: "deck", "{tr.t(\"media.deck\")}" }
+									TabsTrigger { value: "docs", "{tr.t(\"media.docs\")}" }
 								}
 								TabsContent { value: "pics", PicGrid { files: files.clone() } }
 								TabsContent { value: "deck", FileList { files: files.clone(), kind: FileKind::PitchDeck } }

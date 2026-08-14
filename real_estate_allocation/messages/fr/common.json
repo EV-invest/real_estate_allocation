@@ -1,0 +1,190 @@
+{
+  "panel.map": {
+    "en": "Map",
+    "t": "Carte"
+  },
+  "panel.media": {
+    "en": "Media",
+    "t": "Médias"
+  },
+  "panel.chart": {
+    "en": "Chart",
+    "t": "Graphique"
+  },
+  "panel.portfolio": {
+    "en": "Portfolio",
+    "t": "Portefeuille"
+  },
+  "panel.lots": {
+    "en": "Lots",
+    "t": "Lots"
+  },
+  "panel.details": {
+    "en": "Details",
+    "t": "Détails"
+  },
+  "status.available": {
+    "en": "Available",
+    "t": "Disponible"
+  },
+  "status.sold": {
+    "en": "Sold",
+    "t": "Vendu"
+  },
+  "status.purchased": {
+    "en": "Purchased",
+    "t": "Acquis"
+  },
+  "status.purchasing": {
+    "en": "Purchasing",
+    "t": "En acquisition"
+  },
+  "status.interesting": {
+    "en": "Interesting",
+    "t": "À suivre"
+  },
+  "header.buildings": {
+    "en": "Buildings",
+    "t": "Immeubles"
+  },
+  "details.empty": {
+    "en": "Select a building to see its terms.",
+    "t": "Sélectionnez un immeuble pour voir ses conditions."
+  },
+  "details.developer": {
+    "en": "Developer",
+    "t": "Promoteur"
+  },
+  "details.status": {
+    "en": "Status",
+    "t": "Statut"
+  },
+  "details.price": {
+    "en": "Price",
+    "t": "Prix"
+  },
+  "details.avgApartmentPrice": {
+    "en": "Avg apt. price",
+    "t": "Prix moyen app."
+  },
+  "details.construction": {
+    "en": "Construction",
+    "t": "Construction"
+  },
+  "details.lots": {
+    "en": "Lots",
+    "t": "Lots"
+  },
+  "details.apartment": {
+    "en": "Apartment",
+    "t": "Appartement"
+  },
+  "details.terms": {
+    "en": "Terms",
+    "t": "Conditions"
+  },
+  "details.term": {
+    "en": "Term",
+    "t": "Durée"
+  },
+  "details.lender": {
+    "en": "Lender",
+    "t": "Prêteur"
+  },
+  "details.loanRate": {
+    "en": "Loan rate",
+    "t": "Taux du prêt"
+  },
+  "details.equityDebt": {
+    "en": "Equity / Debt",
+    "t": "Fonds propres / Dette"
+  },
+  "details.targetAppreciation": {
+    "en": "Target appreciation",
+    "t": "Appréciation cible"
+  },
+  "details.dealNotes": {
+    "en": "Deal notes",
+    "t": "Notes sur l'opération"
+  },
+  "details.reasoning": {
+    "en": "Reasoning",
+    "t": "Argumentaire"
+  },
+  "chart.empty": {
+    "en": "Select a building on the map.",
+    "t": "Sélectionnez un immeuble sur la carte."
+  },
+  "lots.empty": {
+    "en": "Select a building to see its lots.",
+    "t": "Sélectionnez un immeuble pour voir ses lots."
+  },
+  "lots.buildingLevel": {
+    "en": "Lot breakdown is shown at building level.",
+    "t": "La répartition des lots est affichée au niveau de l'immeuble."
+  },
+  "lots.total": {
+    "en": "Total lots",
+    "t": "Total des lots"
+  },
+  "lots.yourSelection": {
+    "en": "Your Selection",
+    "t": "Votre sélection"
+  },
+  "lots.yourShare": {
+    "en": "Your share",
+    "t": "Votre part"
+  },
+  "media.empty": {
+    "en": "Select a building to view its media.",
+    "t": "Sélectionnez un immeuble pour voir ses médias."
+  },
+  "media.pics": {
+    "en": "Pics",
+    "t": "Photos"
+  },
+  "media.deck": {
+    "en": "Deck",
+    "t": "Présentation"
+  },
+  "media.docs": {
+    "en": "Docs",
+    "t": "Documents"
+  },
+  "media.noPictures": {
+    "en": "No pictures yet.",
+    "t": "Pas encore de photos."
+  },
+  "media.nothingHere": {
+    "en": "Nothing here yet.",
+    "t": "Rien ici pour l'instant."
+  },
+  "heatmap.empty": {
+    "en": "No holdings to display.",
+    "t": "Aucun actif à afficher."
+  },
+  "header.empty": {
+    "en": "Select a building on the map, to populate the dashboard",
+    "t": "Sélectionnez un immeuble sur la carte pour remplir le tableau de bord"
+  },
+  "header.apt": {
+    "en": "Apt {n}",
+    "t": "Appt {n}"
+  },
+  "dashboard.layoutCached": {
+    "en": "Layout cached in this browser ({band})",
+    "t": "Disposition mise en cache dans ce navigateur ({band})"
+  },
+  "dashboard.layoutPublishedDefault": {
+    "en": "Layout published (xl + default)",
+    "t": "Disposition publiée (xl + par défaut)"
+  },
+  "dashboard.layoutPublished": {
+    "en": "Layout published ({band})",
+    "t": "Disposition publiée ({band})"
+  },
+  "dashboard.publishFailed": {
+    "en": "Publish failed",
+    "t": "Échec de la publication"
+  }
+}

@@ -4,6 +4,7 @@ use ev_lib::uikit::{Badge, BadgeVariant};
 use crate::{
 	app::{BuildingResource, SelectedAppt},
 	domain::{ApartmentStatus, Building, PropertyStateKind},
+	i18n::{status_key, use_t},
 };
 
 /// Persistent page header, two rows: breadcrumb (the only place the name appears),
@@ -45,7 +46,7 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 			div { class: "flex items-center gap-3",
 				match &apt {
 					Some(a) => rsx! {
-						Badge { variant: status_variant(a.status), "{status_label(a.status)}" }
+						Badge { variant: status_variant(a.status), "{use_t().t(status_key(a.status))}" }
 						match a.price {
 							Some(p) => rsx! { span { class: "text-sm font-medium text-main-accent-t2", "{p}" } },
 							None => rsx! { span { class: "text-sm font-medium text-warn", "?" } },
@@ -85,33 +86,36 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 
 #[component]
 fn Empty() -> Element {
+	let tr = use_t();
 	rsx! {
 		nav { class: "flex items-center gap-2 text-sm text-muted-foreground",
-			span { class: "text-foreground", "Buildings" }
+			span { class: "text-foreground", "{tr.t(\"header.buildings\")}" }
 		}
 		// Stats/actions are meaningless without a building, so row 2 becomes the mild
 		// warning nudging towards selecting one. `h-9` matches the action row's height.
 		div { class: "flex h-9 items-center text-sm font-medium text-main-accent-t3",
-			"Select a building on the map, to populate the dashboard"
+			"{tr.t(\"header.empty\")}"
 		}
 	}
 }
 
 #[component]
 fn Breadcrumb(building: String, appt: Option<u32>) -> Element {
+	let tr = use_t();
 	rsx! {
 		nav { class: "flex items-center gap-2 text-sm text-muted-foreground",
-			span { "Buildings" }
+			span { "{tr.t(\"header.buildings\")}" }
 			span { "›" }
 			span { class: if appt.is_some() { "" } else { "text-foreground" }, "{building}" }
 			if let Some(n) = appt {
 				span { "›" }
-				span { class: "text-foreground", "Apt {n}" }
+				span { class: "text-foreground", "{tr.tv(\"header.apt\", &[(\"n\".to_owned(), n.into())].into_iter().collect())}" }
 			}
 		}
 	}
 }
 
+#[allow(dead_code)]
 fn status_label(status: ApartmentStatus) -> &'static str {
 	match status {
 		ApartmentStatus::Available => "Available",

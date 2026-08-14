@@ -1,0 +1,190 @@
+{
+  "panel.map": {
+    "en": "Map",
+    "t": "Карта"
+  },
+  "panel.media": {
+    "en": "Media",
+    "t": "Медиа"
+  },
+  "panel.chart": {
+    "en": "Chart",
+    "t": "График"
+  },
+  "panel.portfolio": {
+    "en": "Portfolio",
+    "t": "Портфель"
+  },
+  "panel.lots": {
+    "en": "Lots",
+    "t": "Лоты"
+  },
+  "panel.details": {
+    "en": "Details",
+    "t": "Детали"
+  },
+  "status.available": {
+    "en": "Available",
+    "t": "Доступно"
+  },
+  "status.sold": {
+    "en": "Sold",
+    "t": "Продано"
+  },
+  "status.purchased": {
+    "en": "Purchased",
+    "t": "Куплено"
+  },
+  "status.purchasing": {
+    "en": "Purchasing",
+    "t": "Покупается"
+  },
+  "status.interesting": {
+    "en": "Interesting",
+    "t": "Интересно"
+  },
+  "header.buildings": {
+    "en": "Buildings",
+    "t": "Здания"
+  },
+  "details.empty": {
+    "en": "Select a building to see its terms.",
+    "t": "Выберите здание, чтобы увидеть условия."
+  },
+  "details.developer": {
+    "en": "Developer",
+    "t": "Застройщик"
+  },
+  "details.status": {
+    "en": "Status",
+    "t": "Статус"
+  },
+  "details.price": {
+    "en": "Price",
+    "t": "Цена"
+  },
+  "details.avgApartmentPrice": {
+    "en": "Avg apt. price",
+    "t": "Средняя цена кв."
+  },
+  "details.construction": {
+    "en": "Construction",
+    "t": "Строительство"
+  },
+  "details.lots": {
+    "en": "Lots",
+    "t": "Лоты"
+  },
+  "details.apartment": {
+    "en": "Apartment",
+    "t": "Квартира"
+  },
+  "details.terms": {
+    "en": "Terms",
+    "t": "Условия"
+  },
+  "details.term": {
+    "en": "Term",
+    "t": "Срок"
+  },
+  "details.lender": {
+    "en": "Lender",
+    "t": "Кредитор"
+  },
+  "details.loanRate": {
+    "en": "Loan rate",
+    "t": "Ставка по кредиту"
+  },
+  "details.equityDebt": {
+    "en": "Equity / Debt",
+    "t": "Капитал / Долг"
+  },
+  "details.targetAppreciation": {
+    "en": "Target appreciation",
+    "t": "Целевой прирост стоимости"
+  },
+  "details.dealNotes": {
+    "en": "Deal notes",
+    "t": "Заметки по сделке"
+  },
+  "details.reasoning": {
+    "en": "Reasoning",
+    "t": "Обоснование"
+  },
+  "chart.empty": {
+    "en": "Select a building on the map.",
+    "t": "Выберите здание на карте."
+  },
+  "lots.empty": {
+    "en": "Select a building to see its lots.",
+    "t": "Выберите здание, чтобы увидеть его лоты."
+  },
+  "lots.buildingLevel": {
+    "en": "Lot breakdown is shown at building level.",
+    "t": "Разбивка по лотам показана на уровне здания."
+  },
+  "lots.total": {
+    "en": "Total lots",
+    "t": "Всего лотов"
+  },
+  "lots.yourSelection": {
+    "en": "Your Selection",
+    "t": "Ваш выбор"
+  },
+  "lots.yourShare": {
+    "en": "Your share",
+    "t": "Ваша доля"
+  },
+  "media.empty": {
+    "en": "Select a building to view its media.",
+    "t": "Выберите здание, чтобы посмотреть материалы."
+  },
+  "media.pics": {
+    "en": "Pics",
+    "t": "Фото"
+  },
+  "media.deck": {
+    "en": "Deck",
+    "t": "Презентация"
+  },
+  "media.docs": {
+    "en": "Docs",
+    "t": "Документы"
+  },
+  "media.noPictures": {
+    "en": "No pictures yet.",
+    "t": "Фотографий пока нет."
+  },
+  "media.nothingHere": {
+    "en": "Nothing here yet.",
+    "t": "Здесь пока пусто."
+  },
+  "heatmap.empty": {
+    "en": "No holdings to display.",
+    "t": "Нет объектов для отображения."
+  },
+  "header.empty": {
+    "en": "Select a building on the map, to populate the dashboard",
+    "t": "Выберите здание на карте, чтобы заполнить панель"
+  },
+  "header.apt": {
+    "en": "Apt {n}",
+    "t": "Кв. {n}"
+  },
+  "dashboard.layoutCached": {
+    "en": "Layout cached in this browser ({band})",
+    "t": "Раскладка сохранена в этом браузере ({band})"
+  },
+  "dashboard.layoutPublishedDefault": {
+    "en": "Layout published (xl + default)",
+    "t": "Раскладка опубликована (xl + по умолчанию)"
+  },
+  "dashboard.layoutPublished": {
+    "en": "Layout published ({band})",
+    "t": "Раскладка опубликована ({band})"
+  },
+  "dashboard.publishFailed": {
+    "en": "Publish failed",
+    "t": "Не удалось опубликовать"
+  }
+}
