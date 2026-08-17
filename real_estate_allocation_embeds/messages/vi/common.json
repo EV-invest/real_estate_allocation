@@ -1,0 +1,54 @@
+{
+  "embeds.eyebrow": {
+    "en": "Investment Scope",
+    "t": "Phạm vi đầu tư"
+  },
+  "embeds.title": {
+    "en": "Premium Asset *Portfolio*",
+    "t": "*Danh mục* tài sản cao cấp"
+  },
+  "embeds.featuredDeal": {
+    "en": "Featured Deal",
+    "t": "Thương vụ nổi bật"
+  },
+  "embeds.stat.targetYield": {
+    "en": "Target Yield",
+    "t": "Lợi suất mục tiêu"
+  },
+  "embeds.stat.appreciation": {
+    "en": "Appreciation",
+    "t": "Mức tăng giá"
+  },
+  "embeds.stat.status": {
+    "en": "Status",
+    "t": "Trạng thái"
+  },
+  "embeds.avgApartment": {
+    "en": "Avg. Apartment",
+    "t": "Căn hộ trung bình"
+  },
+  "embeds.viewProperty": {
+    "en": "View Property",
+    "t": "Xem bất động sản"
+  },
+  "embeds.marketGrowth": {
+    "en": "Market Growth",
+    "t": "Tăng trưởng thị trường"
+  },
+  "embeds.riskTerminal": {
+    "en": "Risk Terminal",
+    "t": "Bảng rủi ro"
+  },
+  "embeds.correlationProfile": {
+    "en": "Correlation Profile",
+    "t": "Hồ sơ tương quan"
+  },
+  "embeds.factorExposures": {
+    "en": "Factor Exposures",
+    "t": "Mức phơi nhiễm theo yếu tố"
+  },
+  "embeds.hostYoyReturn": {
+    "en": "Host YoY return",
+    "t": "Lợi nhuận chủ nhà theo năm"
+  }
+}

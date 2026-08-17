@@ -1,0 +1,54 @@
+{
+  "embeds.eyebrow": {
+    "en": "Investment Scope",
+    "t": "Investitionsumfang"
+  },
+  "embeds.title": {
+    "en": "Premium Asset *Portfolio*",
+    "t": "*Portfolio* erstklassiger Objekte"
+  },
+  "embeds.featuredDeal": {
+    "en": "Featured Deal",
+    "t": "Ausgewählte Transaktion"
+  },
+  "embeds.stat.targetYield": {
+    "en": "Target Yield",
+    "t": "Zielrendite"
+  },
+  "embeds.stat.appreciation": {
+    "en": "Appreciation",
+    "t": "Wertsteigerung"
+  },
+  "embeds.stat.status": {
+    "en": "Status",
+    "t": "Status"
+  },
+  "embeds.avgApartment": {
+    "en": "Avg. Apartment",
+    "t": "Ø Wohnung"
+  },
+  "embeds.viewProperty": {
+    "en": "View Property",
+    "t": "Objekt ansehen"
+  },
+  "embeds.marketGrowth": {
+    "en": "Market Growth",
+    "t": "Marktwachstum"
+  },
+  "embeds.riskTerminal": {
+    "en": "Risk Terminal",
+    "t": "Risiko-Terminal"
+  },
+  "embeds.correlationProfile": {
+    "en": "Correlation Profile",
+    "t": "Korrelationsprofil"
+  },
+  "embeds.factorExposures": {
+    "en": "Factor Exposures",
+    "t": "Faktor-Exposures"
+  },
+  "embeds.hostYoyReturn": {
+    "en": "Host YoY return",
+    "t": "Gastgeber-Rendite J/J"
+  }
+}

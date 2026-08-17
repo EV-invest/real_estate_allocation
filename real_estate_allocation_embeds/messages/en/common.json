@@ -1,0 +1,15 @@
+{
+  "embeds.eyebrow": "Investment Scope",
+  "embeds.title": "Premium Asset *Portfolio*",
+  "embeds.featuredDeal": "Featured Deal",
+  "embeds.stat.targetYield": "Target Yield",
+  "embeds.stat.appreciation": "Appreciation",
+  "embeds.stat.status": "Status",
+  "embeds.avgApartment": "Avg. Apartment",
+  "embeds.viewProperty": "View Property",
+  "embeds.marketGrowth": "Market Growth",
+  "embeds.riskTerminal": "Risk Terminal",
+  "embeds.correlationProfile": "Correlation Profile",
+  "embeds.factorExposures": "Factor Exposures",
+  "embeds.hostYoyReturn": "Host YoY return"
+}

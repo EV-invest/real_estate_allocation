@@ -7,12 +7,15 @@
 //! file is only the wasm-only shell: the custom-element registration (`ev_lib::mfe!`),
 //! the live data fetch, and the asset-origin derivation.
 
+mod i18n;
 mod view;
 
 use dioxus::prelude::*;
 use ev_lib::mfe::bundle_origin;
 use real_estate_allocation_core::domain::Building;
 use view::{AssetOrigin, Featured, Overview, Q1_PROPERTY};
+
+use crate::i18n::use_provide_i18n;
 
 // The producer entrypoint: generates the custom-element registration, the
 // `wasm-bindgen(start)` entrypoint, the origin self-derivation, and `MFE_MANIFEST`
@@ -37,6 +40,8 @@ fn OverviewContainer() -> Element {
 		b
 	});
 	use_context_provider(|| AssetOrigin(bundle_origin()));
+	// One translator for the widget, read from the host page's `ev_locale` cookie.
+	use_provide_i18n();
 	let building = Featured(building.read().clone());
 	rsx! { Overview { building } }
 }
