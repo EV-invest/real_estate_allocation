@@ -1,0 +1,54 @@
+{
+  "embeds.eyebrow": {
+    "en": "Investment Scope",
+    "t": "Инвестиционный охват"
+  },
+  "embeds.title": {
+    "en": "Premium Asset *Portfolio*",
+    "t": "*Портфель* премиальных активов"
+  },
+  "embeds.featuredDeal": {
+    "en": "Featured Deal",
+    "t": "Избранная сделка"
+  },
+  "embeds.stat.targetYield": {
+    "en": "Target Yield",
+    "t": "Целевая доходность"
+  },
+  "embeds.stat.appreciation": {
+    "en": "Appreciation",
+    "t": "Прирост стоимости"
+  },
+  "embeds.stat.status": {
+    "en": "Status",
+    "t": "Статус"
+  },
+  "embeds.avgApartment": {
+    "en": "Avg. Apartment",
+    "t": "Средняя квартира"
+  },
+  "embeds.viewProperty": {
+    "en": "View Property",
+    "t": "Смотреть объект"
+  },
+  "embeds.marketGrowth": {
+    "en": "Market Growth",
+    "t": "Рост рынка"
+  },
+  "embeds.riskTerminal": {
+    "en": "Risk Terminal",
+    "t": "Терминал рисков"
+  },
+  "embeds.correlationProfile": {
+    "en": "Correlation Profile",
+    "t": "Профиль корреляции"
+  },
+  "embeds.factorExposures": {
+    "en": "Factor Exposures",
+    "t": "Факторные экспозиции"
+  },
+  "embeds.hostYoyReturn": {
+    "en": "Host YoY return",
+    "t": "Доходность хоста г/г"
+  }
+}

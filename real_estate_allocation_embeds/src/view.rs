@@ -5,11 +5,12 @@
 //! (wasm → `bundle_origin()`, SSR → `""`), and the featured building via a prop.
 
 use dioxus::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use dioxus::web::WebEventExt;
 use ev_lib::uikit::Container;
 use real_estate_allocation_core::{MISSING, domain::Building, factors::profile};
 
-#[cfg(target_arch = "wasm32")]
-use dioxus::web::WebEventExt;
+use crate::i18n::{Accented, use_t};
 
 // Banners are static assets served alongside the bundle; they resolve against the
 // asset origin (wherever the `.js` loaded from, or root-relative under the conductor).
@@ -78,6 +79,7 @@ pub fn featured_stats(building: &Featured) -> (String, String, String) {
 
 #[component]
 pub fn Overview(building: Featured) -> Element {
+	let tr = use_t();
 	rsx! {
 		section { id: "portfolio", class: "relative border-t border-main-mist/10 py-24",
 			Container {
@@ -88,11 +90,10 @@ pub fn Overview(building: Featured) -> Element {
 				div { class: "mb-16 flex max-md:flex-col justify-between md:items-end",
 					div {
 						span { class: "mb-3 block font-mono text-xs uppercase tracking-[0.3em] text-main-accent-t1",
-							"Investment Scope"
+							"{tr.t(\"embeds.eyebrow\")}"
 						}
 						h2 { class: "font-serif text-3xl font-light text-white sm:text-5xl",
-							"Premium Asset "
-							span { class: "font-serif italic text-main-accent-t1", "Portfolio" }
+							Accented { text: tr.t("embeds.title"), class: "font-serif italic text-main-accent-t1" }
 						}
 					}
 					p { class: "mt-4 max-w-md font-light text-sm text-main-mist/70 md:mt-0",
@@ -116,6 +117,7 @@ pub fn Overview(building: Featured) -> Element {
 /// Live stats come in as a prop (`featured_stats`) so the tile is pure presentation.
 #[component]
 fn FeaturedCard(building: Featured) -> Element {
+	let tr = use_t();
 	let (target_yield, appreciation, status) = featured_stats(&building);
 	let origin = use_context::<AssetOrigin>().0;
 
@@ -132,7 +134,7 @@ fn FeaturedCard(building: Featured) -> Element {
 				style: "background-image: linear-gradient(to top, rgba(7,13,24,0.96) 10%, rgba(7,13,24,0.2)), url({origin}/mfe/{Q1_BANNER}?v={ASSET_V})",
 			}
 			div { class: "absolute right-4 top-4 bg-main-accent-t1 px-3 py-1.5 font-mono text-[0.625rem] font-bold uppercase tracking-widest text-main-black",
-				"Featured Deal"
+				"{tr.t(\"embeds.featuredDeal\")}"
 			}
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
@@ -144,9 +146,9 @@ fn FeaturedCard(building: Featured) -> Element {
 					"Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views."
 				}
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
-					Stat { label: "Target Yield", value_class: "text-main-accent-t2", "{target_yield}" }
-					Stat { label: "Appreciation", value_class: "text-main-accent-t3", "{appreciation}" }
-					Stat { label: "Status", value_class: "text-white", "{status}" }
+					Stat { label: tr.t("embeds.stat.targetYield"), value_class: "text-main-accent-t2", "{target_yield}" }
+					Stat { label: tr.t("embeds.stat.appreciation"), value_class: "text-main-accent-t3", "{appreciation}" }
+					Stat { label: tr.t("embeds.stat.status"), value_class: "text-white", "{status}" }
 				}
 			}
 		}
@@ -156,6 +158,7 @@ fn FeaturedCard(building: Featured) -> Element {
 /// Standard side tile. Links to the TMS Luxury Hotel & Residence property page.
 #[component]
 fn SideCard() -> Element {
+	let tr = use_t();
 	let origin = use_context::<AssetOrigin>().0;
 	rsx! {
 		a {
@@ -176,11 +179,11 @@ fn SideCard() -> Element {
 				}
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
 					div {
-						span { class: "mb-0.5 block font-mono text-[0.5625rem] uppercase text-main-mist/40", "Avg. Apartment" }
+						span { class: "mb-0.5 block font-mono text-[0.5625rem] uppercase text-main-mist/40", "{tr.t(\"embeds.avgApartment\")}" }
 						span { class: "text-sm font-serif font-bold text-white", "$76,000" }
 					}
 					span { class: "flex items-center font-mono text-xs tracking-wider text-main-accent-t1 transition-colors group-hover:text-white",
-						"View Property"
+						"{tr.t(\"embeds.viewProperty\")}"
 						IconArrow {}
 					}
 				}
@@ -192,12 +195,13 @@ fn SideCard() -> Element {
 /// Static market-context tile (no deep-link).
 #[component]
 fn WhyCard() -> Element {
+	let tr = use_t();
 	rsx! {
 		div { class: "flex flex-col justify-between border border-main-mist/10 bg-main-card p-8",
 			div {
 				div { class: "mb-6 inline-flex items-center gap-1.5 border border-main-accent-t1/20 bg-main-accent-t1/10 px-2 py-1 font-mono text-[0.5625rem] uppercase tracking-wider text-main-accent-t1",
 					IconTrend {}
-					"Market Growth"
+					"{tr.t(\"embeds.marketGrowth\")}"
 				}
 				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "Why Quy Nhon?" }
 				p { class: "mb-6 font-light text-sm text-main-mist/70",
@@ -232,6 +236,7 @@ fn snap(v: f64) -> f64 {
 /// exposure drawn as a draggable bar, so the book's composition reads at a glance.
 #[component]
 fn Calculator() -> Element {
+	let tr = use_t();
 	let p = profile();
 	// One exposure signal per factor + the host's current YoY return, all in percent.
 	// ponytail: factor count is fixed (`profile()` is constant), so these per-factor
@@ -260,8 +265,8 @@ fn Calculator() -> Element {
 			div { class: "grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_20rem]",
 				div { class: "flex flex-col gap-5",
 					div { class: "flex flex-col gap-2",
-						span { class: "font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.22em] text-main-accent-t1", "Risk Terminal" }
-						h3 { class: "font-serif text-[1.375rem] text-white", "Correlation Profile" }
+						span { class: "font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.22em] text-main-accent-t1", "{tr.t(\"embeds.riskTerminal\")}" }
+						h3 { class: "font-serif text-[1.375rem] text-white", "{tr.t(\"embeds.correlationProfile\")}" }
 						p { class: "font-light text-[0.8125rem] leading-relaxed text-main-mist/70",
 							"We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
 						}
@@ -363,7 +368,7 @@ fn Calculator() -> Element {
 			// Factor mixer — one row per factor: label · ρ · draggable exposure bar · stepper.
 			div { class: "flex flex-col gap-3 font-mono",
 				div { class: "flex items-center justify-between",
-					span { class: "text-[0.625rem] font-semibold uppercase tracking-[0.15em] text-main-mist/40", "Factor Exposures" }
+					span { class: "text-[0.625rem] font-semibold uppercase tracking-[0.15em] text-main-mist/40", "{tr.t(\"embeds.factorExposures\")}" }
 					div { class: "flex items-center gap-2",
 						span {
 							class: if balanced { "text-[0.5625rem] uppercase tracking-wider text-main-mist/55" } else { "rounded border border-main-accent-t3/50 bg-main-accent-t3/10 px-1.5 py-0.5 text-[0.6875rem] font-bold uppercase tracking-wider text-main-accent-t3" },
@@ -382,7 +387,7 @@ fn Calculator() -> Element {
 				// Host book input — teal-marked: it's the user's own number, not a factor weight.
 				div { class: "flex items-center gap-3",
 					span { class: "h-3.5 w-[3px] shrink-0 rounded-sm bg-main-accent-t1" }
-					span { class: "flex-1 text-[0.625rem] uppercase tracking-wide text-main-mist/70 sm:flex-none", "Host YoY return" }
+					span { class: "flex-1 text-[0.625rem] uppercase tracking-wide text-main-mist/70 sm:flex-none", "{tr.t(\"embeds.hostYoyReturn\")}" }
 					span { class: "hidden text-[0.5625rem] uppercase tracking-wider text-main-mist/30 sm:block sm:flex-1",
 						"your book's current return — not a factor weight"
 					}

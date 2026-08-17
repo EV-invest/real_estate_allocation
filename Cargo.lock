@@ -4173,6 +4173,7 @@ dependencies = [
  "ev_lib",
  "jiff",
  "serde",
+ "serde_json",
  "strum",
  "thiserror 2.0.18",
  "uuid",

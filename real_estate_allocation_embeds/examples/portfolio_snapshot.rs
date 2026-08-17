@@ -12,6 +12,11 @@
 //! featured stats render the standard `MISSING` placeholder). Dark-only; the conductor is
 //! dark-only, so there is no light variant.
 
+// `view` reads its labels through `crate::i18n`, so the snapshot pulls that in by
+// path too. Natively `detect()` has no document to read, so the snapshot bakes
+// English — see the note in `src/i18n.rs`.
+#[path = "../src/i18n.rs"]
+mod i18n;
 #[path = "../src/view.rs"]
 mod view;
 

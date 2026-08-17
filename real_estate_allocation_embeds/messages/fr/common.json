@@ -1,0 +1,54 @@
+{
+  "embeds.eyebrow": {
+    "en": "Investment Scope",
+    "t": "Périmètre d'investissement"
+  },
+  "embeds.title": {
+    "en": "Premium Asset *Portfolio*",
+    "t": "*Portefeuille* d'actifs premium"
+  },
+  "embeds.featuredDeal": {
+    "en": "Featured Deal",
+    "t": "Opération à la une"
+  },
+  "embeds.stat.targetYield": {
+    "en": "Target Yield",
+    "t": "Rendement cible"
+  },
+  "embeds.stat.appreciation": {
+    "en": "Appreciation",
+    "t": "Appréciation"
+  },
+  "embeds.stat.status": {
+    "en": "Status",
+    "t": "Statut"
+  },
+  "embeds.avgApartment": {
+    "en": "Avg. Apartment",
+    "t": "Appartement moyen"
+  },
+  "embeds.viewProperty": {
+    "en": "View Property",
+    "t": "Voir le bien"
+  },
+  "embeds.marketGrowth": {
+    "en": "Market Growth",
+    "t": "Croissance du marché"
+  },
+  "embeds.riskTerminal": {
+    "en": "Risk Terminal",
+    "t": "Terminal de risque"
+  },
+  "embeds.correlationProfile": {
+    "en": "Correlation Profile",
+    "t": "Profil de corrélation"
+  },
+  "embeds.factorExposures": {
+    "en": "Factor Exposures",
+    "t": "Expositions factorielles"
+  },
+  "embeds.hostYoyReturn": {
+    "en": "Host YoY return",
+    "t": "Rendement annuel de l'hôte"
+  }
+}

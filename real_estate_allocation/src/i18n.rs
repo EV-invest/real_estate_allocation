@@ -1,16 +1,9 @@
 //! Locale wiring for the dashboard.
 //!
-//! The catalogues under `messages/` are **the same on-disk format the public
-//! site uses** — `en/common.json` is flat `key → text`, every other locale is
-//! `key → {en, t}` carrying the English it was translated from. That is what
-//! lets `ev_lib::i18n::policy` apply the same rules here as
-//! `npm run i18n:check` applies there, and it is why a catalogue can move
-//! between the two without conversion.
-//!
-//! Baked in with `include_str!` rather than fetched: this is a wasm SPA, so a
-//! runtime fetch would mean the first paint renders untranslated and then
-//! reflows, and a failed fetch would mean no copy at all. Five small JSON files
-//! cost less than that flicker.
+//! The catalogue loading and the policy live in
+//! [`real_estate_allocation_core::i18n`], shared with the embed bundle. What is
+//! here is only what differs per surface: this crate's own `messages/`, and the
+//! Dioxus context that hands one translator to every panel.
 //!
 //! What is **not** translated: the property dataset in [`store`](crate::store)
 //! — project names, developers, terms, reasoning. That is content authored per
@@ -19,16 +12,10 @@
 //! serve. Translating the frame around English prose would be the worse of the
 //! two failures.
 
-use std::collections::BTreeMap;
-
 use dioxus::prelude::*;
-use ev_lib::i18n::{
-	DEFAULT_LOCALE, LOCALES, Locale, Messages, Translator,
-	policy::{ResolvedCatalogue, TranslatedCatalogue, TranslatedEntry, resolve_catalogue},
-};
-use serde::Deserialize;
-
-use crate::domain::ApartmentStatus;
+use ev_lib::i18n::{DEFAULT_LOCALE, Locale, Translator};
+use real_estate_allocation_core::i18n::Catalogues;
+pub use real_estate_allocation_core::i18n::status_key;
 
 /// The cookie the conductor sets once it has negotiated a reader's language.
 /// A zone never negotiates for itself — the shell owns that decision, and two
@@ -36,58 +23,15 @@ use crate::domain::ApartmentStatus;
 /// page.
 const LOCALE_COOKIE: &str = "ev_locale";
 
-const EN: &str = include_str!("../messages/en/common.json");
-const RU: &str = include_str!("../messages/ru/common.json");
-const VI: &str = include_str!("../messages/vi/common.json");
-const FR: &str = include_str!("../messages/fr/common.json");
-const DE: &str = include_str!("../messages/de/common.json");
-
-/// `{"en": "...", "t": "..."}` — the wire shape. `ev_lib` stays dep-free and so
-/// derives no serde; converting here is a four-line cost for keeping the
-/// library parseable by anything.
-#[derive(Deserialize)]
-struct RawEntry {
-	en: String,
-	t: String,
-}
-
-fn source() -> Messages {
-	serde_json::from_str(EN).expect("messages/en/common.json is malformed")
-}
-
-fn translated(raw: &str) -> TranslatedCatalogue {
-	let parsed: BTreeMap<String, RawEntry> = serde_json::from_str(raw).expect("a locale catalogue is malformed");
-	parsed.into_iter().map(|(k, v)| (k, TranslatedEntry { en: v.en, t: v.t })).collect()
-}
-
-fn raw_for(locale: Locale) -> Option<&'static str> {
-	match locale {
-		Locale::En => None,
-		Locale::Ru => Some(RU),
-		Locale::Vi => Some(VI),
-		Locale::Fr => Some(FR),
-		Locale::De => Some(DE),
-	}
-}
-
-/// Apply the translation policy to one locale.
-///
-/// Rule 1.2 in practice: an entry whose English source has moved is refused and
-/// the English is served instead, so a stale translation cannot quietly
-/// contradict the dashboard. Nothing here can fail into a blank panel — every
-/// key English defines is present in the result.
-pub fn resolve(locale: Locale) -> ResolvedCatalogue {
-	let en = source();
-	match raw_for(locale) {
-		None => resolve_catalogue(DEFAULT_LOCALE, &en, &TranslatedCatalogue::new()),
-		Some(raw) => resolve_catalogue(locale, &en, &translated(raw)),
-	}
-}
-
-/// Every non-English catalogue, resolved — what the drift test reports on.
-pub fn resolve_all() -> Vec<ResolvedCatalogue> {
-	LOCALES.into_iter().filter(|l| *l != DEFAULT_LOCALE).map(resolve).collect()
-}
+/// This surface's copy: operational, not marketing. The embed bundle keeps its
+/// own for the opposite reason.
+pub const CATALOGUES: Catalogues = Catalogues {
+	en: include_str!("../messages/en/common.json"),
+	ru: include_str!("../messages/ru/common.json"),
+	vi: include_str!("../messages/vi/common.json"),
+	fr: include_str!("../messages/fr/common.json"),
+	de: include_str!("../messages/de/common.json"),
+};
 
 /// The reader's locale, from the cookie the conductor set.
 ///
@@ -122,22 +66,6 @@ fn detect() -> Locale {
 	DEFAULT_LOCALE
 }
 
-/// The catalogue key for an apartment's portfolio state.
-///
-/// One mapping, used by the header, the details panel and anything else that
-/// shows a state. Two panels each holding their own copy is how a building ends
-/// up "Purchased" in one place and something else in another — which is exactly
-/// what was happening here before.
-pub fn status_key(status: ApartmentStatus) -> &'static str {
-	match status {
-		ApartmentStatus::Available => "status.available",
-		ApartmentStatus::Sold => "status.sold",
-		ApartmentStatus::Purchasing => "status.purchasing",
-		ApartmentStatus::Purchased(_) => "status.purchased",
-		ApartmentStatus::Interesting => "status.interesting",
-	}
-}
-
 /// Shared from the root so every panel renders in one language. A panel that
 /// built its own translator would be a second place the locale could be wrong.
 pub type I18n = Signal<Translator>;
@@ -146,7 +74,7 @@ pub type I18n = Signal<Translator>;
 pub fn use_provide_i18n() -> I18n {
 	use_context_provider(|| {
 		let locale = detect();
-		Signal::new(Translator::new(resolve(locale).messages, locale))
+		Signal::new(Translator::new(CATALOGUES.resolve(locale).messages, locale))
 	})
 }
 
@@ -167,51 +95,44 @@ pub fn use_t() -> Translator {
 	// has no runtime at all and panics before reaching this line).
 	match try_consume_context::<I18n>() {
 		Some(signal) => signal(),
-		None => Translator::new(resolve(DEFAULT_LOCALE).messages, DEFAULT_LOCALE),
+		None => Translator::new(CATALOGUES.resolve(DEFAULT_LOCALE).messages, DEFAULT_LOCALE),
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use ev_lib::i18n::policy::audit;
+	use ev_lib::i18n::LOCALES;
 
 	use super::*;
 
 	#[test]
-	fn every_catalogue_parses_and_carries_every_english_key() {
-		let en = source();
-		assert!(!en.is_empty(), "the English catalogue is the key set — it cannot be empty");
+	fn every_catalogue_carries_every_english_key() {
+		let expected = CATALOGUES.key_count();
+		assert!(expected > 0, "the English catalogue is the key set — it cannot be empty");
 		for locale in LOCALES {
-			let resolved = resolve(locale);
-			assert_eq!(resolved.messages.len(), en.len(), "{locale} does not cover every key English defines");
+			assert_eq!(CATALOGUES.resolve(locale).messages.len(), expected, "{locale} does not cover every key English defines");
 		}
 	}
 
-	/// The drift gate, and the mirror of `npm run i18n:check` on the site.
-	///
-	/// The runtime already degrades safely — rule 1.2 serves English and the
-	/// panel is fine. That safety is exactly why drift needs a second, noisy
-	/// channel: a silent fallback looks identical to a zone that was never
-	/// translated, so without this a locale can rot to zero coverage unnoticed.
 	#[test]
 	fn no_translation_has_drifted_from_its_english_source() {
-		let (ok, report) = audit(&resolve_all(), 1.0);
+		let (ok, report) = CATALOGUES.audit();
 		assert!(ok, "\n{report}\n");
 	}
 
 	#[test]
 	fn a_translated_panel_title_actually_resolves() {
-		let t = Translator::new(resolve(Locale::Ru).messages, Locale::Ru);
+		let t = Translator::new(CATALOGUES.resolve(Locale::Ru).messages, Locale::Ru);
 		assert_eq!(t.t("panel.map"), "Карта");
 		assert_eq!(t.t("status.purchased"), "Куплено");
 	}
 
-	/// The interpolated key in the breadcrumb. Placeholder names are part of what
-	/// the policy checks, so this pins that the argument survives translation.
+	/// Placeholder names are part of what the policy checks, so this pins that
+	/// the argument survives translation in every locale.
 	#[test]
 	fn the_apartment_label_interpolates_in_every_locale() {
 		for locale in LOCALES {
-			let t = Translator::new(resolve(locale).messages, locale);
+			let t = Translator::new(CATALOGUES.resolve(locale).messages, locale);
 			let out = t.tv("header.apt", &[("n".to_owned(), 12.into())].into_iter().collect());
 			assert!(out.contains("12"), "{locale} dropped the apartment number: {out}");
 		}
