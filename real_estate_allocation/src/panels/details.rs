@@ -59,8 +59,8 @@ fn BuildingDetails(building: Building) -> Element {
 	rsx! {
 		div { class: "flex flex-col",
 			match building.avg_price() {
-				Some(p) => rsx! { Kv { label: "Avg apt. price", value_class: "text-main-accent-t3", "{p}" } },
-				None => rsx! { Kv { label: "Avg apt. price", value_class: "text-warn", "?" } },
+				Some(p) => rsx! { Kv { label: tr.t("details.avgApartmentPrice"), value_class: "text-main-accent-t3", "{p}" } },
+				None => rsx! { Kv { label: tr.t("details.avgApartmentPrice"), value_class: "text-warn", "?" } },
 			}
 
 			Kv { label: tr.t("details.lots"), "{building.lots_total()}" }
@@ -83,7 +83,7 @@ fn BuildingDetails(building: Building) -> Element {
 			}
 
 			if let Some(deal) = building.deal.as_ref() {
-				Kv { label: "Equity / Debt", "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
+				Kv { label: tr.t("details.equityDebt"), "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
 			}
 
 			if let Some(loan) = building.loan.as_ref() {
@@ -92,7 +92,7 @@ fn BuildingDetails(building: Building) -> Element {
 				Kv { label: tr.t("details.lender"), "{loan.lender}" }
 			}
 
-			if let Some(terms) = building.terms.as_ref() {
+			if let Some(terms) = crate::translations::terms(&building, tr.locale()) {
 				Note { label: tr.t("details.terms"), "{terms}" }
 			}
 
@@ -100,7 +100,7 @@ fn BuildingDetails(building: Building) -> Element {
 				Note { label: tr.t("details.dealNotes"), "{notes}" }
 			}
 
-			if let Some(reasoning) = building.additional_reasoning.as_ref() {
+			if let Some(reasoning) = crate::translations::reasoning(&building, tr.locale()) {
 				Note { label: tr.t("details.reasoning"), "{reasoning}" }
 			}
 		}
