@@ -186,5 +186,25 @@
   "dashboard.publishFailed": {
     "en": "Publish failed",
     "t": "Công bố thất bại"
+  },
+  "map.center": {
+    "en": "Center map on buildings",
+    "t": "Căn giữa bản đồ theo các tòa nhà"
+  },
+  "app.prevApartment": {
+    "en": "Previous apartment",
+    "t": "Căn hộ trước"
+  },
+  "app.nextApartment": {
+    "en": "Next apartment",
+    "t": "Căn hộ tiếp theo"
+  },
+  "header.openResearch": {
+    "en": "Open research ↗",
+    "t": "Mở nghiên cứu ↗"
+  },
+  "media.dropFile": {
+    "en": "Drop a file here, or",
+    "t": "Kéo tệp vào đây, hoặc"
   }
 }

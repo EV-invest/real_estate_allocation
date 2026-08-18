@@ -179,6 +179,7 @@ fn Treemap(buildings: Vec<Building>, states: Vec<PropertyStateKind>) -> Element 
 /// sub-tile descends into that apartment; the active one keeps the selection ring.
 #[component]
 fn BuildingCell(tile: BTile) -> Element {
+	let tr = use_t();
 	let mut selected = use_context::<SelectedBuilding>();
 	let mut appt = use_context::<SelectedAppt>();
 	// `prospect` is a building-level flag; the expanded cell marks each lot individually.
@@ -212,7 +213,7 @@ fn BuildingCell(tile: BTile) -> Element {
 					rsx! {
 						button {
 							key: "{n}",
-							title: "Apt {n}",
+							title: tr.tv("header.apt", &[("n".to_owned(), n.into())].into_iter().collect()),
 							class: "absolute overflow-hidden rounded-sm transition-[filter] hover:brightness-110 {ring} {dim}",
 							style: "left:calc({ar.x:.4}% + 1px);top:calc({ar.y:.4}% + 1px);width:calc({ar.w:.4}% - 2px);height:calc({ar.h:.4}% - 2px);background-color:{heat_color(ch)}{stripes}",
 							onclick: move |_| {

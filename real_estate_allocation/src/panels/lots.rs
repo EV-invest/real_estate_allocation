@@ -20,7 +20,7 @@ pub fn LotsPanel() -> Element {
 			CardContent { class: "flex-1 overflow-hidden",
 				match &*building.read() {
 					Some(Some(b)) if appt().is_none() => rsx! { Lots { building: b.clone() } },
-					Some(Some(_)) => rsx! { p { class: "text-sm text-muted-foreground", "Lot breakdown is shown at building level." } },
+					Some(Some(_)) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"lots.buildingLevel\")}" } },
 					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"lots.empty\")}" } },
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
@@ -63,12 +63,12 @@ fn Lots(building: Building) -> Element {
 					div { class: "relative h-48 w-48 rounded-full", style: "background:{gradient}",
 						div { class: "absolute inset-[26%] flex flex-col items-center justify-center gap-0.5 rounded-full bg-main-card",
 							span { class: "font-serif text-3xl font-semibold text-main-accent-t3", "{share * 100.0:.1}%" }
-							span { class: "text-[10px] uppercase tracking-widest text-muted-foreground", "Your share" }
+							span { class: "text-[10px] uppercase tracking-widest text-muted-foreground", "{tr.t(\"lots.yourShare\")}" }
 						}
 					}
 					div { class: "flex items-center gap-5 text-xs text-muted-foreground",
 						Legend { color: "#f2c94c", label: tr.t("status.sold") }
-						Legend { color: "#f6dd86", label: "Your Selection" }
+						Legend { color: "#f6dd86", label: tr.t("lots.yourSelection") }
 						Legend { color: "#2c3342", label: tr.t("status.available") }
 					}
 				}

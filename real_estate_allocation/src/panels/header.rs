@@ -37,6 +37,7 @@ pub fn TopBar() -> Element {
 
 #[component]
 fn Loaded(building: Building, appt: Option<u32>) -> Element {
+	let tr = use_t();
 	let mut selected_appt = use_context::<SelectedAppt>();
 	let apt = appt.and_then(|n| building.apartments.iter().find(|a| a.number == n).cloned());
 
@@ -77,7 +78,7 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 					target: "_blank",
 					rel: "noopener noreferrer",
 					class: "inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-4 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground",
-					"Open research ↗"
+					"{tr.t(\"header.openResearch\")}"
 				}
 			}
 		}

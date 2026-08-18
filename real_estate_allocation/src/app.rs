@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::{
 	dashboard::Dashboard,
 	domain::{Building, BuildingId, PropertyStateKind},
-	i18n::use_provide_i18n,
+	i18n::{use_provide_i18n, use_t},
 };
 
 /// The selected building, shared from the root so all panels read/write the same
@@ -86,6 +86,7 @@ enum Route {
 
 #[component]
 fn Home() -> Element {
+	let tr = use_t();
 	let deep = use_context::<DeepLink>();
 	let selected: SelectedBuilding = use_signal(|| deep.building);
 	use_context_provider(|| selected);
@@ -180,13 +181,13 @@ fn Home() -> Element {
 				if appt().is_some() {
 					button {
 						class: "fixed left-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
-						"aria-label": "Previous apartment",
+						"aria-label": tr.t("app.prevApartment"),
 						onclick: move |_| cycle_appt(building, appt, -1),
 						"‹"
 					}
 					button {
 						class: "fixed right-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
-						"aria-label": "Next apartment",
+						"aria-label": tr.t("app.nextApartment"),
 						onclick: move |_| cycle_appt(building, appt, 1),
 						"›"
 					}

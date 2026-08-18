@@ -61,9 +61,10 @@ pub fn MediaPanel() -> Element {
 
 #[component]
 fn PicGrid(files: Vec<PropertyFile>) -> Element {
+	let tr = use_t();
 	let pics: Vec<_> = files.into_iter().filter(|f| f.kind == FileKind::Pic).collect();
 	if pics.is_empty() {
-		return rsx! { p { class: "text-muted-foreground text-sm", "No pictures yet." } };
+		return rsx! { p { class: "text-muted-foreground text-sm", "{tr.t(\"media.noPictures\")}" } };
 	}
 	rsx! {
 		div { class: "grid grid-cols-2 gap-2 pt-2",
@@ -93,9 +94,10 @@ fn Pic(file: PropertyFile) -> Element {
 
 #[component]
 fn FileList(files: Vec<PropertyFile>, kind: FileKind) -> Element {
+	let tr = use_t();
 	let items: Vec<_> = files.into_iter().filter(|f| f.kind == kind).collect();
 	if items.is_empty() {
-		return rsx! { p { class: "text-muted-foreground text-sm", "Nothing here yet." } };
+		return rsx! { p { class: "text-muted-foreground text-sm", "{tr.t(\"media.nothingHere\")}" } };
 	}
 	rsx! {
 		div { class: "flex flex-col gap-2 pt-2",
@@ -130,6 +132,7 @@ fn Download(file: PropertyFile) -> Element {
 /// re-checks the admin token server-side).
 #[component]
 fn DropZone(building_id: BuildingId, appt: Option<u32>, on_uploaded: EventHandler<()>) -> Element {
+	let tr = use_t();
 	let do_upload = move |file: dioxus::html::FileData| {
 		let on_uploaded = on_uploaded;
 		async move {
@@ -155,7 +158,7 @@ fn DropZone(building_id: BuildingId, appt: Option<u32>, on_uploaded: EventHandle
 					spawn(do_upload(file));
 				}
 			},
-			"Drop a file here, or"
+			"{tr.t(\"media.dropFile\")}"
 			input {
 				r#type: "file",
 				class: "block mx-auto mt-2 text-xs",

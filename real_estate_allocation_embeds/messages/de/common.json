@@ -50,5 +50,69 @@
   "embeds.hostYoyReturn": {
     "en": "Host YoY return",
     "t": "Gastgeber-Rendite J/J"
+  },
+  "embeds.property.q1.location": {
+    "en": "Quy Nhơn Beachfront",
+    "t": "Strandlage Quy Nhơn"
+  },
+  "embeds.property.q1.body": {
+    "en": "Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views.",
+    "t": "Markante Zwillingstürme in erster Strandreihe über der sichelförmigen Bucht von Quy Nhơn — eine vom Leuchtturm inspirierte Landmarke, die Fünf-Sterne-Resortausstattung mit Panoramablick auf das Südchinesische Meer verbindet."
+  },
+  "embeds.property.tms.body": {
+    "en": "Quy Nhơn's tallest landmark — a 42-floor beachfront tower pairing five-star Grand Hyams hotel service with branded condotel residences steps from the city beach.",
+    "t": "Das höchste Wahrzeichen Quy Nhơns — ein 42-geschossiger Turm am Strand, der den Fünf-Sterne-Hotelservice des Grand Hyams mit gebrandeten Condotel-Residenzen wenige Schritte vom Stadtstrand verbindet."
+  },
+  "embeds.whyQuyNhon": {
+    "en": "Why Quy Nhon?",
+    "t": "Warum Quy Nhơn?"
+  },
+  "embeds.whyQuyNhonBody": {
+    "en": "Positioned as the new gateway of Central Vietnam, Quy Nhon is undergoing a multi-billion dollar infrastructure upgrade, transforming into a global science and beach tourism destination.",
+    "t": "Als neues Tor zu Zentralvietnam positioniert, durchläuft Quy Nhơn eine milliardenschwere Infrastrukturmodernisierung und entwickelt sich zu einem globalen Ziel für Wissenschaft und Strandtourismus."
+  },
+  "embeds.infrastructureInvestment": {
+    "en": "Infrastructure Investment:",
+    "t": "Infrastrukturinvestitionen:"
+  },
+  "embeds.tourismGrowth": {
+    "en": "Tourism Growth Rate:",
+    "t": "Wachstumsrate Tourismus:"
+  },
+  "embeds.fdiInflow": {
+    "en": "FDI Inflow (2025):",
+    "t": "FDI-Zufluss (2025):"
+  },
+  "embeds.marginalEffect": {
+    "en": "We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own.",
+    "t": "Wir werden an unserem Grenzbeitrag zu Ihrem Portfolio gemessen — positiv, weil wir mit den Alpha-Faktoren, die Sie bereits halten, nahezu unkorreliert sind."
+  },
+  "embeds.allocationSwapped": {
+    "en": "Allocation swapped into Vietnam",
+    "t": "In Vietnam umgeschichteter Anteil"
+  },
+  "embeds.deltaRiskPremia": {
+    "en": "Δ Effective Risk Premia",
+    "t": "Δ Effektive Risikoprämie"
+  },
+  "embeds.deltaExpectedPerf": {
+    "en": "Δ Expected Perf",
+    "t": "Δ Erwartete Wertentw."
+  },
+  "embeds.correlationDisclaimer": {
+    "en": "*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary.",
+    "t": "*Korrelationswerte sind indikative Platzhalter. Risikokosten nach probabilistischem Kelly-Kriterium (γ≈1). Tatsächliche Ergebnisse können abweichen."
+  },
+  "embeds.mixerHint": {
+    "en": "drag bars · type · ↑↓",
+    "t": "ziehen · tippen · ↑↓"
+  },
+  "embeds.hostYoyHint": {
+    "en": "your book's current return — not a factor weight",
+    "t": "die aktuelle Rendite Ihres Portfolios — kein Faktorgewicht"
+  },
+  "embeds.factorExposureAria": {
+    "en": "{label} exposure",
+    "t": "Exposure {label}"
   }
 }
