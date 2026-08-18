@@ -41,6 +41,11 @@ pub const CATALOGUES: Catalogues = Catalogues {
 /// default, which is exactly what an unrecognised value means too.
 #[cfg(target_arch = "wasm32")]
 fn detect() -> Locale {
+	// `dyn_into` is a `JsCast` method, and the trait has to be in scope for it.
+	// Imported here rather than at module scope because `wasm_bindgen` is a
+	// wasm-only dependency — a top-level `use` would break the server build.
+	use wasm_bindgen::JsCast as _;
+
 	let Some(cookies) = web_sys::window()
 		.and_then(|w| w.document())
 		.and_then(|d| d.dyn_into::<web_sys::HtmlDocument>().ok())
