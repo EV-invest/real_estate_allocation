@@ -186,5 +186,25 @@
   "dashboard.publishFailed": {
     "en": "Publish failed",
     "t": "Veröffentlichen fehlgeschlagen"
+  },
+  "map.center": {
+    "en": "Center map on buildings",
+    "t": "Karte auf Gebäude zentrieren"
+  },
+  "app.prevApartment": {
+    "en": "Previous apartment",
+    "t": "Vorherige Wohnung"
+  },
+  "app.nextApartment": {
+    "en": "Next apartment",
+    "t": "Nächste Wohnung"
+  },
+  "header.openResearch": {
+    "en": "Open research ↗",
+    "t": "Recherche öffnen ↗"
+  },
+  "media.dropFile": {
+    "en": "Drop a file here, or",
+    "t": "Datei hierher ziehen, oder"
   }
 }

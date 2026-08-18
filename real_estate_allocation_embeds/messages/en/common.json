@@ -11,5 +11,21 @@
   "embeds.riskTerminal": "Risk Terminal",
   "embeds.correlationProfile": "Correlation Profile",
   "embeds.factorExposures": "Factor Exposures",
-  "embeds.hostYoyReturn": "Host YoY return"
+  "embeds.hostYoyReturn": "Host YoY return",
+  "embeds.property.q1.location": "Quy Nhơn Beachfront",
+  "embeds.property.q1.body": "Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views.",
+  "embeds.property.tms.body": "Quy Nhơn's tallest landmark — a 42-floor beachfront tower pairing five-star Grand Hyams hotel service with branded condotel residences steps from the city beach.",
+  "embeds.whyQuyNhon": "Why Quy Nhon?",
+  "embeds.whyQuyNhonBody": "Positioned as the new gateway of Central Vietnam, Quy Nhon is undergoing a multi-billion dollar infrastructure upgrade, transforming into a global science and beach tourism destination.",
+  "embeds.infrastructureInvestment": "Infrastructure Investment:",
+  "embeds.tourismGrowth": "Tourism Growth Rate:",
+  "embeds.fdiInflow": "FDI Inflow (2025):",
+  "embeds.marginalEffect": "We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own.",
+  "embeds.allocationSwapped": "Allocation swapped into Vietnam",
+  "embeds.deltaRiskPremia": "Δ Effective Risk Premia",
+  "embeds.deltaExpectedPerf": "Δ Expected Perf",
+  "embeds.correlationDisclaimer": "*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary.",
+  "embeds.mixerHint": "drag bars · type · ↑↓",
+  "embeds.hostYoyHint": "your book's current return — not a factor weight",
+  "embeds.factorExposureAria": "{label} exposure"
 }

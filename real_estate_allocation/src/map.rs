@@ -6,12 +6,14 @@ use dioxus::prelude::*;
 use ev_lib::uikit::{Card, CardContent, Skeleton};
 
 use crate::{
+	i18n::use_t,
 	app::{SelectedAppt, SelectedBuilding},
 	domain::PropertyStateKind,
 };
 
 #[component]
 pub fn MapPanel() -> Element {
+	let tr = use_t();
 	let selected = use_context::<SelectedBuilding>();
 	let appt = use_context::<SelectedAppt>();
 
@@ -73,7 +75,7 @@ pub fn MapPanel() -> Element {
 					button {
 						r#type: "button",
 						class: "flex h-7 w-7 items-center justify-center rounded-md bg-background text-muted-foreground transition hover:text-foreground",
-						"aria-label": "Center map on buildings",
+						"aria-label": tr.t("map.center"),
 						onclick: move |_| {
 							#[cfg(target_arch = "wasm32")]
 							center_map();

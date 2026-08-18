@@ -5,12 +5,11 @@
 //! here is only what differs per surface: this crate's own `messages/`, and the
 //! Dioxus context that hands one translator to every panel.
 //!
-//! What is **not** translated: the property dataset in [`store`](crate::store)
-//! — project names, developers, terms, reasoning. That is content authored per
-//! building, not chrome, and it takes the same route publications did: it stays
-//! in the language it was written in until there is a per-record translation to
-//! serve. Translating the frame around English prose would be the worse of the
-//! two failures.
+//! The property dataset in [`store`](crate::store) is content authored per
+//! building, not chrome, so it does not live here. Its two prose fields — terms
+//! and reasoning — are translated per record in [`translations`](crate::translations),
+//! the same route publication cards took. Project names and developers are
+//! proper nouns and stay as written.
 
 use dioxus::prelude::*;
 use ev_lib::i18n::{DEFAULT_LOCALE, Locale, Translator};

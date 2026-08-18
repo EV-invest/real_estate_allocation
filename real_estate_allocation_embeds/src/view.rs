@@ -139,11 +139,11 @@ fn FeaturedCard(building: Featured) -> Element {
 			div { class: "relative z-10 p-8",
 				div { class: "mb-3 flex items-center gap-2 font-mono text-xs text-main-accent-t1",
 					IconPin {}
-					"Quy Nhơn Beachfront" // TODO: exact street address not in `place.json`
+					"{tr.t(\"embeds.property.q1.location\")}" // TODO: exact street address not in `place.json`
 				}
 				h3 { class: "mb-4 font-serif text-2xl text-white sm:text-3xl", "Q1 Tower Quy Nhơn" }
 				p { class: "mb-6 max-w-xl font-light text-sm text-main-mist/70",
-					"Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views."
+					"{tr.t(\"embeds.property.q1.body\")}"
 				}
 				div { class: "grid max-w-md grid-cols-3 gap-4 border-t border-main-mist/10 pt-6",
 					Stat { label: tr.t("embeds.stat.targetYield"), value_class: "text-main-accent-t2", "{target_yield}" }
@@ -175,7 +175,7 @@ fn SideCard() -> Element {
 				}
 				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "TMS Luxury Hotel & Residence" }
 				p { class: "mb-6 font-light text-sm text-main-mist/70",
-					"Quy Nhơn's tallest landmark — a 42-floor beachfront tower pairing five-star Grand Hyams hotel service with branded condotel residences steps from the city beach."
+					"{tr.t(\"embeds.property.tms.body\")}"
 				}
 				div { class: "flex items-center justify-between border-t border-main-mist/10 pt-6",
 					div {
@@ -203,15 +203,15 @@ fn WhyCard() -> Element {
 					IconTrend {}
 					"{tr.t(\"embeds.marketGrowth\")}"
 				}
-				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "Why Quy Nhon?" }
+				h3 { class: "mb-4 font-serif text-xl text-white sm:text-2xl", "{tr.t(\"embeds.whyQuyNhon\")}" }
 				p { class: "mb-6 font-light text-sm text-main-mist/70",
-					"Positioned as the new gateway of Central Vietnam, Quy Nhon is undergoing a multi-billion dollar infrastructure upgrade, transforming into a global science and beach tourism destination."
+					"{tr.t(\"embeds.whyQuyNhonBody\")}"
 				}
 			}
 			ul { class: "space-y-3 border-t border-main-mist/10 pt-6 font-mono text-xs",
-				Row { label: "Infrastructure Investment:", value_class: "text-white", "$2.4 Billion" }
-				Row { label: "Tourism Growth Rate:", value_class: "text-main-accent-t2", "+28% YoY" }
-				Row { label: "FDI Inflow (2025):", value_class: "text-main-accent-t2", "$420M" }
+				Row { label: tr.t("embeds.infrastructureInvestment"), value_class: "text-white", "$2.4 Billion" }
+				Row { label: tr.t("embeds.tourismGrowth"), value_class: "text-main-accent-t2", "+28% YoY" }
+				Row { label: tr.t("embeds.fdiInflow"), value_class: "text-main-accent-t2", "$420M" }
 			}
 		}
 	}
@@ -268,12 +268,12 @@ fn Calculator() -> Element {
 						span { class: "font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.22em] text-main-accent-t1", "{tr.t(\"embeds.riskTerminal\")}" }
 						h3 { class: "font-serif text-[1.375rem] text-white", "{tr.t(\"embeds.correlationProfile\")}" }
 						p { class: "font-light text-[0.8125rem] leading-relaxed text-main-mist/70",
-							"We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own."
+							"{tr.t(\"embeds.marginalEffect\")}"
 						}
 					}
 					div { class: "mt-auto flex flex-col gap-2 font-mono",
 						div { class: "flex items-center justify-between",
-							label { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "Allocation swapped into Vietnam" }
+							label { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "{tr.t(\"embeds.allocationSwapped\")}" }
 							span { class: "text-[0.8125rem] font-bold text-main-accent-t1", "{swap():.0}%" }
 						}
 						span {
@@ -346,12 +346,12 @@ fn Calculator() -> Element {
 
 				// Output panel
 				div { class: "flex flex-col gap-3 border border-main-mist/10 bg-main-surface p-5",
-					span { class: "font-mono text-[0.625rem] uppercase tracking-wider text-main-mist/40", "Δ Effective Risk Premia" }
+					span { class: "font-mono text-[0.625rem] uppercase tracking-wider text-main-mist/40", "{tr.t(\"embeds.deltaRiskPremia\")}" }
 					span { class: "font-serif text-3xl font-bold text-main-accent-t3", "{out.delta_risk_premia * 10_000.0:+.1} bps" }
 					div { class: "border-t border-main-mist/10" }
 					div { class: "flex gap-7 font-mono",
 						div { class: "flex flex-col gap-1",
-							span { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "Δ Expected Perf" }
+							span { class: "text-[0.625rem] uppercase tracking-wider text-main-mist/40", "{tr.t(\"embeds.deltaExpectedPerf\")}" }
 							span { class: "text-[0.8125rem] font-bold text-main-accent-t2", "{out.delta_performance * 100.0:+.2}%" }
 						}
 						div { class: "flex flex-col gap-1",
@@ -360,7 +360,7 @@ fn Calculator() -> Element {
 						}
 					}
 					p { class: "mt-auto font-light text-[0.625rem] leading-snug text-main-mist/30",
-						"*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary."
+						"{tr.t(\"embeds.correlationDisclaimer\")}"
 					}
 				}
 			}
@@ -375,7 +375,7 @@ fn Calculator() -> Element {
 							title: "{off_by:+.0}% vs 100%",
 							"Σ {total:.0}%"
 						}
-						span { class: "text-[0.5625rem] uppercase tracking-wider text-main-mist/30", "drag bars · type · ↑↓" }
+						span { class: "text-[0.5625rem] uppercase tracking-wider text-main-mist/30", "{tr.t(\"embeds.mixerHint\")}" }
 					}
 				}
 				div { class: "flex flex-col gap-2",
@@ -389,7 +389,7 @@ fn Calculator() -> Element {
 					span { class: "h-3.5 w-[3px] shrink-0 rounded-sm bg-main-accent-t1" }
 					span { class: "flex-1 text-[0.625rem] uppercase tracking-wide text-main-mist/70 sm:flex-none", "{tr.t(\"embeds.hostYoyReturn\")}" }
 					span { class: "hidden text-[0.5625rem] uppercase tracking-wider text-main-mist/30 sm:block sm:flex-1",
-						"your book's current return — not a factor weight"
+						"{tr.t(\"embeds.hostYoyHint\")}"
 					}
 					ValueStepper { value: yoy, step: 0.5, big_step: 10.0, min: -50.0, max: 100.0, suffix: "%", accent: true }
 				}
@@ -404,6 +404,7 @@ fn Calculator() -> Element {
 /// bar wraps to its own line below the label/ρ/stepper meta line.
 #[component]
 fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
+	let tr = use_t();
 	let mut value = value;
 	let mut track = use_signal(|| Option::<std::rc::Rc<MountedData>>::None);
 	let mut bounds = use_signal(|| (0.0_f64, 1.0_f64));
@@ -421,7 +422,7 @@ fn FactorRow(label: &'static str, rho: f64, value: Signal<f64>) -> Element {
 				class: "relative max-md:order-last max-md:col-span-full flex h-4 cursor-ew-resize touch-none select-none items-center",
 				role: "slider",
 				tabindex: "0",
-				"aria-label": "{label} exposure",
+				"aria-label": tr.tv("embeds.factorExposureAria", &[("label".to_owned(), label.into())].into_iter().collect()),
 				"aria-valuenow": value(),
 				"aria-valuemin": EXPO_MIN,
 				"aria-valuemax": EXPO_MAX,

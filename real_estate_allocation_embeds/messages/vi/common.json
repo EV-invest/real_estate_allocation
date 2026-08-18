@@ -50,5 +50,69 @@
   "embeds.hostYoyReturn": {
     "en": "Host YoY return",
     "t": "Lợi nhuận chủ nhà theo năm"
+  },
+  "embeds.property.q1.location": {
+    "en": "Quy Nhơn Beachfront",
+    "t": "Bãi biển Quy Nhơn"
+  },
+  "embeds.property.q1.body": {
+    "en": "Landmark twin-tower beachfront residences rising over Quy Nhơn's crescent bay — a lighthouse-inspired icon pairing five-star resort amenities with panoramic East Sea views.",
+    "t": "Bộ đôi tháp căn hộ mặt biển mang tính biểu tượng vươn lên trên vịnh hình lưỡi liềm của Quy Nhơn — kiến trúc lấy cảm hứng từ ngọn hải đăng, kết hợp tiện ích nghỉ dưỡng năm sao với tầm nhìn toàn cảnh Biển Đông."
+  },
+  "embeds.property.tms.body": {
+    "en": "Quy Nhơn's tallest landmark — a 42-floor beachfront tower pairing five-star Grand Hyams hotel service with branded condotel residences steps from the city beach.",
+    "t": "Công trình cao nhất Quy Nhơn — tháp 42 tầng mặt biển kết hợp dịch vụ khách sạn năm sao Grand Hyams với các căn condotel thương hiệu, chỉ vài bước tới bãi biển thành phố."
+  },
+  "embeds.whyQuyNhon": {
+    "en": "Why Quy Nhon?",
+    "t": "Vì sao chọn Quy Nhơn?"
+  },
+  "embeds.whyQuyNhonBody": {
+    "en": "Positioned as the new gateway of Central Vietnam, Quy Nhon is undergoing a multi-billion dollar infrastructure upgrade, transforming into a global science and beach tourism destination.",
+    "t": "Được định vị là cửa ngõ mới của miền Trung Việt Nam, Quy Nhơn đang trải qua đợt nâng cấp hạ tầng hàng tỷ đô la, vươn mình thành điểm đến khoa học và du lịch biển tầm quốc tế."
+  },
+  "embeds.infrastructureInvestment": {
+    "en": "Infrastructure Investment:",
+    "t": "Đầu tư hạ tầng:"
+  },
+  "embeds.tourismGrowth": {
+    "en": "Tourism Growth Rate:",
+    "t": "Tốc độ tăng trưởng du lịch:"
+  },
+  "embeds.fdiInflow": {
+    "en": "FDI Inflow (2025):",
+    "t": "Vốn FDI (2025):"
+  },
+  "embeds.marginalEffect": {
+    "en": "We are judged on our marginal effect on your book — accretive because we are nearly uncorrelated with the alpha factors you already own.",
+    "t": "Chúng tôi được đánh giá qua tác động biên lên danh mục của bạn — tích cực, bởi chúng tôi gần như không tương quan với các yếu tố alpha bạn đang nắm giữ."
+  },
+  "embeds.allocationSwapped": {
+    "en": "Allocation swapped into Vietnam",
+    "t": "Tỷ trọng chuyển sang Việt Nam"
+  },
+  "embeds.deltaRiskPremia": {
+    "en": "Δ Effective Risk Premia",
+    "t": "Δ Phần bù rủi ro hiệu dụng"
+  },
+  "embeds.deltaExpectedPerf": {
+    "en": "Δ Expected Perf",
+    "t": "Δ Hiệu suất kỳ vọng"
+  },
+  "embeds.correlationDisclaimer": {
+    "en": "*Correlation figures indicative placeholders. Risk cost under probabilistic-Kelly (γ≈1). Actual results may vary.",
+    "t": "*Các hệ số tương quan chỉ mang tính minh họa. Chi phí rủi ro theo tiêu chí Kelly xác suất (γ≈1). Kết quả thực tế có thể khác."
+  },
+  "embeds.mixerHint": {
+    "en": "drag bars · type · ↑↓",
+    "t": "kéo thanh · nhập · ↑↓"
+  },
+  "embeds.hostYoyHint": {
+    "en": "your book's current return — not a factor weight",
+    "t": "lợi suất hiện tại của danh mục — không phải trọng số yếu tố"
+  },
+  "embeds.factorExposureAria": {
+    "en": "{label} exposure",
+    "t": "Mức phơi nhiễm {label}"
   }
 }

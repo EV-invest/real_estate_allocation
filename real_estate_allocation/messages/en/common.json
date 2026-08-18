@@ -45,5 +45,10 @@
   "dashboard.layoutCached": "Layout cached in this browser ({band})",
   "dashboard.layoutPublishedDefault": "Layout published (xl + default)",
   "dashboard.layoutPublished": "Layout published ({band})",
-  "dashboard.publishFailed": "Publish failed"
+  "dashboard.publishFailed": "Publish failed",
+  "map.center": "Center map on buildings",
+  "app.prevApartment": "Previous apartment",
+  "app.nextApartment": "Next apartment",
+  "header.openResearch": "Open research ↗",
+  "media.dropFile": "Drop a file here, or"
 }

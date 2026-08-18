@@ -20,6 +20,7 @@ mod uikit;
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod store;
+pub mod translations;
 
 pub use app::App;
 #[cfg(not(target_arch = "wasm32"))]
