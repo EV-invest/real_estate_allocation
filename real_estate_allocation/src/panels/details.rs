@@ -3,8 +3,8 @@ use ev_lib::uikit::{Card, CardContent, Skeleton, Tooltip, TooltipContent, Toolti
 
 use crate::{
 	app::{BuildingResource, SelectedAppt},
-	domain::{Apartment, ApartmentStatus, Building, ConstructionStatus},
-	i18n::use_t,
+	domain::{Apartment, Building, ConstructionStatus},
+	i18n::{status_key, use_t},
 };
 
 #[component]
@@ -34,13 +34,7 @@ pub fn DetailsPanel() -> Element {
 #[component]
 fn ApartmentDetails(apt: Apartment) -> Element {
 	let tr = use_t();
-	let status = match apt.status {
-		ApartmentStatus::Available => "Available",
-		ApartmentStatus::Sold => "Sold",
-		ApartmentStatus::Purchasing => "Purchasing",
-		ApartmentStatus::Purchased(_) => "Purchased",
-		ApartmentStatus::Interesting => "Interesting",
-	};
+	let status = tr.t(status_key(apt.status));
 	rsx! {
 		div { class: "flex flex-col",
 			Kv { label: tr.t("details.apartment"), "#{apt.number}" }
