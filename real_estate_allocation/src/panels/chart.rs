@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, Skeleton};
+use ev_lib::{
+	t,
+	uikit::{Card, CardContent, Skeleton},
+};
 
 use crate::{
 	app::{BuildingResource, SelectedAppt},
@@ -21,7 +24,7 @@ pub fn ChartPanel() -> Element {
 						let apt = appt().and_then(|n| b.apartments.iter().find(|a| a.number == n).cloned());
 						rsx! { ChartBody { building: b.clone(), apt } }
 					}
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"chart.empty\")}" } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", {t!(tr, "chart.empty", "Select a building on the map.")} } },
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
 			}
@@ -34,8 +37,8 @@ fn ChartBody(building: Building, apt: Option<Apartment>) -> Element {
 	let tr = use_t();
 	// Apartment view shows the lot's own price; building view the mean across lots.
 	let (label, price) = match &apt {
-		Some(a) => (tr.t("details.price"), a.price),
-		None => (tr.t("details.avgApartmentPrice"), building.avg_price()),
+		Some(a) => (t!(tr, "details.price", "Price"), a.price),
+		None => (t!(tr, "details.avgApartmentPrice", "Avg apt. price"), building.avg_price()),
 	};
 	rsx! {
 		div { class: "flex flex-col gap-0.5",

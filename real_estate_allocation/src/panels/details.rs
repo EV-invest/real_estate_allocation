@@ -1,10 +1,13 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, Skeleton, Tooltip, TooltipContent, TooltipTrigger};
+use ev_lib::{
+	t,
+	uikit::{Card, CardContent, Skeleton, Tooltip, TooltipContent, TooltipTrigger},
+};
 
 use crate::{
 	app::{BuildingResource, SelectedAppt},
 	domain::{Apartment, Building, ConstructionStatus},
-	i18n::{status_key, use_t},
+	i18n::{status_label, use_t},
 };
 
 #[component]
@@ -23,7 +26,7 @@ pub fn DetailsPanel() -> Element {
 							None => rsx! { BuildingDetails { building: b.clone() } },
 						}
 					}
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"details.empty\")}" } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", {t!(tr, "details.empty", "Select a building to see its terms.")} } },
 					None => rsx! { Skeleton { class: "h-48 w-full" } },
 				}
 			}
@@ -34,14 +37,14 @@ pub fn DetailsPanel() -> Element {
 #[component]
 fn ApartmentDetails(apt: Apartment) -> Element {
 	let tr = use_t();
-	let status = tr.t(status_key(apt.status));
+	let status = status_label(&tr, apt.status);
 	rsx! {
 		div { class: "flex flex-col",
-			Kv { label: tr.t("details.apartment"), "#{apt.number}" }
-			Kv { label: tr.t("details.status"), value_class: "text-main-accent-t3", "{status}" }
+			Kv { label: t!(tr, "details.apartment", "Apartment"), "#{apt.number}" }
+			Kv { label: t!(tr, "details.status", "Status"), value_class: "text-main-accent-t3", "{status}" }
 			match apt.price {
-				Some(p) => rsx! { Kv { label: tr.t("details.price"), value_class: "text-main-accent-t3", "{p}" } },
-				None => rsx! { Kv { label: tr.t("details.price"), value_class: "text-warn", "?" } },
+				Some(p) => rsx! { Kv { label: t!(tr, "details.price", "Price"), value_class: "text-main-accent-t3", "{p}" } },
+				None => rsx! { Kv { label: t!(tr, "details.price", "Price"), value_class: "text-warn", "?" } },
 			}
 		}
 	}
@@ -53,18 +56,18 @@ fn BuildingDetails(building: Building) -> Element {
 	rsx! {
 		div { class: "flex flex-col",
 			match building.avg_price() {
-				Some(p) => rsx! { Kv { label: tr.t("details.avgApartmentPrice"), value_class: "text-main-accent-t3", "{p}" } },
-				None => rsx! { Kv { label: tr.t("details.avgApartmentPrice"), value_class: "text-warn", "?" } },
+				Some(p) => rsx! { Kv { label: t!(tr, "details.avgApartmentPrice", "Avg apt. price"), value_class: "text-main-accent-t3", "{p}" } },
+				None => rsx! { Kv { label: t!(tr, "details.avgApartmentPrice", "Avg apt. price"), value_class: "text-warn", "?" } },
 			}
 
-			Kv { label: tr.t("details.lots"), "{building.lots_total()}" }
+			Kv { label: t!(tr, "details.lots", "Lots"), "{building.lots_total()}" }
 
 			if let Some(dev) = building.developer.as_ref() {
 				DeveloperKv { name: dev.clone() }
 			}
 
 			Kv {
-				label: tr.t("details.construction"),
+				label: t!(tr, "details.construction", "Construction"),
 				value_class: match building.construction {
 					ConstructionStatus::Completed => "text-main-accent-t2",
 					ConstructionStatus::UnderConstruction => "text-warn",
@@ -73,29 +76,29 @@ fn BuildingDetails(building: Building) -> Element {
 			}
 
 			if building.target_appreciation > 0.0 {
-				Kv { label: tr.t("details.targetAppreciation"), value_class: "text-main-accent-t3", "{building.target_appreciation:.0}% / yr" }
+				Kv { label: t!(tr, "details.targetAppreciation", "Target appreciation"), value_class: "text-main-accent-t3", "{building.target_appreciation:.0}% / yr" }
 			}
 
 			if let Some(deal) = building.deal.as_ref() {
-				Kv { label: tr.t("details.equityDebt"), "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
+				Kv { label: t!(tr, "details.equityDebt", "Equity / Debt"), "{deal.equity_pct:.0}% / {deal.debt_pct:.0}%" }
 			}
 
 			if let Some(loan) = building.loan.as_ref() {
-				Kv { label: tr.t("details.loanRate"), value_class: "text-main-accent-t1", "{loan.rate_pct:.2}%" }
-				Kv { label: tr.t("details.term"), "{loan.term_years} yr" }
-				Kv { label: tr.t("details.lender"), "{loan.lender}" }
+				Kv { label: t!(tr, "details.loanRate", "Loan rate"), value_class: "text-main-accent-t1", "{loan.rate_pct:.2}%" }
+				Kv { label: t!(tr, "details.term", "Term"), "{loan.term_years} yr" }
+				Kv { label: t!(tr, "details.lender", "Lender"), "{loan.lender}" }
 			}
 
 			if let Some(terms) = crate::translations::terms(&building, tr.locale()) {
-				Note { label: tr.t("details.terms"), "{terms}" }
+				Note { label: t!(tr, "details.terms", "Terms"), "{terms}" }
 			}
 
 			if let Some(notes) = building.deal.as_ref().and_then(|d| d.notes.as_ref()) {
-				Note { label: tr.t("details.dealNotes"), "{notes}" }
+				Note { label: t!(tr, "details.dealNotes", "Deal notes"), "{notes}" }
 			}
 
 			if let Some(reasoning) = crate::translations::reasoning(&building, tr.locale()) {
-				Note { label: tr.t("details.reasoning"), "{reasoning}" }
+				Note { label: t!(tr, "details.reasoning", "Reasoning"), "{reasoning}" }
 			}
 		}
 	}
@@ -140,14 +143,14 @@ fn DeveloperKv(name: String) -> Element {
 	rsx! {
 		match note {
 			Some(note) => rsx! {
-				Kv { label: tr.t("details.developer"),
+				Kv { label: t!(tr, "details.developer", "Developer"),
 					Tooltip {
 						TooltipTrigger { class: "cursor-help text-sm font-semibold underline decoration-dotted underline-offset-4", "{name}" }
 						TooltipContent { class: "max-w-xs text-left text-xs font-normal normal-case", "{note}" }
 					}
 				}
 			},
-			None => rsx! { Kv { label: tr.t("details.developer"), "{name}" } },
+			None => rsx! { Kv { label: t!(tr, "details.developer", "Developer"), "{name}" } },
 		}
 	}
 }

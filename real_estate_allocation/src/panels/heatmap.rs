@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, Skeleton};
+use ev_lib::{
+	t,
+	uikit::{Card, CardContent, Skeleton},
+};
 
 use crate::{
 	app::{Filter, SelectedAppt, SelectedBuilding},
@@ -32,7 +35,7 @@ pub fn PortfolioHeatmap() -> Element {
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 					Some(list) if list.is_empty() => rsx! {
 						div { class: "flex h-full items-center justify-center text-sm text-muted-foreground",
-							"{tr.t(\"heatmap.empty\")}"
+							{t!(tr, "heatmap.empty", "No holdings to display.")}
 						}
 					},
 					Some(list) => rsx! { Treemap { buildings: list.clone(), states: states() } },
@@ -213,7 +216,7 @@ fn BuildingCell(tile: BTile) -> Element {
 					rsx! {
 						button {
 							key: "{n}",
-							title: tr.tv("header.apt", &[("n".to_owned(), n.into())].into_iter().collect()),
+							title: t!(tr, "header.apt", "Apt {n}", n = n),
 							class: "absolute overflow-hidden rounded-sm transition-[filter] hover:brightness-110 {ring} {dim}",
 							style: "left:calc({ar.x:.4}% + 1px);top:calc({ar.y:.4}% + 1px);width:calc({ar.w:.4}% - 2px);height:calc({ar.h:.4}% - 2px);background-color:{heat_color(ch)}{stripes}",
 							onclick: move |_| {

@@ -1,5 +1,8 @@
 use dioxus::{html::HasFileData, prelude::*};
-use ev_lib::uikit::{Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger};
+use ev_lib::{
+	t,
+	uikit::{Button, ButtonVariant, Card, CardContent, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger},
+};
 
 use crate::{
 	app::{SelectedAppt, SelectedBuilding},
@@ -33,16 +36,16 @@ pub fn MediaPanel() -> Element {
 		Card { class: "flex h-full flex-col overflow-hidden",
 			CardContent { class: "flex-1 overflow-y-auto",
 				match selected() {
-					None => rsx! { p { class: "text-muted-foreground text-sm", "{tr.t(\"media.empty\")}" } },
+					None => rsx! { p { class: "text-muted-foreground text-sm", {t!(tr, "media.empty", "Select a building to view its media.")} } },
 					Some(bid) => {
 						let appt = appt();
 						let files = files.read().clone().unwrap_or_default();
 						rsx! {
 							Tabs { default_value: "pics".to_string(),
 								TabsList {
-									TabsTrigger { value: "pics", "{tr.t(\"media.pics\")}" }
-									TabsTrigger { value: "deck", "{tr.t(\"media.deck\")}" }
-									TabsTrigger { value: "docs", "{tr.t(\"media.docs\")}" }
+									TabsTrigger { value: "pics", {t!(tr, "media.pics", "Pics")} }
+									TabsTrigger { value: "deck", {t!(tr, "media.deck", "Deck")} }
+									TabsTrigger { value: "docs", {t!(tr, "media.docs", "Docs")} }
 								}
 								TabsContent { value: "pics", PicGrid { files: files.clone() } }
 								TabsContent { value: "deck", FileList { files: files.clone(), kind: FileKind::PitchDeck } }
@@ -64,7 +67,7 @@ fn PicGrid(files: Vec<PropertyFile>) -> Element {
 	let tr = use_t();
 	let pics: Vec<_> = files.into_iter().filter(|f| f.kind == FileKind::Pic).collect();
 	if pics.is_empty() {
-		return rsx! { p { class: "text-muted-foreground text-sm", "{tr.t(\"media.noPictures\")}" } };
+		return rsx! { p { class: "text-muted-foreground text-sm", {t!(tr, "media.noPictures", "No pictures yet.")} } };
 	}
 	rsx! {
 		div { class: "grid grid-cols-2 gap-2 pt-2",
@@ -97,7 +100,7 @@ fn FileList(files: Vec<PropertyFile>, kind: FileKind) -> Element {
 	let tr = use_t();
 	let items: Vec<_> = files.into_iter().filter(|f| f.kind == kind).collect();
 	if items.is_empty() {
-		return rsx! { p { class: "text-muted-foreground text-sm", "{tr.t(\"media.nothingHere\")}" } };
+		return rsx! { p { class: "text-muted-foreground text-sm", {t!(tr, "media.nothingHere", "Nothing here yet.")} } };
 	}
 	rsx! {
 		div { class: "flex flex-col gap-2 pt-2",
@@ -158,7 +161,7 @@ fn DropZone(building_id: BuildingId, appt: Option<u32>, on_uploaded: EventHandle
 					spawn(do_upload(file));
 				}
 			},
-			"{tr.t(\"media.dropFile\")}"
+			{t!(tr, "media.dropFile", "Drop a file here, or")}
 			input {
 				r#type: "file",
 				class: "block mx-auto mt-2 text-xs",

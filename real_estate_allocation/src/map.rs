@@ -3,12 +3,15 @@
 //! renders a placeholder so the inline-JS extern is never linked off-target.
 
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, Skeleton};
+use ev_lib::{
+	t,
+	uikit::{Card, CardContent, Skeleton},
+};
 
 use crate::{
-	i18n::use_t,
 	app::{SelectedAppt, SelectedBuilding},
 	domain::PropertyStateKind,
+	i18n::use_t,
 };
 
 #[component]
@@ -75,7 +78,7 @@ pub fn MapPanel() -> Element {
 					button {
 						r#type: "button",
 						class: "flex h-7 w-7 items-center justify-center rounded-md bg-background text-muted-foreground transition hover:text-foreground",
-						"aria-label": tr.t("map.center"),
+						"aria-label": t!(tr, "map.center", "Center map on buildings"),
 						onclick: move |_| {
 							#[cfg(target_arch = "wasm32")]
 							center_map();

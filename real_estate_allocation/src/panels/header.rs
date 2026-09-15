@@ -1,10 +1,13 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Badge, BadgeVariant};
+use ev_lib::{
+	t,
+	uikit::{Badge, BadgeVariant},
+};
 
 use crate::{
 	app::{BuildingResource, SelectedAppt},
 	domain::{ApartmentStatus, Building, PropertyStateKind},
-	i18n::{status_key, use_t},
+	i18n::{status_label, use_t},
 };
 
 /// Persistent page header, two rows: breadcrumb (the only place the name appears),
@@ -47,7 +50,7 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 			div { class: "flex items-center gap-3",
 				match &apt {
 					Some(a) => rsx! {
-						Badge { variant: status_variant(a.status), "{use_t().t(status_key(a.status))}" }
+						Badge { variant: status_variant(a.status), "{status_label(&tr, a.status)}" }
 						match a.price {
 							Some(p) => rsx! { span { class: "text-sm font-medium text-main-accent-t2", "{p}" } },
 							None => rsx! { span { class: "text-sm font-medium text-warn", "?" } },
@@ -78,7 +81,7 @@ fn Loaded(building: Building, appt: Option<u32>) -> Element {
 					target: "_blank",
 					rel: "noopener noreferrer",
 					class: "inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-4 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground",
-					"{tr.t(\"header.openResearch\")}"
+					{t!(tr, "header.openResearch", "Open research ↗")}
 				}
 			}
 		}
@@ -90,12 +93,12 @@ fn Empty() -> Element {
 	let tr = use_t();
 	rsx! {
 		nav { class: "flex items-center gap-2 text-sm text-muted-foreground",
-			span { class: "text-foreground", "{tr.t(\"header.buildings\")}" }
+			span { class: "text-foreground", {t!(tr, "header.buildings", "Buildings")} }
 		}
 		// Stats/actions are meaningless without a building, so row 2 becomes the mild
 		// warning nudging towards selecting one. `h-9` matches the action row's height.
 		div { class: "flex h-9 items-center text-sm font-medium text-main-accent-t3",
-			"{tr.t(\"header.empty\")}"
+			{t!(tr, "header.empty", "Select a building on the map, to populate the dashboard")}
 		}
 	}
 }
@@ -105,25 +108,14 @@ fn Breadcrumb(building: String, appt: Option<u32>) -> Element {
 	let tr = use_t();
 	rsx! {
 		nav { class: "flex items-center gap-2 text-sm text-muted-foreground",
-			span { "{tr.t(\"header.buildings\")}" }
+			span { {t!(tr, "header.buildings", "Buildings")} }
 			span { "›" }
 			span { class: if appt.is_some() { "" } else { "text-foreground" }, "{building}" }
 			if let Some(n) = appt {
 				span { "›" }
-				span { class: "text-foreground", "{tr.tv(\"header.apt\", &[(\"n\".to_owned(), n.into())].into_iter().collect())}" }
+				span { class: "text-foreground", {t!(tr, "header.apt", "Apt {n}", n = n)} }
 			}
 		}
-	}
-}
-
-#[allow(dead_code)]
-fn status_label(status: ApartmentStatus) -> &'static str {
-	match status {
-		ApartmentStatus::Available => "Available",
-		ApartmentStatus::Sold => "Sold",
-		ApartmentStatus::Purchasing => "Purchasing",
-		ApartmentStatus::Purchased(_) => "Purchased",
-		ApartmentStatus::Interesting => "Interesting",
 	}
 }
 

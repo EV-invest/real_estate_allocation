@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use dockviewers::dioxus::{Config, DockPanel, Group, GroupId, MinSize, PackedApi, PackedArea, PanelId, Saved, Step};
+use ev_lib::t;
 
 use crate::{
 	api::load_default_layout,
@@ -21,32 +22,32 @@ pub fn Dashboard() -> Element {
 		vec![
 			DockPanel {
 				id: PanelId("map".into()),
-				title: panel_tr.t("panel.map"),
+				title: t!(panel_tr, "panel.map", "Map"),
 				content: rsx! { MapPanel {} },
 			},
 			DockPanel {
 				id: PanelId("media".into()),
-				title: panel_tr.t("panel.media"),
+				title: t!(panel_tr, "panel.media", "Media"),
 				content: rsx! { MediaPanel {} },
 			},
 			DockPanel {
 				id: PanelId("chart".into()),
-				title: panel_tr.t("panel.chart"),
+				title: t!(panel_tr, "panel.chart", "Chart"),
 				content: rsx! { ChartPanel {} },
 			},
 			DockPanel {
 				id: PanelId("heatmap".into()),
-				title: panel_tr.t("panel.portfolio"),
+				title: t!(panel_tr, "panel.portfolio", "Portfolio"),
 				content: rsx! { PortfolioHeatmap {} },
 			},
 			DockPanel {
 				id: PanelId("lots".into()),
-				title: panel_tr.t("panel.lots"),
+				title: t!(panel_tr, "panel.lots", "Lots"),
 				content: rsx! { LotsPanel {} },
 			},
 			DockPanel {
 				id: PanelId("details".into()),
-				title: panel_tr.t("panel.details"),
+				title: t!(panel_tr, "panel.details", "Details"),
 				content: rsx! { DetailsPanel {} },
 			},
 		]
@@ -100,18 +101,18 @@ pub fn Dashboard() -> Element {
 		on_save: Some(Rc::new(move |saved| {
 			let tr = toast_tr.clone();
 			match saved {
-				Saved::Cached { band } => show_toast(toast, tr.tv("dashboard.layoutCached", &[("band".to_owned(), band.to_string().into())].into_iter().collect())),
+				Saved::Cached { band } => show_toast(toast, t!(tr, "dashboard.layoutCached", "Layout cached in this browser ({band})", band = band.to_string())),
 				Saved::Published { band, json } => {
 					spawn(async move {
 						let msg = match crate::api::save_default_layout(json, band, crate::api::admin_token()).await {
 							// An xl publish doubles as the `default` seed (see `save_default_layout`).
 							Ok(()) => match band {
-								dockviewers::core::Band::Xl => tr.t("dashboard.layoutPublishedDefault"),
-								band => tr.tv("dashboard.layoutPublished", &[("band".to_owned(), band.to_string().into())].into_iter().collect()),
+								dockviewers::core::Band::Xl => t!(tr, "dashboard.layoutPublishedDefault", "Layout published (xl + default)"),
+								band => t!(tr, "dashboard.layoutPublished", "Layout published ({band})", band = band.to_string()),
 							},
 							Err(e) => {
 								dioxus::logger::tracing::error!(%e, "publish default layout failed");
-								tr.t("dashboard.publishFailed")
+								t!(tr, "dashboard.publishFailed", "Publish failed")
 							}
 						};
 						show_toast(toast, msg);

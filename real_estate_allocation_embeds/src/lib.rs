@@ -3,9 +3,15 @@
 //! Marketing surface and cross-origin microfrontend bundle. The wasm container for the
 //! landing "Premium Asset Portfolio" bento section — no app shell, so the landing host
 //! composes `<tag>` directly into its page. All presentation lives in `view` (native-
-//! compilable, so the same components render the static `portfolio.html` snapshot); this
-//! file is only the wasm-only shell: the custom-element registration (`ev_lib::mfe!`),
-//! the live data fetch, and the asset-origin derivation.
+//! compilable, so the same components render the static `portfolio.<locale>.html`
+//! snapshots); this file is only the wasm-only shell: the custom-element registration
+//! (`ev_lib::mfe!`), the live data fetch, and the asset-origin derivation.
+//!
+//! The locale is not among the wasm-only inputs, and deliberately so: `mfe!` reads the
+//! host page's `<html lang>` (`ev_lib::mfe::host_locale`) and provides the `Translator`
+//! above `view`. Nothing is passed to the element either — the conductor's
+//! `RemoteElement` appends the node in one effect and sets its attributes in a later
+//! one, so an attribute reads as absent at `connectedCallback` time.
 
 mod i18n;
 mod view;
@@ -15,14 +21,13 @@ use ev_lib::mfe::bundle_origin;
 use real_estate_allocation_core::domain::Building;
 use view::{AssetOrigin, Featured, Overview, Q1_PROPERTY};
 
-use crate::i18n::use_provide_i18n;
-
 // The producer entrypoint: generates the custom-element registration, the
 // `wasm-bindgen(start)` entrypoint, the origin self-derivation, and `MFE_MANIFEST`
 // (emitted by the build as `mfe.json`).
 ev_lib::mfe! {
 	service: "real-estate", name: "overview", kind: component,
-	root: crate::OverviewContainer, stylesheet: "mfe.css"
+	root: crate::OverviewContainer, stylesheet: "mfe.css",
+	messages: crate::i18n::catalogue
 }
 
 /// wasm shell around `view::Overview`: fetches Q1's live figures, provides the asset
@@ -40,8 +45,6 @@ fn OverviewContainer() -> Element {
 		b
 	});
 	use_context_provider(|| AssetOrigin(bundle_origin()));
-	// One translator for the widget, read from the host page's `ev_locale` cookie.
-	use_provide_i18n();
 	let building = Featured(building.read().clone());
 	rsx! { Overview { building } }
 }

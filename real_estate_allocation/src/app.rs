@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use ev_lib::t;
 
 use crate::{
 	dashboard::Dashboard,
@@ -39,9 +40,6 @@ pub fn App() -> Element {
 	use_provide_i18n();
 	rsx! {
 		document::Stylesheet { href: asset!("/assets/tailwind.css") }
-		// Self-hosted brand webfonts, bundled and `@font-face`d by the uikit — no
-		// CDN, renders identically offline / behind a CSP.
-		ev_lib::uikit::Fonts {}
 		Router::<Route> {}
 	}
 }
@@ -181,13 +179,13 @@ fn Home() -> Element {
 				if appt().is_some() {
 					button {
 						class: "fixed left-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
-						"aria-label": tr.t("app.prevApartment"),
+						"aria-label": t!(tr, "app.prevApartment", "Previous apartment"),
 						onclick: move |_| cycle_appt(building, appt, -1),
 						"‹"
 					}
 					button {
 						class: "fixed right-2 top-1/2 z-40 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-main-black/70 text-2xl text-main-mist transition hover:text-white",
-						"aria-label": tr.t("app.nextApartment"),
+						"aria-label": t!(tr, "app.nextApartment", "Next apartment"),
 						onclick: move |_| cycle_appt(building, appt, 1),
 						"›"
 					}

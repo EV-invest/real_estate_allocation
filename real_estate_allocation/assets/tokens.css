@@ -17,10 +17,10 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   /* The leading var() carries its own fallback: next/font (landing) sets
-   * `--font-inter` / `--font-playfair`; a Rust consumer renders `uikit::Fonts`,
-   * which `@font-face`s the same families. Without the in-var fallback an
-   * undefined leading var would invalidate the whole `font-family` and drop the
-   * browser to its default — so it must never resolve to guaranteed-invalid. */
+   * `--font-inter` / `--font-playfair`; nothing sets them here, so the named
+   * family is tried and the generic tail catches it. Without the in-var fallback
+   * an undefined leading var would invalidate the whole `font-family` and drop
+   * the browser to its default — so it must never resolve to guaranteed-invalid. */
   --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-playfair, "Playfair Display"), ui-serif, Georgia, serif;
   --font-mono: var(--font-inter, "Inter"), ui-monospace, monospace;

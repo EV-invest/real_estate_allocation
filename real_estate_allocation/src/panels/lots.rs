@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
-use ev_lib::uikit::{Card, CardContent, Skeleton};
+use ev_lib::{
+	t,
+	uikit::{Card, CardContent, Skeleton},
+};
 
 use crate::{
 	app::{BuildingResource, SelectedAppt},
@@ -20,8 +23,8 @@ pub fn LotsPanel() -> Element {
 			CardContent { class: "flex-1 overflow-hidden",
 				match &*building.read() {
 					Some(Some(b)) if appt().is_none() => rsx! { Lots { building: b.clone() } },
-					Some(Some(_)) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"lots.buildingLevel\")}" } },
-					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", "{tr.t(\"lots.empty\")}" } },
+					Some(Some(_)) => rsx! { p { class: "text-sm text-muted-foreground", {t!(tr, "lots.buildingLevel", "Lot breakdown is shown at building level.")} } },
+					Some(None) => rsx! { p { class: "text-sm text-muted-foreground", {t!(tr, "lots.empty", "Select a building to see its lots.")} } },
 					None => rsx! { Skeleton { class: "h-full w-full" } },
 				}
 			}
@@ -55,21 +58,21 @@ fn Lots(building: Building) -> Element {
 		div { id: "rea-lots-fit", class: "flex h-full w-full items-center justify-center overflow-hidden",
 			div { class: "flex w-80 flex-col gap-7",
 				div { class: "grid grid-cols-3 gap-3",
-					Tile { label: tr.t("lots.total"), value: total, value_class: "text-white" }
-					Tile { label: tr.t("status.sold"), value: sold, value_class: "text-main-accent-t3" }
-					Tile { label: tr.t("status.available"), value: available, value_class: "text-main-accent-t2" }
+					Tile { label: t!(tr, "lots.total", "Total lots"), value: total, value_class: "text-white" }
+					Tile { label: t!(tr, "status.sold", "Sold"), value: sold, value_class: "text-main-accent-t3" }
+					Tile { label: t!(tr, "status.available", "Available"), value: available, value_class: "text-main-accent-t2" }
 				}
 				div { class: "flex flex-col items-center gap-6",
 					div { class: "relative h-48 w-48 rounded-full", style: "background:{gradient}",
 						div { class: "absolute inset-[26%] flex flex-col items-center justify-center gap-0.5 rounded-full bg-main-card",
 							span { class: "font-serif text-3xl font-semibold text-main-accent-t3", "{share * 100.0:.1}%" }
-							span { class: "text-[10px] uppercase tracking-widest text-muted-foreground", "{tr.t(\"lots.yourShare\")}" }
+							span { class: "text-[10px] uppercase tracking-widest text-muted-foreground", {t!(tr, "lots.yourShare", "Your share")} }
 						}
 					}
 					div { class: "flex items-center gap-5 text-xs text-muted-foreground",
-						Legend { color: "#f2c94c", label: tr.t("status.sold") }
-						Legend { color: "#f6dd86", label: tr.t("lots.yourSelection") }
-						Legend { color: "#2c3342", label: tr.t("status.available") }
+						Legend { color: "#f2c94c", label: t!(tr, "status.sold", "Sold") }
+						Legend { color: "#f6dd86", label: t!(tr, "lots.yourSelection", "Your Selection") }
+						Legend { color: "#2c3342", label: t!(tr, "status.available", "Available") }
 					}
 				}
 			}
