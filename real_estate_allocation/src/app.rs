@@ -40,9 +40,9 @@ pub fn App() -> Element {
 	use_provide_i18n();
 	rsx! {
 		document::Stylesheet { href: asset!("/assets/tailwind.css") }
-		// Self-hosted brand webfonts. Ours since they left the uikit in 0.10.0 —
-		// without this the token chains name "Inter" with nothing defining it.
-		crate::fonts::Fonts {}
+		// Self-hosted brand webfonts, bundled and `@font-face`d by the uikit — no
+		// CDN, renders identically offline / behind a CSP.
+		ev_lib::uikit::Fonts {}
 		Router::<Route> {}
 	}
 }

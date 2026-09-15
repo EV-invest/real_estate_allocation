@@ -1953,9 +1953,9 @@ dependencies = [
 
 [[package]]
 name = "ev_lib"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8db4cc3cf485bd83ac8e6eb7a31263e5e232f7d9814e82002f6feb08746dded4"
+checksum = "78042c915770a0fdefa94b2b4a51ad6aa6fb0583eee247215b9b68fe54c283ac"
 dependencies = [
  "async-trait",
  "dioxus",
