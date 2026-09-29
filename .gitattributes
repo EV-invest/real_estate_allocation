@@ -17,6 +17,13 @@
 *.tiff -filter
 *.webp -filter
 
+# Video formats
+*.mp4 -filter
+*.webm -filter
+*.mov -filter
+*.mkv -filter
+*.m4v -filter
+
 # Documents
 *.pdf filter=lfs diff=lfs merge=ours -text
 *.excalidraw filter=lfs diff=lfs merge=ours -text
@@ -35,4 +42,3 @@
 # Generated/locked files (keep current branch's version on conflict)
 Cargo.lock -filter merge=ours
 flake.lock -filter merge=ours
-.pre-commit-config.yaml -filter merge=ours

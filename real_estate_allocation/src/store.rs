@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use ev_lib::architecture::{Reader, Repository, Specification};
 use sqlx::{
 	FromRow, Row as _, SqlitePool,
-	sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+	sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
 use crate::{
@@ -44,10 +44,13 @@ impl SqliteStore {
 
 		// `foreign_keys(true)` per connection so `property_files.property_id` →
 		// properties(id) is enforced by the DB, not just by discipline.
+		// WAL is required by litestream (the sidecar that replicates `/data/app.db` to R2);
+		// sqlx otherwise leaves the journal mode unset, which defaults to SQLite's DELETE mode.
 		let opts = SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))
 			.map_err(map_sqlx_error)?
 			.create_if_missing(true)
-			.foreign_keys(true);
+			.foreign_keys(true)
+			.journal_mode(SqliteJournalMode::Wal);
 		let pool = SqlitePoolOptions::new().connect_with(opts).await.map_err(map_sqlx_error)?;
 		// Schema is versioned in `migrations/`; applied here so a bare server boot keeps
 		// the DB current, and via `db migrate` for explicit/CI use. The `Building` doc

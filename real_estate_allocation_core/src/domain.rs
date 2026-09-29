@@ -34,7 +34,7 @@ impl PropertyState {
 /// The state *category*, stripped of the purchase instant — what filters, badges and
 /// map colours switch on. `PropertyState::kind` projects onto it, and it is the value
 /// persisted in the `state` text column.
-#[derive(strum::AsRefStr, Clone, Copy, Debug, Deserialize, strum::Display, strum::EnumString, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, strum::AsRefStr, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "title_case")]
 pub enum PropertyStateKind {
 	Purchased,
@@ -44,7 +44,7 @@ pub enum PropertyStateKind {
 
 /// Build progress, orthogonal to `PropertyState` (which tracks *our* acquisition
 /// lifecycle, not the asset's physical state).
-#[derive(strum::AsRefStr, Clone, Copy, Debug, Deserialize, strum::Display, strum::EnumString, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, strum::AsRefStr, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "title_case")]
 pub enum ConstructionStatus {
 	UnderConstruction,
@@ -318,7 +318,7 @@ impl AggregateRoot for Building {
 	const NAME: &'static str = "property";
 }
 
-#[derive(strum::AsRefStr, Clone, Copy, Debug, Deserialize, strum::EnumString, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, strum::AsRefStr, strum::EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum FileKind {
 	Pic,

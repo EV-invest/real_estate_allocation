@@ -19,6 +19,9 @@
         # Canonical toolchain pinned in v_flakes — byte-identical across repos, so
         # the nix store dedups it and sccache cross-references compilations.
         rust = v_flakes.rs.default_nightly system;
+        # `buildRustPackage` derivations (reaBin/embeds/reaDxBuild) use this one —
+        # the dev toolchain isn't meant for hermetic package builds.
+        build_rust = v_flakes.rs.build_nightly system;
         # rust-lld (the wasm32 linker) embeds a bad rpath on macOS — it looks for
         # libLLVM.dylib in bin/../lib but Nix puts it in <rust>/lib, so a wasm build
         # aborts (SIGABRT) at link time. Point the dynamic loader at <rust>/lib.
@@ -229,7 +232,7 @@
                     - type: s3
                       endpoint: https://1dbedc392b294bdef442b64e9030ba96.r2.cloudflarestorage.com
                       bucket: ev-invest-state
-                      path: real-estate-allocation/litestream
+                      path: litestream/apps/real-estate-allocation-data/app.db
             '';
           in
           pkgs.writeShellApplication {
@@ -264,8 +267,8 @@
 
       in
       let
-        rustc = rust;
-        cargo = rust;
+        rustc = build_rust;
+        cargo = build_rust;
         rustPlatform = pkgs.makeRustPlatform {
           inherit rustc cargo stdenv;
         };
@@ -481,6 +484,7 @@
           containers."" = {
             port = pkgs.lib.toInt reaPort;
             mounts = [ "/data" ];
+            sqlite = [ "/data/app.db" ];
             healthPath = "/health";
             criticality = "normal";
             entrypoint = [ "${reaDxBuild}/bin/real_estate_allocation" "--config" "${prodConfig}" ];

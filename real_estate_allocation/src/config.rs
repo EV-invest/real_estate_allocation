@@ -4,7 +4,7 @@ use secrecy::SecretString;
 use smart_default::SmartDefault;
 use v_utils::{io::ExpandedPath, macros as v_macros};
 
-#[derive(Clone, Debug, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings, SmartDefault)]
+#[derive(Clone, Debug, SmartDefault, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings)]
 pub struct AppConfig {
 	pub maps_api_key: SecretString,
 	#[default(app_data("app.db"))]
